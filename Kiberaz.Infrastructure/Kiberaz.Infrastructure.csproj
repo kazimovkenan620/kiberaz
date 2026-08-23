@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kiberaz.Application\Kiberaz.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- JWT Authentication — dəyişmir -->
+    <PackageReference Include="MailKit" Version="4.17.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+
+    <!-- ASP.NET Core Identity (standalone, EF Core-suz) -->
+    <!-- NOT: "Microsoft.AspNetCore.Identity.Core" mövcud deyil!
+         Düzgün paket: Microsoft.Extensions.Identity.Core -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="9.0.0" />
+
+    <!-- LiteDB — Embedded NoSQL verilənlər bazası (tək .db faylı) -->
+    <PackageReference Include="LiteDB" Version="5.0.21" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

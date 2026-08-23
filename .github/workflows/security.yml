@@ -1,0 +1,172 @@
+name: Security CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Hər bazar ertəsi 04:00 UTC — tam yoxlama (yalnız default branch-də işləyir).
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+# PR-larda köhnə run-ları ləğv et, amma main/develop və cron skanlarını ləğv etmə —
+# əks halda Security tab-dakı nəticələrdə boşluq yaranır.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Bütün job-lar üçün standart: yalnız oxuma.
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "9.0.x"
+  SOLUTION_PATH: "Kiberaz.sln"
+  FRONTEND_PATH: "kiberaz-ui"
+  NODE_VERSION: "22"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend: build + zəiflik auditi + testlər
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend — build, audit and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore "${{ env.SOLUTION_PATH }}"
+
+      - name: Build backend
+        run: >-
+          dotnet build "${{ env.SOLUTION_PATH }}"
+          --configuration Release
+          --no-restore
+          --warnaserror
+
+      # `dotnet list package --vulnerable` zəiflik tapsa da exit 0 qaytarır,
+      # ona görə çıxışı özümüz yoxlayırıq.
+      - name: Check vulnerable NuGet packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet list "${{ env.SOLUTION_PATH }}" package \
+            --vulnerable --include-transitive 2>&1 | tee nuget-audit.txt
+
+          if grep -q "has the following vulnerable packages" nuget-audit.txt; then
+            echo "::error title=NuGet audit::Zəiflikli NuGet paketləri tapıldı"
+            exit 1
+          fi
+          echo "Zəiflikli NuGet paketi tapılmadı."
+
+      # Köhnəlmiş (deprecated) paketlər — bloklamır, sadəcə xəbərdarlıq.
+      - name: Check deprecated NuGet packages
+        continue-on-error: true
+        run: >-
+          dotnet list "${{ env.SOLUTION_PATH }}"
+          package
+          --deprecated
+          --include-transitive
+
+      - name: Run backend tests
+        run: >-
+          dotnet test "${{ env.SOLUTION_PATH }}"
+          --configuration Release
+          --no-build
+          --verbosity normal
+
+  # ---------------------------------------------------------------------------
+  # Frontend: asılılıq auditi + build
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend — audit and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: ${{ env.FRONTEND_PATH }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: "${{ env.FRONTEND_PATH }}/package-lock.json"
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      # İstehsalata düşən asılılıqlar — bunlar build-i qırmalıdır.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      # devDependencies daxil tam mənzərə — məlumat üçün, bloklamır.
+      - name: Audit all dependencies (informational)
+        if: always()
+        continue-on-error: true
+        run: npm audit --audit-level=moderate
+
+      - name: Build frontend
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # CodeQL statik analiz
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL — ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    permissions:
+      contents: read
+      actions: read           # private repo-larda CodeQL üçün tələb olunur
+      security-events: write
+      packages: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+
+      - name: Analyze with CodeQL
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"

@@ -1,0 +1,326 @@
+/* =============================================================
+   AboutSection.css — Platform Mission & Info
+   ============================================================= */
+
+.ab-section {
+  position: relative;
+  background: var(--bg-base);
+  padding: var(--sp-20) 0;
+  overflow: hidden;
+}
+
+/* Section 2 ilə eyni grid şəbəkəsi */
+.ab-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scanline süzülmə xətti */
+.ab-section::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.35), transparent);
+  animation: ab-scanline 10s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes ab-scanline {
+  0%   { top: 0; opacity: 0.8; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Kontentin z-index-i arxa fondakı elementlərin üzərindədir */
+.ab-container { position: relative; z-index: 2; }
+
+/* Decorative vertical glow lines */
+.ab-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0,212,255,0.15) 30%,
+    rgba(0,212,255,0.15) 70%,
+    transparent
+  );
+  pointer-events: none;
+}
+.ab-line-left  { left: 12%; }
+.ab-line-right { right: 12%; }
+
+.ab-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--container-pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+
+/* ── Mission Block ─────────────────────────────────────────── */
+.ab-mission {
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.ab-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 16px;
+  border: 1px solid rgba(0,212,255,0.25);
+  border-radius: var(--r-full);
+  background: rgba(0,212,255,0.06);
+  color: var(--brand-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: var(--sp-5);
+}
+
+.ab-tag-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  animation: pulse-ring 2s infinite;
+}
+
+.ab-heading {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1.12;
+  margin-bottom: var(--sp-6);
+}
+
+.ab-accent {
+  background: linear-gradient(90deg, var(--brand-primary), var(--brand-gold));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.ab-mission-text {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: 1.85;
+  margin-bottom: var(--sp-4);
+}
+
+.ab-mission-text strong {
+  color: var(--brand-primary);
+  font-weight: 700;
+}
+
+/* ── Stats Row ─────────────────────────────────────────────── */
+.ab-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-4);
+}
+
+.ab-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-6) var(--sp-4);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-mild);
+  border-radius: var(--r-2xl);
+  backdrop-filter: blur(8px);
+  transition: all var(--ease-normal);
+  text-align: center;
+}
+
+.ab-stat-card:hover {
+  background: rgba(0,212,255,0.04);
+  border-color: rgba(0,212,255,0.2);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.ab-stat-emoji {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.ab-stat-val {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 900;
+  color: var(--brand-primary);
+  line-height: 1;
+  text-shadow: 0 0 24px rgba(0,212,255,0.4);
+}
+
+.ab-stat-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Module Divider ───────────────────────────────────────── */
+.ab-modules-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.ab-modules-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+.ab-modules-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Pillars Grid ──────────────────────────────────────────── */
+.ab-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-5);
+}
+
+.ab-pillar {
+  position: relative;
+  padding: var(--sp-6);
+  background: rgba(255,255,255,0.015);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-2xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  overflow: hidden;
+  transition: all var(--ease-normal);
+}
+
+.ab-pillar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 0%,
+    color-mix(in srgb, var(--p-clr) 8%, transparent),
+    transparent 70%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--ease-normal);
+}
+
+.ab-pillar:hover {
+  border-color: color-mix(in srgb, var(--p-clr) 30%, transparent);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+
+.ab-pillar:hover::before {
+  opacity: 1;
+}
+
+.ab-pillar-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-1);
+}
+
+.ab-pillar-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-clr);
+  background: color-mix(in srgb, var(--p-clr) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--p-clr) 22%, transparent);
+  border-radius: var(--r-full);
+  padding: 2px 10px;
+}
+
+.ab-pillar-icon {
+  width: 40px; height: 40px;
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--p-clr) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--p-clr) 25%, transparent);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--p-clr);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--p-clr) 20%, transparent);
+  flex-shrink: 0;
+  position: relative; z-index: 1;
+}
+
+.ab-pillar-title {
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: 800;
+  color: var(--text-primary);
+  position: relative; z-index: 1;
+}
+
+.ab-pillar-desc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.7;
+  flex: 1;
+  position: relative; z-index: 1;
+}
+
+.ab-pillar-line {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--p-clr),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity var(--ease-normal);
+}
+
+.ab-pillar:hover .ab-pillar-line {
+  opacity: 0.6;
+}
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .ab-pillars { grid-template-columns: repeat(2, 1fr); }
+  .ab-stats   { grid-template-columns: repeat(2, 1fr); }
+  .ab-line    { display: none; }
+}
+
+@media (max-width: 640px) {
+  .ab-pillars { grid-template-columns: 1fr; }
+  .ab-stats   { grid-template-columns: repeat(2, 1fr); }
+  .ab-heading { font-size: 1.8rem; }
+}

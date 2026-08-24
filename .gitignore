@@ -592,3 +592,11 @@ secrets/
 .terraform/
 *.tfvars
 !*.tfvars.example
+
+# ============================================================
+# Quiz sual bankı (seed-data) — 2026-08-24
+# ============================================================
+# Real sual/kateqoriya faylları CAVAB AÇARLARINI ehtiva edir və yalnız
+# lokalda qalmalıdır. TEMPLATE.md və köməkçi skriptlər git-də açıq qalır.
+seed-data/quiz-categories.json
+seed-data/quiz-questions.json

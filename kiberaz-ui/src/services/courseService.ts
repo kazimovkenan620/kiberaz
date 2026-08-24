@@ -1,4 +1,6 @@
 // 🛡️ Kurs API servisi — backend ilə əlaqə
+import { getToken } from './authService';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5251/api';
 
 // ─── Tiplər ───────────────────────────────────────────────────
@@ -86,6 +88,14 @@ export async function getCourseById(id: number): Promise<ApiResponse<CourseRespo
   return response.json();
 }
 
+// Backend-də UploadController artıq [AllowAnonymous] — daxil olmayan istifadəçi də kurs formunda
+// şəkil/PDF yükləyə bilir (CreateCourse özü də hər kəsə açıqdır, bu ikisi eyni davranışda olmalıdır).
+// Token varsa yenə göndərilir (zərəri yoxdur, gələcəkdə audit üçün faydalı ola bilər), amma tələb olunmur.
+function authHeaders(): HeadersInit | undefined {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
+}
+
 /// Müəllim şəklini serverə yükləmə
 export async function uploadInstructorPhoto(file: File): Promise<ApiResponse<string>> {
   const formData = new FormData();
@@ -93,7 +103,8 @@ export async function uploadInstructorPhoto(file: File): Promise<ApiResponse<str
 
   const response = await fetch(`${API_URL}/upload/photo`, {
     method: 'POST',
-    body: formData, // Qeyd: Fetch-də FormData göndərərkən Content-Type header-i avtomatik təyin olunmalıdır (multipart/form-data)
+    headers: authHeaders(), // Qeyd: Content-Type qəsdən təyin edilmir — brauzer FormData üçün multipart boundary-ni özü qoyur.
+    body: formData,
   });
 
   return response.json();
@@ -106,6 +117,7 @@ export async function uploadSyllabusPdf(file: File): Promise<ApiResponse<string>
 
   const response = await fetch(`${API_URL}/upload/syllabus`, {
     method: 'POST',
+    headers: authHeaders(),
     body: formData,
   });
 

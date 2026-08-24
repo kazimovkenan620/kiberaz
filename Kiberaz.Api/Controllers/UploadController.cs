@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Kiberaz.Application.DTOs.Common;
 using Kiberaz.Application.Interfaces;
 
@@ -12,10 +13,15 @@ namespace Kiberaz.Api.Controllers;
 /// <summary>
 /// Platformada fayl yükləmə (File Upload) əməliyyatlarını idarə edən controller.
 /// Təhlükəsizlik üçün bütün yükləmələr üçün ciddi validasiyalar və limitlər tətbiq olunur.
+/// CourseController.CreateCourse hər kəsə (AllowAnonymous) açıq olduğu üçün, kurs formundakı
+/// şəkil/PDF yükləməsi də eyni şəkildə anonim istifadəçilərə açılır — əks halda daxil olmayan
+/// istifadəçi faylı seçəndə 401 alır və bu, HeroSlider-də aldadıcı "server əlaqəsi" xətası kimi görünür.
+/// "auth" rate-limit siyasəti CreateCourse ilə eyni cədvəldədir ki, anonim sui-istifadə məhdudlaşsın.
 /// </summary>
-[Authorize]
+[AllowAnonymous]
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("auth")]
 public class UploadController : ControllerBase
 {
     private readonly IUploadService _uploadService;

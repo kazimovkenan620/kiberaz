@@ -321,7 +321,9 @@ public class AuthService : IAuthService
             await _userManager.UpdateAsync(user);
         }
 
-        if (expired)
+        // "user is null" burada təkrar yoxlanılır ki, compiler aşağıda user-i qeyri-null kimi tanısın —
+        // məntiqi olaraq artıqdır (user is null zatən expired-i true edir), sırf nullable analizatoru üçün.
+        if (expired || user is null)
             return ApiResponse<AuthResponse>.Fail("Google giriş kodu etibarsızdır və ya vaxtı bitib.");
 
         var roles = await _userManager.GetRolesAsync(user);

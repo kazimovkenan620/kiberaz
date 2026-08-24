@@ -17,7 +17,8 @@ public class ApiResponse<T>
     public bool CaptchaRequired { get; set; }
 
     // Uğurlu cavab: data doldurulur, Success=true — statik metod olduğu üçün new() yazmadan birbaşa çağırılır.
-    public static ApiResponse<T> Ok(T data, string message = "Əməliyyat uğurla tamamlandı.")
+    // T? qəbul edir, çünki Data property-si özü nullable-dır (məs. RegisterAsync uğurlu olanda hələ AuthResponse yoxdur — e-poçt təsdiqi gözlənilir).
+    public static ApiResponse<T> Ok(T? data, string message = "Əməliyyat uğurla tamamlandı.")
         => new() { Success = true, Data = data, Message = message };
 
     // Tək xəta mesajı üçün qısa yol — captchaRequired parametri brute-force aşkar edildikdə true ötürülür.

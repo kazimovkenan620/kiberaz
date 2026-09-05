@@ -343,7 +343,7 @@ function ForgotPasswordModal({ initialEmail, onClose }: { initialEmail: string; 
     setError('');
     try {
       const res = await forgotPassword(forgotEmail, captchaToken);
-      if (res.success) setMessage(res.message || 'Link e-poçt ünvanına göndərildi.');
+      if (res.success) setMessage(res.message || 'Şifrə yeniləmə linki e-poçtunuza göndərildi.');
       else setError(res.errors?.[0] || res.message || 'Sorğu tamamlanmadı.');
     } catch {
       setError('Serverlə əlaqə yaradıla bilmədi.');
@@ -492,7 +492,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin
     setResendMessage('');
     try {
       const response = await resendConfirmationEmail(email);
-      setResendMessage(response.message || (response.success ? 'Təsdiq linki göndərildi.' : 'Təsdiq linki göndərilə bilmədi.'));
+      setResendMessage(response.message || 'Təsdiq linki e-poçtunuza göndərildi.');
     } catch {
       setResendMessage('Serverlə əlaqə yaradıla bilmədi.');
     } finally {

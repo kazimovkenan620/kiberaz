@@ -3,6 +3,7 @@ import {
   Shield, User, Mail, ChevronRight, LogOut,
   Globe, Zap, Target, TrendingUp,
   ClipboardList, CheckCircle, Clock, Star, Edit3, Home, Loader, BookOpen, Save, Users, Plus, UserPlus, School, Eye, Lock,
+  Copy, Check,
 } from 'lucide-react';
 import { addStudentToClass, createTeacherClass, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
 import type { ProfileResponse, StudentOverviewResponse, TeacherClassResponse } from '../services/userService';
@@ -114,6 +115,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   const [securityLoading, setSecurityLoading] = useState(false);
   const [securityMsg, setSecurityMsg] = useState('');
   const [securityError, setSecurityError] = useState('');
+  const [userIdCopied, setUserIdCopied] = useState(false);
 
   const handleSave = async () => {
     setSaving(true); setSaveMsg(''); setSaveError('');
@@ -135,6 +137,14 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
       }
     } catch { setSaveError('Serverlə əlaqə yaradıla bilmədi.'); }
     finally { setSaving(false); setTimeout(() => setSaveMsg(''), 4000); }
+  };
+
+  const handleCopyUserId = () => {
+    if (!profile?.id) return;
+    navigator.clipboard.writeText(profile.id).then(() => {
+      setUserIdCopied(true);
+      setTimeout(() => setUserIdCopied(false), 2000);
+    });
   };
 
   const handleEmailChange = async () => {
@@ -721,9 +731,24 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
                 </div>
                 {profile?.id && (
                   <div className="form-field">
-                    <label><User size={12} /> İstifadəçi ID-si</label>
-                    <input id="ud-user-id" type="text" value={profile.id} disabled style={{ opacity: 0.75 }} />
-                    <span className="ud-helper-text">Bu ID-ni müəlliminizlə paylaşaraq göstəricilərinizin izlənməsinə icazə verə bilərsiniz.</span>
+                    <label><User size={12} /> {isTeacher ? 'Müəllim ID-si' : 'İstifadəçi ID-si'}</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input id="ud-user-id" type="text" value={profile.id} disabled style={{ opacity: 0.75, flex: '1 1 auto' }} />
+                      <button
+                        type="button"
+                        className="ud-copy-btn"
+                        onClick={handleCopyUserId}
+                        aria-label="ID-ni kopyala"
+                        title="ID-ni kopyala"
+                      >
+                        {userIdCopied ? <Check size={14} /> : <Copy size={14} />}
+                      </button>
+                    </div>
+                    <span className="ud-helper-text">
+                      {isTeacher
+                        ? 'Bu, sizin müəllim hesabınızın unikal identifikatorudur.'
+                        : 'Bu ID-ni müəlliminizlə paylaşaraq göstəricilərinizin izlənməsinə icazə verə bilərsiniz.'}
+                    </span>
                   </div>
                 )}
 

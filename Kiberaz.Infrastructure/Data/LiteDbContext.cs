@@ -28,6 +28,15 @@ public class LiteDbContext : IDisposable
                 Path.Combine(environment.ContentRootPath, connectionString.Filename));
         }
 
+        // Bazanın qovluğu yoxdursa yaradılır. LiteDB faylı özü yaradır, LAKİN qovluğu yaratmır —
+        // production-da (məs. App_Data/ və ya /var/kiberaz/data/) bu, tətbiqin start-da
+        // DirectoryNotFoundException ilə qəzaya uğramasına səbəb olurdu.
+        var databaseDirectory = Path.GetDirectoryName(connectionString.Filename);
+        if (!string.IsNullOrEmpty(databaseDirectory) && !Directory.Exists(databaseDirectory))
+        {
+            Directory.CreateDirectory(databaseDirectory);
+        }
+
         var mapper = new BsonMapper();
 
         // [BsonId] attribute-u domain entity-lərdə yazmırıq — LiteDB asılılığını domain-dən uzaq saxlamaq üçün
@@ -41,6 +50,7 @@ public class LiteDbContext : IDisposable
         mapper.Entity<QuizCategory>().Id(q => q.Id, autoId: true);
         mapper.Entity<QuizQuestion>().Id(q => q.Id, autoId: true);
         mapper.Entity<QuizResult>().Id(q => q.Id, autoId: true);
+        mapper.Entity<LoginAttempt>().Id(a => a.Id);
 
         // Enum-lar string kimi saxlanır — oxunaqlıdır və migration asanlaşır
         // Belə ki, DB-də "Beginner" yazısı görünür, rəqəm deyil — debug zamanı rahatdır.
@@ -104,6 +114,13 @@ public class LiteDbContext : IDisposable
     public ILiteCollection<QuizResult> QuizResults
         => _db.GetCollection<QuizResult>("QuizResults");
 
+    /// <summary>
+    /// Uğursuz giriş/qeydiyyat cəhdlərinin sayğacları — CAPTCHA həddini hesablamaq üçün.
+    /// Açarlar hash halında saxlanılır, qeydlər 15 dəqiqədən sonra köhnəlir.
+    /// </summary>
+    public ILiteCollection<LoginAttempt> LoginAttempts
+        => _db.GetCollection<LoginAttempt>("LoginAttempts");
+
     public ILiteDatabase Database => _db;
 
     // Tez-tez istifadə olunan sahələrə indeks qurur — böyük data olduqda sorğular daha sürətli işləyir.
@@ -128,6 +145,9 @@ public class LiteDbContext : IDisposable
 
         QuizResults.EnsureIndex(r => r.UserId);
         QuizResults.EnsureIndex(r => r.CategoryId);
+
+        // Köhnəlmiş cəhd qeydlərinin toplu silinməsi bu indeks üzərindən işləyir.
+        LoginAttempts.EnsureIndex(a => a.ExpiresAt);
     }
 
     // LiteDB faylını bağlayır — using bloku bitdikdə avtomatik çağrılır.

@@ -206,6 +206,10 @@ public class AuthService : IAuthService
             user.RefreshToken = null;
             user.RefreshTokenExpiryTime = null;
             await _userManager.UpdateAsync(user);
+
+            // Refresh tokeni silmək kifayət etmir — əlindəki access token hələ 15 dəqiqə işləyir.
+            // SecurityStamp yenilənəndə OnTokenValidated həmin tokeni dərhal rədd edir, yəni çıxış REAL çıxışdır.
+            await _userManager.UpdateSecurityStampAsync(user);
         }
 
         await _signInManager.SignOutAsync();
@@ -240,11 +244,20 @@ public class AuthService : IAuthService
 
         // Constant-time müqayisə — timing attack qarşısı.
         // Adi == operatoru ilk fərqli baytda dayanır; sabit vaxt müqayisəsi isə tokenin uzunluğundan asılı olmayaraq eyni vaxt aparır.
-        var storedToken = user?.RefreshToken ?? string.Empty;
+        //
+        // Hər iki tərəf SHA-256-dan bir dəfə də keçirilir: nəticə HƏMİŞƏ 32 baytdır.
+        // Əvvəlki PadRight(128) yanaşması hash uzunluğu dəyişsə səssizcə sınardı —
+        // FixedTimeEquals fərqli uzunluqda sadəcə false qaytarır və müqayisə mənasını itirirdi.
+        var storedToken   = user?.RefreshToken ?? string.Empty;
         var providedToken = HashToken(refreshToken ?? string.Empty);
         var tokensMatch = CryptographicOperations.FixedTimeEquals(
-            System.Text.Encoding.UTF8.GetBytes(storedToken.PadRight(128)),
-            System.Text.Encoding.UTF8.GetBytes(providedToken.PadRight(128)));
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(storedToken)),
+            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(providedToken)));
+
+        // Boş storedToken (logout edilmiş hesab) real hash-ə heç vaxt bərabər ola bilməz,
+        // amma niyyəti açıq saxlamaq üçün açıq şəkildə rədd edilir.
+        if (string.IsNullOrEmpty(storedToken))
+            tokensMatch = false;
 
         if (user == null || !tokensMatch || user.RefreshTokenExpiryTime <= DateTime.UtcNow)
         {
@@ -364,7 +377,7 @@ public class AuthService : IAuthService
     /// <inheritdoc />
     public async Task<ApiResponse<bool>> ResendConfirmationEmailAsync(ResendConfirmationEmailRequest request)
     {
-        var genericMessage = "Əgər bu e-poçtla təsdiqlənməmiş hesab varsa, təsdiq linki göndərildi.";
+        var genericMessage = "Təsdiq linki e-poçtunuza göndərildi.";
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null || user.EmailConfirmed)
             return ApiResponse<bool>.Ok(true, genericMessage);
@@ -408,7 +421,7 @@ public class AuthService : IAuthService
         _attempts.Record(key);
 
         // Ümumi mesaj işlədilir — belə olmazsa haker hesabın mövcud olub-olmadığını anlaya bilər.
-        var genericMessage = "Əgər bu e-poçtla hesab mövcuddursa, şifrə yeniləmə linki göndərildi.";
+        var genericMessage = "Şifrə yeniləmə linki e-poçtunuza göndərildi.";
         var email = request.Email.Trim();
         if (string.IsNullOrWhiteSpace(email))
             return ApiResponse<bool>.Fail("E-poçt daxil edin.");

@@ -127,8 +127,14 @@ function ResetPasswordPage() {
         newPassword,
         confirmPassword,
       });
-      if (res.success) setMessage(res.message || 'Şifrə yeniləndi.');
-      else setError(res.errors?.[0] || res.message || 'Şifrə yenilənmədi.');
+      if (res.success) {
+        setMessage(res.message || 'Şifrəniz uğurla yeniləndi. Yönləndirilir...');
+        // Təhlükəsizlik qeydi: yönləndirmə hədəfi URL-dən oxunmur, sabit (hardcoded) saxlanılır —
+        // əks halda "open redirect" boşluğu yaranardı (məs. ?redirect=https://phishing.com kimi bir parametr qəbul etsək).
+        setTimeout(() => { window.location.href = '/'; }, 1800);
+      } else {
+        setError(res.errors?.[0] || res.message || 'Şifrə yenilənmədi.');
+      }
     } catch {
       setError('Serverlə əlaqə yaradıla bilmədi.');
     } finally {
@@ -139,18 +145,18 @@ function ResetPasswordPage() {
   return (
     <main className="app-main" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <form onSubmit={submit} className="modal-panel" style={{ width: '100%', maxWidth: 440 }}>
-        <h1 className="modal-title">Yeni şifrə</h1>
+        <h1 className="modal-title">Şifrəni yenilə</h1>
         <div className="form-field">
           <label htmlFor="reset-pass">Yeni şifrə</label>
-          <input id="reset-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" />
+          <input id="reset-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={30} disabled={loading || !!message} />
         </div>
         <div className="form-field">
-          <label htmlFor="reset-confirm">Şifrə təkrarı</label>
-          <input id="reset-confirm" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+          <label htmlFor="reset-confirm">Şifrənin təkrarı</label>
+          <input id="reset-confirm" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={30} disabled={loading || !!message} />
         </div>
         {message && <p style={{ color: '#22c55e', textAlign: 'center' }}>{message}</p>}
         {error && <p style={{ color: '#ef4444', textAlign: 'center' }}>{error}</p>}
-        <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Yenilənir...' : 'Şifrəni yenilə'}</button>
+        <button className="btn btn-primary" type="submit" disabled={loading || !!message}>{loading ? 'Yenilənir...' : 'Şifrəni yenilə'}</button>
       </form>
     </main>
   );

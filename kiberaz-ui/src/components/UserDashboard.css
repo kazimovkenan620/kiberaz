@@ -737,6 +737,18 @@
 }
 .ud-btn-outline:hover { border-color: var(--text-secondary); color: var(--text-primary); }
 
+.ud-copy-btn {
+  flex: 0 0 auto;
+  width: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-full);
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-mild); cursor: pointer;
+  transition: all var(--ease-fast);
+}
+.ud-copy-btn:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+
+
 .ud-profile-meta {
   display: flex;
   gap: var(--sp-3);

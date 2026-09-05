@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,6 +17,7 @@ using Kiberaz.Api.Filters;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.HttpOverrides;
 
 
 
@@ -85,6 +87,55 @@ builder.Services.AddAuthentication(options =>
         // Bunu sıfırlamaq token-in dəqiq müddəti qurtardıqda etibarsız sayılmasını təmin edir.
         ClockSkew                = TimeSpan.Zero
     };
+
+    // ─── SECURITY STAMP YOXLAMASI ─────────────────────────────
+    // İmza düzgün olsa belə token-in HƏLƏ DƏ etibarlı olduğunu yoxlayırıq.
+    // Identity parol və e-poçt dəyişdikdə (biz isə əlavə olaraq rol dəyişikliyində) SecurityStamp-i yeniləyir;
+    // token-in içindəki damğa bazadakı ilə uyğun gəlmirsə, token dərhal rədd edilir.
+    // Bu olmadan parol dəyişdirildikdən sonra oğurlanmış access token 15 dəqiqə daha işləyirdi.
+    // Rədd 401 qaytarır — frontend-dəki apiClient bunu görüb avtomatik refresh edir və yeni claim-lərlə davam edir.
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            if (principal is null)
+            {
+                context.Fail("Token etibarsızdır.");
+                return;
+            }
+
+            var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                         ?? principal.FindFirstValue("sub");
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                context.Fail("Token etibarsızdır.");
+                return;
+            }
+
+            var userManager = context.HttpContext.RequestServices
+                .GetRequiredService<UserManager<AppUser>>();
+
+            var user = await userManager.FindByIdAsync(userId);
+            if (user is null)
+            {
+                // İstifadəçi silinib, amma token hələ ömrünü başa vurmayıb.
+                context.Fail("Token etibarsızdır.");
+                return;
+            }
+
+            var storedStamp = await userManager.GetSecurityStampAsync(user);
+
+            // Damğası olmayan köhnə qeydlər bloklanmır — geriyə uyğunluq üçün yoxlama atlanır.
+            if (string.IsNullOrEmpty(storedStamp))
+                return;
+
+            var tokenStamp = principal.FindFirstValue(TokenService.SecurityStampClaimType);
+            if (!string.Equals(storedStamp, tokenStamp, StringComparison.Ordinal))
+                context.Fail("Sessiya etibarsızdır. Yenidən daxil olun.");
+        }
+    };
 });
 
 // ─── 3a. COOKIE OPTIONS ───────────────────────────────────────
@@ -146,6 +197,18 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit  = 0
         }));
 
+    // Upload: anonim fayl yükləmə — 5/dəq
+    // Yükləmə endpoint-i diskə yazır və heç bir hesabla əlaqələndirilmir, ona görə
+    // ümumi "auth" siyasəti ilə deyil, öz daha dar limiti ilə qorunur (disk doldurma vektoru).
+    options.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = builder.Environment.IsDevelopment() ? 1000 : 5,
+            Window      = TimeSpan.FromMinutes(1),
+            QueueLimit  = 0
+        }));
+
     // General: ümumi public endpoint-lər — 60/dəq
     // Normal istifadəçi davranışı üçün kifayət qədər yüksəkdir, lakin bot skriptlərini yavaşladır.
     options.AddPolicy("general", context => RateLimitPartition.GetFixedWindowLimiter(
@@ -158,6 +221,44 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 
+// ─── 3d. FORWARDED HEADERS (reverse proxy) ────────────────────
+// Nginx / IIS ARR / Cloudflare arxasında tətbiq hər sorğunu proxy-nin IP-si ilə görür.
+// Bunun iki nəticəsi var və hər ikisi yalnız production-da üzə çıxır:
+//   1) UseHttpsRedirection sonsuz loop-a düşür — proxy app-ə HTTP göndərir, app HTTPS-ə yönləndirir.
+//   2) Rate limiting partition açarı RemoteIpAddress-dir — bütün istifadəçilər BİR bucket-a düşür,
+//      yəni tək bot bütün saytı bloklaya bilər.
+//
+// TƏHLÜKƏSİZLİK QEYDİ: X-Forwarded-For başlığını istənilən client saxtalaşdıra bilər.
+// Buna görə default olaraq YALNIZ loopback-dən (eyni serverdəki Nginx/IIS) gələn başlıqlara etibar edilir.
+// Proxy ayrı maşındadırsa (Cloudflare, xarici load balancer), onun IP-si konfiqurasiyada AÇIQ göstərilməlidir —
+// əks halda hücumçu saxta IP göndərib rate limit-i tamamilə keçə bilər.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // Yalnız ən yaxın proxy-yə etibar edilir — zəncirdəki əvvəlki dəyərlər client tərəfindən yazıla bilər.
+    options.ForwardLimit = 1;
+
+    var knownProxies = builder.Configuration
+        .GetSection("ForwardedHeaders:KnownProxies")
+        .GetChildren()
+        .Select(c => c.Value)
+        .Where(v => !string.IsNullOrWhiteSpace(v))
+        .ToArray();
+
+    if (knownProxies.Length > 0)
+    {
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        foreach (var proxy in knownProxies)
+        {
+            if (System.Net.IPAddress.TryParse(proxy, out var ip))
+                options.KnownProxies.Add(ip);
+        }
+    }
+});
+
 // ─── 4. CORS ──────────────────────────────────────────────────
 // CORS brauzerə hansı mənbəli saytların bu API-yə müraciət edə biləcəyini bildirir.
 // AllowCredentials() httpOnly cookie-lərin (refresh token) cross-origin sorğularda göndərilməsi üçün tələb olunur — onsuz cookie bloklanır.
@@ -166,9 +267,12 @@ builder.Services.AddCors(options =>
     options.AddPolicy("FrontendPolicy", policy =>
     {
         // Sabit production ünvanı həmişə siyahıdadır; konfiqurasiyadan əlavə URL dinamik əlavə edilə bilər.
+        // Hər iki kanonik host siyahıdadır. `www` buraxılsa, sayt www-dan açıldıqda
+        // BÜTÜN API sorğuları CORS-dan keçmir — brauzer konsolunda görünür, serverdə heç bir log qalmır.
         var configuredOrigins = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "https://kiberaz.az"
+            "https://kiberaz.az",
+            "https://www.kiberaz.az"
         };
 
         var frontendUrl = builder.Configuration["FrontendUrl"];
@@ -210,9 +314,10 @@ builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<ICaptchaService, CaptchaService>();
-// InMemoryAttemptTracker Singleton-dur: uğursuz giriş cəhdlərini sayır, bu sayğac bütün sorğular arasında ortaq olmalıdır.
+// LiteDbAttemptTracker Singleton-dur: uğursuz giriş cəhdlərini sayır, bu sayğac bütün sorğular arasında ortaq olmalıdır.
+// Yaddaş versiyasından (InMemoryAttemptTracker) fərqli olaraq sayğaclar restart-dan sonra da qalır.
 // TokenService də Singleton-dur — token imzalama açarını yenidən yükləməmək üçün bir dəfə yaradılır.
-builder.Services.AddSingleton<IAttemptTracker, InMemoryAttemptTracker>();
+builder.Services.AddSingleton<IAttemptTracker, LiteDbAttemptTracker>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddHttpClient("captcha");
 builder.Services.AddHttpContextAccessor();
@@ -276,6 +381,22 @@ using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     await DbInitializer.SeedRolesAsync(roleManager);
+}
+
+// Quiz kateqoriyaları və sualları seed-data JSON fayllarından bir dəfə yüklənir — verilənlər bazasında artıq kateqoriya varsa atlanır.
+using (var scope = app.Services.CreateScope())
+{
+    var liteDbContext = scope.ServiceProvider.GetRequiredService<LiteDbContext>();
+    await QuizSeeder.SeedQuizDataAsync(liteDbContext);
+}
+
+// ─── FORWARDED HEADERS (pipeline-ın ƏN BAŞI) ──────────────────
+// Bu middleware HttpContext.Connection.RemoteIpAddress və Request.Scheme dəyərlərini düzəldir.
+// Ondan sonra gələn HƏR ŞEY (exception logları, rate limiter, HTTPS redirect) düzgün dəyəri görür —
+// buna görə mütləq birinci olmalıdır. Development-də proxy yoxdur, ona görə keçilir.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseForwardedHeaders();
 }
 
 app.UseMiddleware<ExceptionMiddleware>();

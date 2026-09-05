@@ -2,7 +2,7 @@
    Kiberaz.az — "Refined Dark Tactical" Design System
    Skill: frontend-design (anthropics/skills)
    Tone: Luxury / Refined / Dark / Tactical
-   Fonts: Syne (display) + DM Sans (body)
+   Fonts: DM Sans (display + body)
    Palette: Deep Navy + Electric Cyan + Warm Gold
    ============================================================ */
 
@@ -41,7 +41,7 @@
   --text-gold:      #f5a623;
 
   /* ── Typography ── */
-  --font-display: 'Syne', system-ui, sans-serif;
+  --font-display: 'DM Sans', system-ui, sans-serif;
   --font-body:    'DM Sans', system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
 

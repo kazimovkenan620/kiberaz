@@ -292,6 +292,44 @@ public class UserService : IUserService
         return ApiResponse<TeacherClassResponse>.Ok(response, "Tələbə sinfə əlavə edildi.");
     }
 
+    /// <summary>
+    /// Cari istifadəçinin "tələbə" (User) və "müəllim" (Teacher) rolu arasında keçidini idarə edir.
+    /// </summary>
+    public async Task<ApiResponse<bool>> ChangeRoleAsync(string userId, ChangeRoleRequest request)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
+
+        var currentRoles = await _userManager.GetRolesAsync(user);
+
+        // Hazırda User/Teacher-dən hansı roldadırsa tap (Admin/Moderator/VIP kimi əlavə rollara toxunmuruq).
+        var isCurrentlyTeacher = currentRoles.Contains(AppRoles.Teacher);
+        var currentRole = isCurrentlyTeacher ? AppRoles.Teacher : AppRoles.User;
+
+        if (currentRole == request.NewRole)
+            return ApiResponse<bool>.Ok(true, "Artıq bu roldasan.");
+
+        // Teacher -> User keçidi: aktiv sinifləri varsa blokla.
+        if (currentRole == AppRoles.Teacher && request.NewRole == AppRoles.User)
+        {
+            var hasClasses = _db.TeacherClasses.Exists(c => c.TeacherId == userId);
+            if (hasClasses)
+                return ApiResponse<bool>.Fail("Tələbə roluna keçmək üçün əvvəlcə bütün sinifləri silməlisiniz.");
+        }
+
+        await _userManager.RemoveFromRoleAsync(user, currentRole);
+        await _userManager.AddToRoleAsync(user, request.NewRole);
+
+        // Rollar JWT-nin içində claim kimi daşınır — baza dəyişsə də əlindəki token hələ KÖHNƏ rolu deyir.
+        // Damğanı yeniləyəndə həmin token dərhal 401 alır, apiClient avtomatik refresh edir və
+        // yeni token artıq yeni rolla gəlir. Bu olmadan müəllim roluna keçən istifadəçi
+        // 15 dəqiqəyə qədər [Authorize(Roles = Teacher)] endpoint-lərindən 403 alırdı.
+        await _userManager.UpdateSecurityStampAsync(user);
+
+        return ApiResponse<bool>.Ok(true, $"Rolunuz {request.NewRole} olaraq dəyişdirildi.");
+    }
+
     private async Task<(bool Success, string Error)> EnsureTeacherAsync(string teacherId)
     {
         var teacher = await _userManager.FindByIdAsync(teacherId);

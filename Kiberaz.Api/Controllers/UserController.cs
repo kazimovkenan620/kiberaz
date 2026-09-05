@@ -1,10 +1,10 @@
 using System.Security.Claims;
-using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Kiberaz.Domain.Common;
 using Kiberaz.Application.DTOs.User;
 using Kiberaz.Application.Interfaces;
+using Kiberaz.Application.DTOs.Common;
 
 namespace Kiberaz.Api.Controllers;
 
@@ -17,15 +17,30 @@ namespace Kiberaz.Api.Controllers;
 [Authorize]
 public class UserController : ControllerBase
 {
-    // IValidator<T> birbaşa konstruktora inject edilir — FluentValidation qaydaları controller-dən ayrı bir sinifdə yazılıb.
-    // Bu "separation of concerns" prinsipidir: controller yalnız sorğunu idarə edir, validasiya məntiqi öz sinfindədir.
+    // Validasiya burada əl ilə çağrılmır: Program.cs-də qlobal qeydiyyatdan keçmiş ValidationFilter
+    // action icra olunmazdan əvvəl bütün DTO-ları FluentValidation-dan keçirir və uğursuzluqda
+    // standart ApiResponse formatında 400 qaytarır. Controller yalnız öz işini görür.
     private readonly IUserService _userService;
-    private readonly IValidator<UpdateProfileRequest> _updateValidator;
 
-    public UserController(IUserService userService, IValidator<UpdateProfileRequest> updateValidator)
+    public UserController(IUserService userService)
     {
-        _userService      = userService;
-        _updateValidator  = updateValidator;
+        _userService = userService;
+    }
+
+    /// <summary>
+    /// Cari istifadəçinin rolunu (tələbə/müəllim) dəyişir.
+    /// </summary>
+    [HttpPatch("role")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangeRole([FromBody] ChangeRoleRequest request)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var result = await _userService.ChangeRoleAsync(userId, request);
+        return result.Success ? Ok(result) : BadRequest(result);
     }
 
     /// <summary>
@@ -53,15 +68,6 @@ public class UserController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
     {
-        // FluentValidation qaydaları burada əl ilə işə salınır — bu endpoint Program.cs-dəki qlobal ValidationFilter-dən əvvəl öz xüsusi yoxlamasını edir.
-        // Xəta mesajları birbaşa errors massivində qaytarılır ki, frontend hər sahəni ayrıca göstərə bilsin.
-        var validation = await _updateValidator.ValidateAsync(request);
-        if (!validation.IsValid)
-        {
-            var errors = validation.Errors.Select(e => e.ErrorMessage).ToList();
-            return BadRequest(new { success = false, errors });
-        }
-
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 

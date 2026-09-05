@@ -21,9 +21,15 @@ namespace Kiberaz.Api.Controllers;
 [AllowAnonymous]
 [ApiController]
 [Route("api/[controller]")]
-[EnableRateLimiting("auth")]
+[EnableRateLimiting("upload")]
 public class UploadController : ControllerBase
 {
+    // Kestrel-in default request limiti 30 MB-dır — endpoint özü 2/10 MB qəbul etsə də,
+    // bu limit olmadan server 30 MB-lıq gövdəni tam oxuyandan sonra rədd edir.
+    // Aşağıdakı sabitlərlə sorğu HƏLƏ DİSKƏ YAZILMADAN, oxunma mərhələsində kəsilir.
+    private const long PhotoRequestLimitBytes    = 3L  * 1024 * 1024;  // 2 MB fayl + multipart overhead
+    private const long SyllabusRequestLimitBytes = 12L * 1024 * 1024;  // 10 MB fayl + multipart overhead
+
     private readonly IUploadService _uploadService;
 
     public UploadController(IUploadService uploadService)
@@ -37,6 +43,8 @@ public class UploadController : ControllerBase
     /// </summary>
     [HttpPost("photo")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(PhotoRequestLimitBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = PhotoRequestLimitBytes)]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<string>))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
     public async Task<IActionResult> UploadPhoto(IFormFile file)
@@ -72,6 +80,8 @@ public class UploadController : ControllerBase
     /// </summary>
     [HttpPost("syllabus")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(SyllabusRequestLimitBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = SyllabusRequestLimitBytes)]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<string>))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
     public async Task<IActionResult> UploadSyllabus(IFormFile file)

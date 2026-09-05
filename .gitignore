@@ -520,6 +520,14 @@ appsettings.*.json
 !appsettings.*.example.json
 !appsettings.example.json
 
+# ISTISNA: appsettings.Production.json Git-de QALIR.
+# Bu fayl yalniz mühit yollari (LiteDB App_Data yolu, FrontendUrl, AllowedHosts) saxlayir —
+# hec bir gizli acar YOXDUR. Secret-ler yalniz environment variable ile verilir:
+#   JwtSettings__SecretKey, Captcha__SecretKey, EmailSettings__SmtpPassword, ...
+# Ignore edilse, serverdeki LiteDB yol duzelisi deploy-a getmez ve tetbiq start-da sinar.
+# ⚠ Bu fayla HEC VAXT secret yazma.
+!appsettings.Production.json
+
 # İstifadəçi yüklədiyi fayllar (şəxsi məlumat ola bilər)
 **/wwwroot/uploads/
 !**/wwwroot/uploads/.gitkeep
@@ -583,6 +591,14 @@ secrets/
 # Claude Code / IDE lokal konfiqurasiyası
 .claude/settings.local.json
 .claude/local/
+
+# ── Claude / AI asistent ve daxili is senedleri ──────────────
+# Bunlar mehsul kodu deyil, is prosesi senedleridir — repo-da gorunmesine ehtiyac yoxdur.
+# Diskde qalirlar, sadece Git-e getmirler.
+/.claude/
+/SENIOR-RULES.md
+/DEPLOY-CHECKLIST.md
+/QUIZ-SUAL-QAYDALARI.md
 .cursor/
 .aider*
 

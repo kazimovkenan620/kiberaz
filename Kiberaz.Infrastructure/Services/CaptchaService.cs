@@ -34,9 +34,17 @@ public class CaptchaService : ICaptchaService
     // Development mühitində boş token qəbul edilir ki, developer-lər CAPTCHA keçmədən test edə bilsin.
     public async Task<bool> VerifyAsync(string token, string? remoteIp = null)
     {
-        // Development-də CAPTCHA keçirilir — yalnız "BYPASS" token ilə test edilə bilər
-        if (_env.IsDevelopment() && string.IsNullOrWhiteSpace(token))
+        // CAPTCHA-nın development-də keçilməsi ARTIQ AVTOMATİK DEYİL — açıq konfiqurasiya bayrağı tələb olunur.
+        // Səbəb: ASPNETCORE_ENVIRONMENT səhvən "Development" qalmış bir serverdə köhnə davranış
+        // bütün CAPTCHA qapılarını səssizcə açırdı. İndi bunun üçün fayla açıq-aydın true yazılmalıdır.
+        if (_env.IsDevelopment() &&
+            string.IsNullOrWhiteSpace(token) &&
+            bool.TryParse(_config["Captcha:AllowDevelopmentBypass"], out var allowBypass) &&
+            allowBypass)
+        {
+            _logger.LogWarning("CAPTCHA development bypass aktivdir — bu ayar yalnız lokal mühit üçündür.");
             return true;
+        }
 
         var secretKey = _config["Captcha:SecretKey"];
 

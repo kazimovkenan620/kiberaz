@@ -7,6 +7,8 @@ export const getAuthBaseUrl = () => API_URL;
 export interface LoginRequest {
   email: string;
   password: string;
+  // Yalnız çox sayda uğursuz cəhddən sonra tələb olunur — normal girişdə göndərilmir.
+  captchaToken?: string;
 }
 
 // RegisterRequest — qeydiyyat üçün lazım olan bütün sahələri bir yerdə saxlayır.
@@ -20,6 +22,8 @@ export interface RegisterRequest {
   gender: number;
   password: string;
   confirmPassword: string;
+  // Qeydiyyatda CAPTCHA həmişə tələb olunur — forma onsuz göndərilmir.
+  captchaToken: string;
 }
 
 // AuthResponse — servərin autentifikasiya sorğularına verdiyi cavabın ümumi formatı.

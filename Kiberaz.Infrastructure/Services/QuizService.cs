@@ -86,12 +86,20 @@ public class QuizService : IQuizService
             query = query.Where(q => q.Difficulty == level);
         }
 
-        // LiteDB SQL-in ORDER BY RANDOM() funksiyasını dəstəkləmir, buna görə sualları əvvəlcə yaddaşa çəkirik.
-        // Sonra hər sıralama əməliyyatında unikal Guid generasiya edərək təsadüfi ardıcıllıq yaradırıq — bu klassik in-memory shuffle üsuludur.
-        var questions = query
-            .OrderBy(_ => Guid.NewGuid())
-            .Take(count)
-            .ToList();
+        // LiteDB ORDER BY RANDOM() dəstəkləmir, ona görə qarışdırma yaddaşda edilir.
+        // Əvvəl OrderBy(Guid.NewGuid()) işlədilirdi: hər sual üçün Guid yaradıb bütün siyahını sıralayır (O(n log n) + n ədəd Guid).
+        // Partial Fisher–Yates yalnız lazım olan `count` element üçün işləyir (O(count)) və statistik olaraq
+        // düzgün bərabər paylanma verir — Guid sıralaması bunu zəmanətləndirmir.
+        var pool = query.ToList();
+        var take = Math.Min(count, pool.Count);
+
+        for (int i = 0; i < take; i++)
+        {
+            int j = Random.Shared.Next(i, pool.Count);
+            (pool[i], pool[j]) = (pool[j], pool[i]);
+        }
+
+        var questions = pool.Take(take).ToList();
 
         // CorrectKey bu cavabda göndərilmir, çünki brauzer network tabında görünən JSON-a daxil olsaydı, istifadəçi quiz-i həll etmədən cavabı öyrənə bilərdi.
         // Doğru cavab yalnız /submit endpoint-ə göndərdikdən sonra server tərəfdən qaytarılır — bu client-side cheating-in qarşısını alır.

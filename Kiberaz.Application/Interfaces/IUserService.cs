@@ -35,4 +35,6 @@ public interface IUserService
     Task<ApiResponse<TeacherClassResponse>> CreateTeacherClassAsync(string teacherId, CreateTeacherClassRequest request);
 
     Task<ApiResponse<TeacherClassResponse>> AddStudentToClassAsync(string teacherId, int classId, AddStudentToClassRequest request);
+
+    Task<ApiResponse<bool>> ChangeRoleAsync(string userId, ChangeRoleRequest request);
 }

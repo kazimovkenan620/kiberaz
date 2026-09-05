@@ -18,4 +18,16 @@
     <ProjectReference Include="..\Kiberaz.Infrastructure\Kiberaz.Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- Quiz seed faylları repo kökündədir (layihə qovluğundan kənarda).
+       Bu olmadan `dotnet publish` onları kopyalamır və serverdə QuizSeeder heç nə tapmır —
+       nəticədə production bazası 0 sualla açılır.
+       LinkBase sayəsində fayllar çıxışda `seed-data/` altına düşür və
+       QuizSeeder.FindSeedDataPath() onları BaseDirectory-də ilk addımda tapır. -->
+  <ItemGroup>
+    <Content Include="..\seed-data\*.json"
+             LinkBase="seed-data"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

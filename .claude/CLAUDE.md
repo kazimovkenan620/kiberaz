@@ -1,1 +1,0 @@
-@../SENİOR-RULES.md

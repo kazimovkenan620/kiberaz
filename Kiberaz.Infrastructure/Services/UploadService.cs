@@ -47,6 +47,13 @@ public class UploadService : IUploadService
         // Disguised (polyglot) faylları və şəkil daxilində gizlədilmiş scriptləri (EXIF/Metadata XSS) önləmək üçün imza yoxlanışı edirik
         ValidateFileSignature(fileStream, fileExtension);
 
+        // 3c. PDF-lər üçün əlavə qat: imza düzgün olsa belə fayl daxilində aktiv məzmun ola bilər.
+        // %PDF başlığı yalnız "bu PDF-dir" deyir — açılanda kod icra edən PDF də tamamilə düzgün imzalıdır.
+        if (fileExtension == ".pdf")
+        {
+            ValidatePdfHasNoActiveContent(fileStream);
+        }
+
         // 4. wwwroot qovluğunu təyin edirik
         var webRootPath = _webHostEnvironment.WebRootPath;
         if (string.IsNullOrEmpty(webRootPath))
@@ -75,6 +82,73 @@ public class UploadService : IUploadService
 
         // 8. Brauzerdən əlçatan nisbi URL-i qaytarırıq (məs: /uploads/photos/guid.png)
         return $"/uploads/{folderName}/{secureFileName}";
+    }
+
+    /// <summary>
+    /// PDF daxilində kod icrasına səbəb ola biləcək açar sözləri axtarır.
+    /// Sillabus sənədi statik mətndir — onda JavaScript, avtomatik açılan əməliyyat və ya
+    /// yerləşdirilmiş fayl olmasının heç bir legitim səbəbi yoxdur.
+    /// </summary>
+    private void ValidatePdfHasNoActiveContent(Stream fileStream)
+    {
+        if (!fileStream.CanSeek)
+        {
+            return;
+        }
+
+        var currentPosition = fileStream.Position;
+        fileStream.Position = 0;
+
+        try
+        {
+            // PDF strukturu ASCII açar sözlərdən ibarətdir, ona görə baytlar üzərində birbaşa axtarış kifayətdir.
+            // Fayl 10 MB ilə məhdudlaşdığı üçün tam oxumaq təhlükəsizdir.
+            using var buffer = new MemoryStream();
+            fileStream.CopyTo(buffer);
+            var bytes = buffer.ToArray();
+
+            foreach (var marker in DangerousPdfMarkers)
+            {
+                if (ContainsAscii(bytes, marker))
+                {
+                    throw new ArgumentException(
+                        "Təhlükəsizlik Xətası! PDF faylında aktiv məzmun (script və ya avtomatik əməliyyat) aşkarlandı. " +
+                        "Zəhmət olmasa sadə mətn/şəkil formatında sillabus yükləyin.");
+                }
+            }
+        }
+        finally
+        {
+            fileStream.Position = currentPosition;
+        }
+    }
+
+    // /JavaScript, /JS  → PDF içindəki skript
+    // /OpenAction, /AA  → sənəd açılanda avtomatik işə düşən əməliyyat
+    // /Launch           → xarici proqram çağırışı
+    // /EmbeddedFile     → PDF-in içinə gizlədilmiş başqa fayl
+    private static readonly string[] DangerousPdfMarkers =
+    [
+        "/JavaScript", "/JS", "/OpenAction", "/AA", "/Launch", "/EmbeddedFile"
+    ];
+
+    // Bayt massivində ASCII alt-sətir axtarır — Encoding.GetString ilə 10 MB-lıq string yaratmamaq üçün.
+    private static bool ContainsAscii(byte[] haystack, string needle)
+    {
+        if (needle.Length == 0 || haystack.Length < needle.Length)
+            return false;
+
+        for (int i = 0; i <= haystack.Length - needle.Length; i++)
+        {
+            int j = 0;
+            while (j < needle.Length && haystack[i + j] == (byte)needle[j])
+                j++;
+
+            if (j == needle.Length)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>

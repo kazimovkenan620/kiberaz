@@ -12,6 +12,13 @@ namespace Kiberaz.Infrastructure.Services;
 // İstifadəçinin kimlik məlumatları (claims) token içinə şifrələnir, backend hər sorğuda bunu yoxlayır.
 public class TokenService
 {
+    /// <summary>JWT içində SecurityStamp-i daşıyan claim adı.</summary>
+    public const string SecurityStampClaimType = "sstamp";
+
+    // Refresh axınında qəbul edilən "vaxtı bitmiş" access tokenin maksimum yaşı.
+    // Refresh token ömrü ilə eyni saxlanılır — bundan köhnə access token artıq heç bir halda refresh üçün işlədilə bilməz.
+    private static readonly TimeSpan MaxExpiredAccessTokenAge = TimeSpan.FromDays(7);
+
     private readonly IConfiguration _config;
 
     public TokenService(IConfiguration config)
@@ -40,6 +47,12 @@ public class TokenService
             new("firstName", user.FirstName),
             new("lastName",  user.LastName),
         };
+
+        // SecurityStamp token-in içinə yazılır. Parol/e-poçt dəyişdikdə Identity bu damğanı yeniləyir,
+        // OnTokenValidated hadisəsi isə hər sorğuda bazadakı damğa ilə müqayisə edir —
+        // uyğunsuzluq halında köhnə access token dərhal (15 dəqiqə gözləmədən) etibarsız sayılır.
+        if (!string.IsNullOrEmpty(user.SecurityStamp))
+            claims.Add(new Claim(SecurityStampClaimType, user.SecurityStamp));
 
         // Hər rol ayrı bir Claim kimi əlavə edilir — çoxlu rol dəstəklənir.
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
@@ -92,6 +105,14 @@ public class TokenService
         if (jwtSecurityToken == null || !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
         {
             throw new SecurityTokenException("Səhv token.");
+        }
+
+        // ValidateLifetime=false olduğu üçün burada tokenin nə qədər köhnə olduğunu ÖZÜMÜZ yoxlamalıyıq.
+        // Bu yoxlama olmasa aylar əvvəlki access token da refresh axınına buraxılır və
+        // oğurlanmış köhnə token cütü ilə sessiya bərpa etmək mümkün olur.
+        if (jwtSecurityToken.ValidTo < DateTime.UtcNow.Subtract(MaxExpiredAccessTokenAge))
+        {
+            throw new SecurityTokenException("Token çox köhnədir.");
         }
 
         return principal;

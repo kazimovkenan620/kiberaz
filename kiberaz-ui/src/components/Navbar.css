@@ -576,3 +576,20 @@
     gap: 6px;
   }
 }
+
+/* ── İstifadəçi rol nişanı ────────────────────────────────────
+   Hər istifadəçi öz rolunu ləqəbinin yanında görür (User, Teacher, Admin...).
+   Yalnız məlumat xarakterlidir — səlahiyyət serverdə yoxlanılır. */
+.navbar-role-badge {
+  padding: 2px var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-gold);
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}

@@ -67,6 +67,29 @@ public class QuizController : ControllerBase
     }
 
     /// <summary>
+    /// Liderlik lövhəsi — canlı QuizResults məlumatından hesablanır.
+    /// İctimaidir: girişsiz də görünür, ona görə cavabda YALNIZ ləqəb var, ad/soyad/e-poçt yoxdur.
+    /// </summary>
+    /// <param name="period">weekly | monthly | all (default: all)</param>
+    /// <param name="categoryId">Kateqoriya filtri; boş = bütün kateqoriyalar</param>
+    /// <param name="limit">Sətir sayı (default 10, max 100)</param>
+    [HttpGet("leaderboard")]
+    [AllowAnonymous]
+    [EnableRateLimiting("general")]
+    [ProducesResponseType(typeof(ApiResponse<List<LeaderboardEntryResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetLeaderboard(
+        [FromQuery] string? period = null,
+        [FromQuery] int? categoryId = null,
+        [FromQuery] int limit = 10)
+    {
+        // Kənardan gələn limit sərbəst buraxılsa böyük cavabla serveri yormaq mümkündür.
+        limit = Math.Clamp(limit, 1, 100);
+
+        var entries = await _quizService.GetLeaderboardAsync(period, categoryId, limit);
+        return Ok(ApiResponse<List<LeaderboardEntryResponse>>.Ok(entries));
+    }
+
+    /// <summary>
     /// İstifadəçinin cavabını server tərəfdə yoxlayır və düzgün açarı qaytarır.
     /// Anonim istifadəçilər də cavab göndərə bilər (nəticə saxlanmır).
     /// Autentifikasiya olunmuş istifadəçilərin nəticəsi statistika üçün saxlanır.

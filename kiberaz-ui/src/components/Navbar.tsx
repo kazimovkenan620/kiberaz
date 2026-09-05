@@ -2,10 +2,16 @@ import { useState, useEffect, useCallback } from 'react';
 import { Shield, X, Eye, EyeOff, User, Mail, Lock, Users, LogOut } from 'lucide-react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import { navLinks } from '../data/mockData';
-import { forgotPassword, getAuthBaseUrl, getToken, loginUser, registerUser, logout, resendConfirmationEmail, setTokens } from '../services/authService';
+import { forgotPassword, getAuthBaseUrl, getPrimaryRoleLabel, getStoredUserNickname, getToken, loginUser, registerUser, logout, resendConfirmationEmail, setStoredUserNickname, setStoredUserRoles, setTokens } from '../services/authService';
 import './Navbar.css';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string;
+
+function getInitialNavbarUser(): { nickname: string } | null {
+  const token = getToken();
+  const nickname = getStoredUserNickname();
+  return token && nickname ? { nickname } : null;
+}
 
 // ── Qeydiyyat Modal ───────────────────────────────────────────
 function RegisterModal({ onClose }: { onClose: () => void }) {
@@ -62,7 +68,7 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
         // Backenddən gələn xətaları göstər
         setApiError(response.message || response.errors?.[0] || 'Qeydiyyat uğursuz oldu.');
       }
-    } catch (error) {
+    } catch {
       setApiError('Serverlə əlaqə yaradıla bilmədi.');
     }
   };
@@ -384,11 +390,10 @@ function ForgotPasswordModal({ initialEmail, onClose }: { initialEmail: string; 
   );
 }
 
-export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin, onGoHome, isLoggedIn }: {
+export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome, isLoggedIn }: {
   onLoginDemo?: () => void;
   onLogout?: () => void;
   onGoDashboard?: () => void;
-  onGoAdmin?: () => void;
   onGoHome?: () => void;
   isLoggedIn?: boolean;
 }) {
@@ -400,22 +405,17 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin
   const [registerOpen, setRegisterOpen] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
 
-  const [user, setUser] = useState<{ nickname: string } | null>(null);
+  const [user, setUser] = useState<{ nickname: string } | null>(getInitialNavbarUser);
+
+  // Rol nişanı ləqəbin yanında göstərilir. Ayrıca "Admin" düyməsi yoxdur —
+  // admin bölmələri Kabinetim içindədir və orada rol ilə açılır.
+  const [roleLabel, setRoleLabel] = useState<string>(() => getPrimaryRoleLabel());
+
   const [loginError, setLoginError] = useState('');
   const [resendMessage, setResendMessage] = useState('');
   const [resending, setResending] = useState(false);
   const [loginCaptchaToken, setLoginCaptchaToken] = useState('');
   const [loginNeedsCaptcha, setLoginNeedsCaptcha] = useState(false);
-
-  useEffect(() => {
-    // Səhifə yüklənəndə local storage-də user varmı yoxla
-    const storedUser = localStorage.getItem('user');
-    if (storedUser && getToken()) {
-      setUser(JSON.parse(storedUser));
-    } else if (storedUser && !getToken()) {
-      logout();
-    }
-  }, []);
 
   const handleScroll = useCallback(() => setScrolled(window.scrollY > 20), []);
 
@@ -460,25 +460,19 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin
       });
       if (response.success && response.data) {
         const u = response.data.user;
-        setTokens(response.data.accessToken, response.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify({
-          nickname: u.nickname,
-          firstName: u.firstName,
-          lastName: u.lastName,
-          gender: u.gender,
-          joinDate: u.joinDate,
-          roles: u.roles,
-          profileImageUrl: u.profileImageUrl,
-        }));
+        setTokens(response.data.accessToken);
+        setStoredUserNickname(u.nickname);
+        setStoredUserRoles(u.roles);
         setUser({ nickname: u.nickname });
+        setRoleLabel(getPrimaryRoleLabel());
         setLoginNeedsCaptcha(false);
         setLoginCaptchaToken('');
         onLoginDemo?.();
       } else {
-        if ((response as any).captchaRequired) setLoginNeedsCaptcha(true);
+        if (response.captchaRequired) setLoginNeedsCaptcha(true);
         setLoginError(response.message || response.errors?.[0] || 'Giriş uğursuz oldu');
       }
-    } catch (error) {
+    } catch {
       setLoginError('Serverlə əlaqə yaradıla bilmədi');
     }
   };
@@ -503,6 +497,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin
   const handleLogout = () => {
     logout();
     setUser(null);
+    setRoleLabel('');
     onLogout?.();
   };
 
@@ -550,23 +545,6 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin
 
           {/* Desktop auth */}
           <div className="navbar-auth">
-            {/* 🚧 TEST: müvəqqəti olaraq hər kəsə açıqdır — production-da silinəcək */}
-            <button
-              id="navbar-admin-btn"
-              onClick={onGoAdmin}
-              className="btn btn-sm"
-              style={{
-                display: 'flex', alignItems: 'center', gap: '5px',
-                background: 'rgba(245,166,35,0.12)',
-                border: '1px solid rgba(245,166,35,0.35)',
-                color: 'var(--brand-gold)',
-                borderRadius: 7,
-                fontWeight: 700,
-                fontSize: '0.82rem',
-              }}
-            >
-              <Shield size={14} /> Admin
-            </button>
 
             {(user || isLoggedIn) ? (
               <div className="navbar-user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -577,8 +555,9 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoAdmin
                 >
                   <User size={15} /> Kabinetim
                 </button>
-                <span style={{ color: 'var(--text-light)', fontWeight: 500 }}>
+                <span style={{ color: 'var(--text-light)', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ color: 'var(--brand-primary)' }}>{user?.nickname}</span>
+                  {roleLabel && <span className="navbar-role-badge">{roleLabel}</span>}
                 </span>
                 <button onClick={handleLogout} className="btn btn-outline btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <LogOut size={16} /> Çıxış

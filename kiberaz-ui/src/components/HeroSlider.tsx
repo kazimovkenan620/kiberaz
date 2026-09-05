@@ -78,7 +78,7 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
   const [syllabus, setSyllabus] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState<string[]>([]);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
 
@@ -88,7 +88,7 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setErrors([]);
 
     const form = e.target as HTMLFormElement;
 
@@ -100,7 +100,7 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
       if (photoFile) {
         const photoResult = await uploadInstructorPhoto(photoFile);
         if (!photoResult.success || !photoResult.data) {
-          setError(photoResult.errors?.join(', ') || photoResult.message || 'Müəllim şəkli yüklənərkən xəta baş verdi.');
+          setErrors(photoResult.errors?.length ? photoResult.errors : [photoResult.message || 'Müəllim şəkli yüklənərkən xəta baş verdi.']);
           setLoading(false);
           return;
         }
@@ -110,7 +110,7 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
       if (syllabusFile) {
         const syllabusResult = await uploadSyllabusPdf(syllabusFile);
         if (!syllabusResult.success || !syllabusResult.data) {
-          setError(syllabusResult.errors?.join(', ') || syllabusResult.message || 'Təlim sillabusu yüklənərkən xəta baş verdi.');
+          setErrors(syllabusResult.errors?.length ? syllabusResult.errors : [syllabusResult.message || 'Təlim sillabusu yüklənərkən xəta baş verdi.']);
           setLoading(false);
           return;
         }
@@ -142,10 +142,11 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
         setSubmitted(true);
         onCourseAdded();
       } else {
-        setError(result.errors?.join(', ') || result.message || 'Xəta baş verdi.');
+        // Serverdən bir neçə xəta gələ bilər — hamısı bir sətirdə birləşdirilsə oxunmur.
+        setErrors(result.errors?.length ? result.errors : [result.message || 'Xəta baş verdi.']);
       }
     } catch {
-      setError('Serverlə əlaqə yaradıla bilmədi.');
+      setErrors(['Serverlə əlaqə yaradıla bilmədi.']);
     } finally {
       setLoading(false);
     }
@@ -165,7 +166,10 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
           <div className="modal-success">
             <div className="success-icon">✓</div>
             <h3>Göndərildi!</h3>
-            <p>Təliminiz uğurla platformaya əlavə edildi.</p>
+            <p>
+              Təliminiz qeydə alındı və <strong>moderasiya növbəsinə</strong> düşdü.
+              Admin təsdiqlədikdən sonra saytda görünəcək.
+            </p>
             <button className="btn btn-primary btn-lg" onClick={onClose}>Bağla</button>
           </div>
         ) : (
@@ -191,9 +195,9 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
               <div className="form-field"><label htmlFor="kicker">Üst Başlıq (Kicker)</label><input id="kicker" type="text" placeholder="YENİ QRUP: 15 OKTYABR" /></div>
             </div>
             <div className="form-grid-3">
-              <div className="form-field"><label htmlFor="duration">Müddət</label><input id="duration" type="text" placeholder="8 həftə" /></div>
-              <div className="form-field"><label htmlFor="level">Səviyyə</label>
-                <select id="level">
+              <div className="form-field"><label htmlFor="duration">Müddət *</label><input id="duration" type="text" placeholder="8 həftə" required minLength={2} /></div>
+              <div className="form-field"><label htmlFor="level">Səviyyə *</label>
+                <select id="level" required>
                   <option value="">Seçin...</option>
                   <option>Başlanğıc</option><option>Başlanğıc → Orta</option>
                   <option>Orta</option><option>Orta → Peşəkar</option><option>Peşəkar</option>
@@ -224,7 +228,11 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
                 <button type="button" className="btn-add-row" onClick={addSyllabus}><Plus size={12} /> Mövzu əlavə et</button>
               </div>
             </div>
-            {error && <p style={{ color: '#ef4444', textAlign: 'center', margin: '0 0 var(--sp-3)' }}>{error}</p>}
+            {errors.length > 0 && (
+              <ul className="form-error-list" role="alert" aria-live="assertive">
+                {errors.map((msg, i) => <li key={i}>{msg}</li>)}
+              </ul>
+            )}
             <div className="modal-footer">
               <p className="modal-note">* Mütləq doldurulmalı olan sahələr.</p>
               <div className="modal-footer-actions">

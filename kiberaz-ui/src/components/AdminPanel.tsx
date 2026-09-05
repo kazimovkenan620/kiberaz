@@ -1,5 +1,12 @@
 // ============================================================
-// AdminPanel.tsx — Kiberaz.az Admin İdarəetmə Paneli
+// AdminPanel.tsx — Admin idarəetmə bölmələri
+//
+// Bu fayl artıq ayrıca səhifə deyil: tab komponentləri export edilir və
+// UserDashboard (Kabinetim) içində Admin rolu olan istifadəçiyə göstərilir.
+// Ayrıca "Admin" düyməsi və marşrutu silinib — bir giriş nöqtəsi qalıb.
+//
+// TƏHLÜKƏSİZLİK: bu komponentlərin görünməsi heç bir səlahiyyət vermir.
+// Bütün api/admin endpoint-ləri serverdə [Authorize(Roles = "Admin")] ilə qorunur.
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
@@ -20,7 +27,7 @@ import './AdminPanel.css';
 type AdminTab = 'dashboard' | 'courses' | 'users' | 'exams';
 
 // ── Toast ────────────────────────────────────────────────────
-function Toast({ message, type, onDone }: { message: string; type: 'success' | 'error'; onDone: () => void }) {
+export function Toast({ message, type, onDone }: { message: string; type: 'success' | 'error'; onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, 3000);
     return () => clearTimeout(t);
@@ -34,7 +41,7 @@ function Toast({ message, type, onDone }: { message: string; type: 'success' | '
 }
 
 // ── Dashboard Tab ─────────────────────────────────────────────
-function DashboardTab({ stats, onRefresh }: { stats: AdminStats | null; onRefresh: () => void }) {
+export function DashboardTab({ stats, onRefresh }: { stats: AdminStats | null; onRefresh: () => void }) {
   if (!stats) return <div className="admin-empty"><div className="admin-empty-icon">⏳</div>Yüklənir...</div>;
 
   return (
@@ -87,10 +94,21 @@ function DashboardTab({ stats, onRefresh }: { stats: AdminStats | null; onRefres
 }
 
 // ── Courses Tab ───────────────────────────────────────────────
-function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+type CourseStatusFilter = 'all' | 'Pending' | 'Approved' | 'Rejected';
+
+const STATUS_FILTERS: { value: CourseStatusFilter; label: string }[] = [
+  { value: 'all', label: 'Hamısı' },
+  { value: 'Pending', label: '⏳ Gözləyən' },
+  { value: 'Approved', label: '✓ Təsdiqli' },
+  { value: 'Rejected', label: '✕ Rədd edilmiş' },
+];
+
+export function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   const [courses, setCourses] = useState<AdminCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>('all');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', instructor: '', category: '', link: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -98,17 +116,40 @@ function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
   const load = useCallback(async () => {
     setLoading(true);
     const res = await getAdminCourses();
-    if (res.success && res.data) setCourses(res.data);
+
+    // Əvvəl uğursuz cavab sükutla udulurdu: 403/500 halında siyahı boş qalır və
+    // ekranda "Nəticə tapılmadı" görünürdü — yəni səlahiyyət xətası "data yoxdur" kimi oxunurdu.
+    if (res.success && res.data) {
+      setCourses(res.data);
+      setLoadError('');
+    } else {
+      setCourses([]);
+      setLoadError(res.message || 'Məlumat yüklənə bilmədi.');
+    }
+
     setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
-  const filtered = courses.filter(c =>
-    c.title.toLowerCase().includes(search.toLowerCase()) ||
-    c.instructor.toLowerCase().includes(search.toLowerCase()) ||
-    c.category.toLowerCase().includes(search.toLowerCase())
-  );
+  // Status sayğacları həmişə TAM siyahıdan hesablanır — axtarış mətni onları dəyişməməlidir,
+  // əks halda "Gözləyən (0)" görünüb admin moderasiya növbəsinin boş olduğunu zənn edə bilər.
+  const counts = {
+    all: courses.length,
+    Pending: courses.filter(c => c.status === 'Pending').length,
+    Approved: courses.filter(c => c.status === 'Approved').length,
+    Rejected: courses.filter(c => c.status === 'Rejected').length,
+  };
+
+  const filtered = courses.filter(c => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    const q = search.toLowerCase();
+    return (
+      c.title.toLowerCase().includes(q) ||
+      c.instructor.toLowerCase().includes(q) ||
+      c.category.toLowerCase().includes(q)
+    );
+  });
 
   const handleApprove = async (id: number) => {
     const res = await approveCourse(id);
@@ -238,10 +279,27 @@ function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
           </div>
         </div>
 
+        {/* Status filtri — moderasiya növbəsini bir kliklə açır */}
+        <div className="admin-filter-row" role="group" aria-label="Status filtri">
+          {STATUS_FILTERS.map(f => (
+            <button
+              key={f.value}
+              className={`admin-btn admin-btn-sm ${statusFilter === f.value ? 'admin-btn-primary' : 'admin-btn-ghost'}`}
+              onClick={() => setStatusFilter(f.value)}
+              aria-pressed={statusFilter === f.value}
+            >
+              {f.label} ({counts[f.value]})
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="admin-empty">⏳ Yüklənir...</div>
         ) : filtered.length === 0 ? (
-          <div className="admin-empty"><div className="admin-empty-icon">📭</div>Nəticə tapılmadı</div>
+          <div className="admin-empty">
+            <div className="admin-empty-icon">{loadError ? '⚠️' : '📭'}</div>
+            {loadError || 'Nəticə tapılmadı'}
+          </div>
         ) : (
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -271,15 +329,17 @@ function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
                     <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{course.createdAt}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {course.status === 'Pending' && (
-                          <>
-                            <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => handleApprove(course.id)}>
-                              <CheckCircle size={12} /> Təsdiqlə
-                            </button>
-                            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleReject(course.id)}>
-                              <XCircle size={12} /> Rədd et
-                            </button>
-                          </>
+                        {/* Moderasiya geri qaytarıla bilir: səhvən rədd edilən təlim
+                            yenidən təsdiqlənə, səhvən təsdiqlənən isə geri götürülə bilər. */}
+                        {course.status !== 'Approved' && (
+                          <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => handleApprove(course.id)}>
+                            <CheckCircle size={12} /> Təsdiqlə
+                          </button>
+                        )}
+                        {course.status !== 'Rejected' && (
+                          <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleReject(course.id)}>
+                            <XCircle size={12} /> Rədd et
+                          </button>
                         )}
                         {course.link && (
                           <a href={course.link} target="_blank" rel="noreferrer" className="admin-btn admin-btn-ghost admin-btn-sm">
@@ -305,15 +365,26 @@ function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
 // ── Users Tab ─────────────────────────────────────────────────
 const ALL_ROLES = ['Admin', 'Moderator', 'Teacher', 'VIP', 'User'];
 
-function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+export function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     const res = await getAdminUsers();
-    if (res.success && res.data) setUsers(res.data);
+
+    // Əvvəl uğursuz cavab sükutla udulurdu: 403/500 halında siyahı boş qalır və
+    // ekranda "Nəticə tapılmadı" görünürdü — yəni səlahiyyət xətası "data yoxdur" kimi oxunurdu.
+    if (res.success && res.data) {
+      setUsers(res.data);
+      setLoadError('');
+    } else {
+      setUsers([]);
+      setLoadError(res.message || 'Məlumat yüklənə bilmədi.');
+    }
+
     setLoading(false);
   }, []);
 
@@ -366,7 +437,10 @@ function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error
         {loading ? (
           <div className="admin-empty">⏳ Yüklənir...</div>
         ) : filtered.length === 0 ? (
-          <div className="admin-empty"><div className="admin-empty-icon">👤</div>Nəticə tapılmadı</div>
+          <div className="admin-empty">
+            <div className="admin-empty-icon">{loadError ? '⚠️' : '👤'}</div>
+            {loadError || 'Nəticə tapılmadı'}
+          </div>
         ) : (
           <div className="admin-table-wrap">
             <table className="admin-table">
@@ -445,15 +519,26 @@ function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error
 }
 
 // ── Exams Tab ─────────────────────────────────────────────────
-function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
+export function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   const [exams, setExams] = useState<AdminExam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     const res = await getAdminExams();
-    if (res.success && res.data) setExams(res.data);
+
+    // Əvvəl uğursuz cavab sükutla udulurdu: 403/500 halında siyahı boş qalır və
+    // ekranda "Nəticə tapılmadı" görünürdü — yəni səlahiyyət xətası "data yoxdur" kimi oxunurdu.
+    if (res.success && res.data) {
+      setExams(res.data);
+      setLoadError('');
+    } else {
+      setExams([]);
+      setLoadError(res.message || 'Məlumat yüklənə bilmədi.');
+    }
+
     setLoading(false);
   }, []);
 
@@ -504,7 +589,10 @@ function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error
         {loading ? (
           <div className="admin-empty">⏳ Yüklənir...</div>
         ) : filtered.length === 0 ? (
-          <div className="admin-empty"><div className="admin-empty-icon">📋</div>Nəticə tapılmadı</div>
+          <div className="admin-empty">
+            <div className="admin-empty-icon">{loadError ? '⚠️' : '📋'}</div>
+            {loadError || 'Nəticə tapılmadı'}
+          </div>
         ) : (
           <div className="admin-table-wrap">
             <table className="admin-table">

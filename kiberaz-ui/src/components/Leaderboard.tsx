@@ -1,10 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trophy, TrendingUp, TrendingDown, Minus, ArrowRight } from 'lucide-react';
-import { leaderboardData } from '../data/mockData';
+import {
+  fetchLeaderboard,
+  fetchQuizCategories,
+  type LeaderboardEntry,
+  type LeaderboardPeriod,
+} from '../services/quizService';
 import './Leaderboard.css';
 
-const categories = ['Hamısı', 'Web Security', 'Network', 'SOC', 'Active Directory', 'Code Review'];
-const timePeriods = ['Həftəlik', 'Aylıq', 'Ümumi'];
+// UI-dakı etiket ilə API parametri ayrı saxlanılır — göstərilən mətn dəyişsə də sorğu sınmır.
+const timePeriods: { label: string; value: LeaderboardPeriod }[] = [
+  { label: 'Həftəlik', value: 'weekly' },
+  { label: 'Aylıq', value: 'monthly' },
+  { label: 'Ümumi', value: 'all' },
+];
+
+type CategoryFilter = { id: number | null; title: string };
+
+// id === null → filtr yoxdur, bütün kateqoriyalar.
+const ALL_CATEGORIES: CategoryFilter = { id: null, title: 'Hamısı' };
 
 // Gradient palettes for avatars (by rank % 5)
 const avatarGradients = [
@@ -16,11 +30,34 @@ const avatarGradients = [
 ];
 
 export default function Leaderboard() {
-  const [activeTab, setActiveTab] = useState('Həftəlik');
-  const [activeCategory, setActiveCategory] = useState('Hamısı');
+  const [activeTab, setActiveTab] = useState<LeaderboardPeriod>('weekly');
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>(ALL_CATEGORIES);
+  const [categories, setCategories] = useState<CategoryFilter[]>([ALL_CATEGORIES]);
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const topThree = leaderboardData.slice(0, 3);
-  const rest = leaderboardData.slice(3);
+  // Kateqoriya filtrləri artıq sabit siyahı deyil — bazadakı real kateqoriyalardan qurulur.
+  useEffect(() => {
+    fetchQuizCategories()
+      .then(cats => setCategories([ALL_CATEGORIES, ...cats.map(c => ({ id: c.id, title: c.title }))]))
+      .catch(() => undefined);
+  }, []);
+
+  // Hər filtr dəyişikliyində lövhə yenidən yüklənir.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    fetchLeaderboard(activeTab, activeCategory.id, 10)
+      .then(data => { if (!cancelled) setEntries(data); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    // Sürətlə filtr dəyişdirildikdə köhnə sorğunun cavabı yenisini əzməsin deyə.
+    return () => { cancelled = true; };
+  }, [activeTab, activeCategory]);
+
+  const topThree = entries.slice(0, 3);
+  const rest = entries.slice(3);
 
   const getMedalEmoji = (rank: number) => {
     if (rank === 1) return '🥇';
@@ -63,14 +100,14 @@ export default function Leaderboard() {
           <div className="leaderboard-tabs" role="tablist" aria-label="Zaman dövrü">
             {timePeriods.map((period) => (
               <button
-                key={period}
-                id={`lb-tab-${period}`}
-                className={`leaderboard-tab ${activeTab === period ? 'active' : ''}`}
-                onClick={() => setActiveTab(period)}
+                key={period.value}
+                id={`lb-tab-${period.value}`}
+                className={`leaderboard-tab ${activeTab === period.value ? 'active' : ''}`}
+                onClick={() => setActiveTab(period.value)}
                 role="tab"
-                aria-selected={activeTab === period}
+                aria-selected={activeTab === period.value}
               >
-                {period}
+                {period.label}
               </button>
             ))}
           </div>
@@ -79,18 +116,33 @@ export default function Leaderboard() {
           <div className="leaderboard-filter" role="group" aria-label="Kateqoriya filtrləri">
             {categories.map((cat) => (
               <button
-                key={cat}
-                id={`lb-filter-${cat.replace(/\s/g, '-').toLowerCase()}`}
-                className={`leaderboard-filter-btn ${activeCategory === cat ? 'active' : ''}`}
+                key={cat.id ?? 'all'}
+                id={`lb-filter-${cat.title.replace(/\s/g, '-').toLowerCase()}`}
+                className={`leaderboard-filter-btn ${activeCategory.id === cat.id ? 'active' : ''}`}
                 onClick={() => setActiveCategory(cat)}
-                aria-pressed={activeCategory === cat}
+                aria-pressed={activeCategory.id === cat.id}
               >
-                {cat}
+                {cat.title}
               </button>
             ))}
           </div>
         </div>
 
+        {/* Canlı data: baza boş ola bilər, ona görə hər iki vəziyyət açıq göstərilir. */}
+        {loading && (
+          <p className="leaderboard-state" role="status" aria-live="polite">
+            Liderlik lövhəsi yüklənir...
+          </p>
+        )}
+
+        {!loading && entries.length === 0 && (
+          <p className="leaderboard-state" role="status" aria-live="polite">
+            Bu filtr üzrə hələ nəticə yoxdur — ilk testi həll edən ilk lider olacaq.
+          </p>
+        )}
+
+        {!loading && entries.length > 0 && (
+        <>
         {/* ── Top 3 Podium ── */}
         <div className="leaderboard-podium" aria-label="İlk üç lider">
           {/* Rearrange: 2nd, 1st, 3rd */}
@@ -202,11 +254,13 @@ export default function Leaderboard() {
             </div>
           ))}
         </div>
+        </>
+        )}
 
         {/* Footer */}
         <div className="leaderboard-footer">
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>
-            🔄 Liderlik lövhəsi hər gün gecə saat 00:00-da yenilənir
+            ⚡ Nəticələr canlı hesablanır — hər düzgün cavab dərhal əks olunur
           </p>
           <button
             id="leaderboard-full-btn"

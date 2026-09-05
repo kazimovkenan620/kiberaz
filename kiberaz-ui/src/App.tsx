@@ -7,10 +7,9 @@ import KnowledgeCategories from './components/KnowledgeCategories';
 import ExamSession from './components/ExamSession';
 import Leaderboard from './components/Leaderboard';
 import UserDashboard from './components/UserDashboard';
-import AdminPanel from './components/AdminPanel';
 import Footer from './components/Footer';
 import QuizView from './components/QuizView';
-import { confirmEmail, confirmEmailChange, exchangeGoogleLoginCode, getToken, logout, resetPassword, setTokens } from './services/authService';
+import { confirmEmail, confirmEmailChange, exchangeGoogleLoginCode, getToken, logout, resetPassword, setStoredUserNickname, setStoredUserRoles, setTokens } from './services/authService';
 import './index.css';
 import './App.css';
 
@@ -203,49 +202,72 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
   );
 }
 
+// Google OAuth callback ayrıca sabit route-da işləyir. URL-dəki bir dəfəlik kod
+// heç bir client-side icazə qərarı vermir: kod şərtsiz serverə göndərilir və
+// yalnız server onu tapıb, müddətini yoxlayıb, tükətdikdən sonra sessiya açılır.
+function GoogleLoginCallbackPage({ onSuccess }: { onSuccess: () => void }) {
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const code = params.get('code') ?? '';
+
+    // Bir dəfəlik kod brauzer tarixçəsində və ünvan sətrində qalmasın.
+    window.history.replaceState(null, '', window.location.pathname);
+
+    exchangeGoogleLoginCode(code)
+      .then((response) => {
+        if (response.success && response.data) {
+          setTokens(response.data.accessToken);
+          setStoredUserNickname(response.data.user.nickname);
+          // Google ilə girişdə də rollar saxlanılır — əks halda admin panel
+          // düyməsi yalnız adi girişdən sonra görünərdi.
+          setStoredUserRoles(response.data.user.roles);
+          window.history.replaceState(null, '', '/');
+          onSuccess();
+          return;
+        }
+
+        setError(response.message || 'Google ilə giriş tamamlanmadı. Yenidən cəhd edin.');
+      })
+      .catch(() => setError('Serverlə əlaqə yaradıla bilmədi.'));
+  }, [onSuccess]);
+
+  return (
+    <main className="app-main" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+      <section className="modal-panel" style={{ width: '100%', maxWidth: 440, textAlign: 'center' }}>
+        <h1 className="modal-title">Google ilə giriş</h1>
+        {!error && <p style={{ color: '#22c55e' }}>Giriş yoxlanılır...</p>}
+        {error && <p style={{ color: '#ef4444' }}>{error}</p>}
+        {error && <a className="btn btn-primary" href="/">Ana səhifəyə qayıt</a>}
+      </section>
+    </main>
+  );
+}
+
 // ─── Main App ────────────────────────────────────────────────
 // Tətbiqin görünüşü React Router əvəzinə boolean state ilə idarə edilir:
-// showDashboard, showAdminPanel və activeQuizCategoryId hansı "ekranın" göstəriləcəyini müəyyən edir.
+// showDashboard və activeQuizCategoryId hansı "ekranın" göstəriləcəyini müəyyən edir.
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(getToken()));
   const [showDashboard, setShowDashboard] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [activeQuizCategoryId, setActiveQuizCategoryId] = useState<number | null>(null);
   // window.location.pathname yoxlanılır ki, xüsusi URL-lər ana tətbiq ilə qarışmasın.
   const isResetPasswordPage = window.location.pathname === '/reset-password';
   const isConfirmEmailPage = window.location.pathname === '/confirm-email';
   const isConfirmEmailChangePage = window.location.pathname === '/confirm-email-change';
+  const isGoogleLoginCallbackPage = window.location.pathname === '/google-login-callback';
 
-  // Səhifə yüklənəndə tokeni yoxla
-  useEffect(() => {
-    // URL hash-da googleLogin=success varsa Google OAuth kodu servərə göndərilir,
-    // cavabda gələn token saxlanılır və istifadəçi avtomatik daxil olmuş sayılır.
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-    if (hash.get('googleLogin') === 'success') {
-      const code = hash.get('code');
-      if (code) {
-        window.history.replaceState(null, '', window.location.pathname);
-        exchangeGoogleLoginCode(code).then((response) => {
-          if (response.success && response.data) {
-            setTokens(response.data.accessToken, response.data.refreshToken);
-            localStorage.setItem('user', JSON.stringify(response.data.user));
-            setIsLoggedIn(true);
-            setShowDashboard(true);
-          }
-        }).catch(() => undefined);
-      }
-    }
-
-    // sessionStorage-da token varsa istifadəçi əvvəlki seansdan daxil olmuş deməkdir.
-    const token = getToken();
-    if (token) setIsLoggedIn(true);
+  const handleGoogleLoginSuccess = useCallback(() => {
+    setIsLoggedIn(true);
+    setShowDashboard(true);
+    setShowAdminPanel(false);
   }, []);
 
   const handleLogout = () => {
     logout();
     setIsLoggedIn(false);
     setShowDashboard(false);
-    setShowAdminPanel(false);
   };
 
   // setTimeout(50ms) hash dəyişmədən əvvəl state yenilənməsinin tamamlanmasına imkan verir;
@@ -270,6 +292,8 @@ export default function App() {
         <ConfirmActionPage type="email" />
       ) : isConfirmEmailChangePage ? (
         <ConfirmActionPage type="email-change" />
+      ) : isGoogleLoginCallbackPage ? (
+        <GoogleLoginCallbackPage onSuccess={handleGoogleLoginSuccess} />
       ) : (
       <>
       {/* Skip link */}
@@ -277,22 +301,20 @@ export default function App() {
 
       {/* Navigation — həmişə görünür (dashboard-da da) */}
       {/* Dashboard və ya Admin paneli açıq olanda Navbar gizlədilir ki, iki naviqasiya sistemləri üst-üstə düşməsin. */}
-      {!showDashboard && !showAdminPanel && (
+      {!showDashboard && (
         <Navbar
           onLoginDemo={() => setIsLoggedIn(true)}
           onLogout={handleLogout}
-          onGoDashboard={() => { setShowDashboard(true); setShowAdminPanel(false); }}
-          onGoAdmin={() => { setShowAdminPanel(true); setShowDashboard(false); }}
+          onGoDashboard={() => { setShowDashboard(true); }}
           onGoHome={() => { setActiveQuizCategoryId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
           isLoggedIn={isLoggedIn}
         />
       )}
 
       {/* Admin Panel görünüşü */}
-      {/* showAdminPanel → showDashboard → ana səhifə sırası ilə yalnız bir ekran göstərilir. */}
-      {showAdminPanel ? (
-        <AdminPanel onGoHome={() => setShowAdminPanel(false)} />
-      ) : showDashboard ? (
+      {/* showDashboard → ana səhifə sırası ilə yalnız bir ekran göstərilir.
+          Admin bölmələri ayrıca səhifə deyil — Kabinetim içində rol ilə açılır. */}
+      {showDashboard ? (
         <UserDashboard
           onLogout={handleLogout}
           onGoHome={() => setShowDashboard(false)}
@@ -336,7 +358,7 @@ export default function App() {
       )}
 
       {/* Footer & Floating UI (həmişə görünür) */}
-      {!showDashboard && !showAdminPanel && <Footer />}
+      {!showDashboard && <Footer />}
       <ScrollToTop />
       <CookieConsent />
       </>

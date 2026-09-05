@@ -196,3 +196,43 @@ function shuffle<T>(arr: T[]): T[] {
   }
   return a;
 }
+
+// ─── Liderlik Lövhəsi ────────────────────────────────────────
+
+export type LeaderboardPeriod = 'weekly' | 'monthly' | 'all';
+
+// Servərdən gələn format. name = ləqəb (ad/soyad ictimai göndərilmir),
+// username = "142 cavab · 87% dəqiqlik" statistikası.
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  username: string;
+  score: number;
+  badge: 'gold' | 'silver' | 'bronze' | 'default';
+  avatar: string;
+  category: string;
+  change: 'up' | 'down' | 'same';
+  changeValue: number;
+}
+
+// Şəbəkə xətasında boş massiv qaytarır — komponent "hələ data yoxdur" vəziyyətini göstərir.
+export async function fetchLeaderboard(
+  period: LeaderboardPeriod = 'all',
+  categoryId?: number | null,
+  limit: number = 10,
+): Promise<LeaderboardEntry[]> {
+  try {
+    const params = new URLSearchParams({ period, limit: String(limit) });
+    if (categoryId != null) params.set('categoryId', String(categoryId));
+
+    const res = await fetch(`${API_URL}/quiz/leaderboard?${params.toString()}`);
+    if (!res.ok) return [];
+
+    const json: ApiResponse<LeaderboardEntry[]> = await res.json();
+    if (!json.success || !json.data) return [];
+
+    return json.data;
+  } catch {
+    return [];
+  }
+}

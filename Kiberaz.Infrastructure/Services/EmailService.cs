@@ -15,7 +15,7 @@ namespace Kiberaz.Infrastructure.Services;
 /// mütləq environment variable ilə təmin edilir.
 /// </summary>
 // E-poçt göndərməni idarə edən servis — hesab aktivləşdirmə, şifrə sıfırlama və e-poçt dəyişikliyi üçün istifadə olunur.
-// MailKit kitabxanası ilə real SMTP bağlantısı qurulur; development mühitində isə link birbaşa konsola yazılır.
+// MailKit kitabxanası ilə real SMTP bağlantısı qurulur; token və şəxsi məlumatlar heç vaxt loglanmır.
 public class EmailService : IEmailService
 {
     private readonly IConfiguration _config;
@@ -31,7 +31,7 @@ public class EmailService : IEmailService
 
     /// <inheritdoc />
     // İstifadəçiyə e-poçt təsdiq linki göndərir.
-    // Token URL-safe kodlaşdırılır ki, xüsusi simvollar link pozmasın; development-də SMTP olmasa link konsola çıxır.
+    // Token URL-safe kodlaşdırılır ki, xüsusi simvollar link pozmasın.
     public async Task<ApiResponse<bool>> SendConfirmationEmailAsync(
         string toEmail, string userId, string token)
     {
@@ -50,14 +50,12 @@ public class EmailService : IEmailService
             var encodedToken = Uri.EscapeDataString(token);
             var confirmUrl   = $"{frontendUrl}/confirm-email#userId={Uri.EscapeDataString(userId)}&token={encodedToken}";
 
-            // Development-də SMTP ayarlanmayıbsa, aktivləşdirmə linkini log-a yazırıq — real e-poçt göndərilmir.
+            // Development-də də təsdiq tokenini loglamaq olmaz. SMTP yoxdursa əməliyyat
+            // açıq şəkildə uğursuz qaytarılır ki, sistem göndərilməmiş məktubu uğurlu saymasın.
             if (_environment.IsDevelopment() && IsSmtpNotConfigured(username, password))
             {
-                _logger.LogWarning("==================================================================");
-                _logger.LogWarning("SMTP konfiqurasiya edilməyib. E-poçt göndərilə bilmədi.");
-                _logger.LogWarning("Aktivləşdirmə Linki (Copy-Paste to browser): {Link}", confirmUrl);
-                _logger.LogWarning("==================================================================");
-                return ApiResponse<bool>.Ok(true, "Development rejimi: E-poçt linki konsola yazıldı.");
+                _logger.LogWarning("SMTP konfiqurasiya edilməyib. Təsdiq e-poçtu göndərilmədi.");
+                return ApiResponse<bool>.Fail("Development rejimi: SMTP konfiqurasiya edilməyib.");
             }
 
             var htmlBody = BuildEmailHtml(confirmUrl);
@@ -72,13 +70,13 @@ public class EmailService : IEmailService
                 toEmail,
                 "Kiberaz.az - Email tesdiqi",
                 htmlBody);
-            _logger.LogInformation("Təsdiq e-poçtu göndərildi: {Email}", toEmail);
+            _logger.LogInformation("Təsdiq e-poçtu göndərildi.");
             return ApiResponse<bool>.Ok(true, "E-poçt göndərildi.");
         }
         catch (Exception ex)
         {
             // 🛡️ OWASP A09: SMTP xətası loglanır, lakin client-ə açılmır
-            _logger.LogError(ex, "E-poçt göndərilərkən xəta baş verdi: {Email}", toEmail);
+            _logger.LogError(ex, "Təsdiq e-poçtu göndərilərkən xəta baş verdi.");
             return ApiResponse<bool>.Fail("E-poçt göndərilə bilmədi.");
         }
     }
@@ -103,7 +101,7 @@ public class EmailService : IEmailService
     }
 
     // Fərqli e-poçt növlərini (şifrə sıfırlama, e-poçt dəyişikliyi) eyni şablonla göndərən ümumi metod.
-    // SMTP konfiqurasiyası oxunur, development modunda link konsola yazılır, production-da real e-poçt göndərilir.
+    // SMTP konfiqurasiyası oxunur; development daxil olmaqla heç bir mühitdə gizli link loglanmır.
     private async Task<ApiResponse<bool>> SendActionEmailAsync(string toEmail, string subject, string actionUrl, string actionText)
     {
         try
@@ -118,11 +116,8 @@ public class EmailService : IEmailService
 
             if (_environment.IsDevelopment() && IsSmtpNotConfigured(username, password))
             {
-                _logger.LogWarning("==================================================================");
-                _logger.LogWarning("SMTP konfiqurasiya edilməyib. E-poçt göndərilə bilmədi.");
-                _logger.LogWarning("Əməliyyat Linki (Copy-Paste to browser): {Link}", actionUrl);
-                _logger.LogWarning("==================================================================");
-                return ApiResponse<bool>.Ok(true, "Development rejimi: E-poçt linki konsola yazıldı.");
+                _logger.LogWarning("SMTP konfiqurasiya edilməyib. Əməliyyat e-poçtu göndərilmədi.");
+                return ApiResponse<bool>.Fail("Development rejimi: SMTP konfiqurasiya edilməyib.");
             }
 
             await SendHtmlEmailAsync(
@@ -135,12 +130,12 @@ public class EmailService : IEmailService
                 toEmail,
                 subject,
                 BuildActionEmailHtml(actionUrl, actionText));
-            _logger.LogInformation("Əməliyyat e-poçtu göndərildi: {Email}", toEmail);
+            _logger.LogInformation("Əməliyyat e-poçtu göndərildi.");
             return ApiResponse<bool>.Ok(true, "E-poçt göndərildi.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Əməliyyat e-poçtu göndərilərkən xəta baş verdi: {Email}", toEmail);
+            _logger.LogError(ex, "Əməliyyat e-poçtu göndərilərkən xəta baş verdi.");
             return ApiResponse<bool>.Fail("E-poçt göndərilə bilmədi.");
         }
     }

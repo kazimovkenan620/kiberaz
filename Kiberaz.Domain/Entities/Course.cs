@@ -71,6 +71,17 @@ public class Course : BaseEntity
     /// <summary>UI-da istifadə olunan CSS accent rəng dəyişəni (məs: "--brand-primary")</summary>
     public string AccentColor { get; set; } = "--brand-primary";
 
+    // ─── ADMİN PANELİ SAHƏLƏRİ ───────────────────────────────────
+    /// <summary>
+    /// Mövzu kateqoriyası (məs: "Web Security"). Admin panelindən əlavə edilən
+    /// təlimlərdə doldurulur; ictimai formadan gələnlərdə null qalır.
+    /// LiteDB sxemsizdir — köhnə sənədlərdə bu sahə sadəcə mövcud olmayacaq, migration lazım deyil.
+    /// </summary>
+    public string? Category { get; set; }
+
+    /// <summary>Qeydiyyat / ətraflı məlumat linki (admin panelindən əlavə edilir).</summary>
+    public string? Link { get; set; }
+
     // ─── MODERASİYA ──────────────────────────────────────────────
     /// <summary>Kursun moderasiya statusu</summary>
     public CourseStatus Status { get; set; } = CourseStatus.Approved;

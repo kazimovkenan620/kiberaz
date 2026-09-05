@@ -29,7 +29,10 @@ public class CourseService : ICourseService
 
     /// <summary>
     /// Yeni təlim yaradır və LiteDB-yə yazır.
-    /// Status default olaraq Approved-dir.
+    ///
+    /// Status = Pending: təlim BİRBAŞA saytda görünmür, əvvəlcə admin panelində
+    /// moderasiyadan keçməlidir. Endpoint anonim olduğu üçün bu yeganə qorunma qatıdır —
+    /// əks halda istənilən ziyarətçi ana səhifəyə istədiyi məzmunu dərhal çıxara bilərdi.
     /// </summary>
     public Task<ApiResponse<CourseResponse>> CreateCourseAsync(CreateCourseRequest request, string? userId)
     {
@@ -57,7 +60,7 @@ public class CourseService : ICourseService
                 .ToList(),
             SyllabusFileUrl   = request.SyllabusFileUrl?.Trim(),
             AccentColor       = request.AccentColor.Trim(),
-            Status            = CourseStatus.Approved,
+            Status            = CourseStatus.Pending,
             SubmittedByUserId = userId,
             CreatedAt         = DateTime.UtcNow
         };
@@ -66,7 +69,9 @@ public class CourseService : ICourseService
         _db.Courses.Insert(course);
 
         var response = MapToResponse(course);
-        return Task.FromResult(ApiResponse<CourseResponse>.Ok(response, "Təlim uğurla əlavə edildi."));
+        return Task.FromResult(ApiResponse<CourseResponse>.Ok(
+            response,
+            "Təliminiz qeydə alındı. Moderasiyadan keçdikdən sonra saytda görünəcək."));
     }
 
     /// <summary>
@@ -89,8 +94,10 @@ public class CourseService : ICourseService
     /// </summary>
     public Task<ApiResponse<CourseResponse>> GetCourseByIdAsync(int id)
     {
-        // LiteDB FindOne — EF-dəki .FirstOrDefaultAsync() əvəzinə
-        var course = _db.Courses.FindOne(c => c.Id == id && !c.IsDeleted);
+        // Yalnız TƏSDİQLƏNMİŞ təlim publik olaraq oxuna bilər.
+        // Status yoxlanmasa, moderasiyada gözləyən və ya rədd edilmiş təlimin bütün detalları
+        // ID-ni sınamaqla kənardan oxunardı — moderasiyanın mənası qalmazdı.
+        var course = _db.Courses.FindOne(c => c.Id == id && !c.IsDeleted && c.Status == CourseStatus.Approved);
 
         if (course is null)
             return Task.FromResult(ApiResponse<CourseResponse>.Fail("Təlim tapılmadı."));

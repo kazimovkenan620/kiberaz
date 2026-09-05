@@ -374,3 +374,20 @@
     gap: var(--space-2);
   }
 }
+
+/* ── Canlı data vəziyyəti ─────────────────────────────────────
+   Liderlik lövhəsi real bazadan gəlir: yüklənmə anı və "hələ nəticə yoxdur"
+   halı üçün eyni kart üslubunda mesaj sahəsi. Yalnız design token-ləri. */
+.leaderboard-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-4);
+  margin-bottom: var(--space-5);
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+  transition: opacity var(--ease-normal);
+}

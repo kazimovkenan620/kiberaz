@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using FluentValidation;
 using Kiberaz.Application.DTOs.Course;
 
@@ -5,7 +6,25 @@ namespace Kiberaz.Application.Validators;
 
 public class CreateCourseRequestValidator : AbstractValidator<CreateCourseRequest>
 {
-    private static readonly string[] AllowedLevels = ["Başlanğıc", "Orta", "Peşəkar"];
+    // Aralıq səviyyələr də qəbul edilir — Course.Level sənədində nümunə kimi "Başlanğıc → Orta" göstərilib.
+    // Əvvəl bu variantlar formda seçilə bilirdi, amma validator onları rədd edirdi: forma göndərilmirdi.
+    private static readonly string[] AllowedLevels =
+        ["Başlanğıc", "Başlanğıc → Orta", "Orta", "Orta → Peşəkar", "Peşəkar"];
+
+    // UploadService faylı diskə yazıb NİSBİ yol qaytarır: /uploads/photos/{guid}.png
+    // "yalnız https://" qaydası isə məhz bu yolu rədd edirdi — yəni platformanın öz yükləmə
+    // axını hər dəfə validasiyada ölürdü. Aşağıdakı şablon yalnız BİZİM yaratdığımız
+    // yolları tanıyır (GUID + icazəli uzantı), ixtiyari nisbi yol qəbul edilmir.
+    private static readonly Regex OwnUploadPath = new(
+        @"^/uploads/(photos|syllabus)/[0-9a-fA-F\-]{36}\.(png|jpg|jpeg|webp|pdf)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    // Xarici ünvan yalnız HTTPS ola bilər: http:// qarışıq məzmun yaradır,
+    // javascript:/data: isə birbaşa XSS vektorudur.
+    private static bool IsAllowedMediaUrl(string? url)
+        => url is null
+           || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+           || OwnUploadPath.IsMatch(url);
     private static readonly string[] AllowedAccentColors =
     [
         "--brand-primary", "--brand-gold", "--brand-success", "--brand-danger",
@@ -31,8 +50,8 @@ public class CreateCourseRequestValidator : AbstractValidator<CreateCourseReques
 
         RuleFor(x => x.InstructorPhotoUrl)
             .MaximumLength(500).WithMessage("Foto URL ən çox 500 simvol ola bilər.")
-            .Must(url => url == null || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Foto URL HTTPS ilə başlamalıdır.")
+            .Must(IsAllowedMediaUrl)
+            .WithMessage("Foto URL HTTPS ilə başlamalı və ya platformaya yüklənmiş fayl olmalıdır.")
             .When(x => !string.IsNullOrWhiteSpace(x.InstructorPhotoUrl));
 
         RuleFor(x => x.LinkedInUrl)
@@ -93,8 +112,8 @@ public class CreateCourseRequestValidator : AbstractValidator<CreateCourseReques
 
         RuleFor(x => x.SyllabusFileUrl)
             .MaximumLength(500).WithMessage("Fayl URL ən çox 500 simvol ola bilər.")
-            .Must(url => url == null || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Fayl URL HTTPS ilə başlamalıdır.")
+            .Must(IsAllowedMediaUrl)
+            .WithMessage("Fayl URL HTTPS ilə başlamalı və ya platformaya yüklənmiş fayl olmalıdır.")
             .When(x => !string.IsNullOrWhiteSpace(x.SyllabusFileUrl));
 
         RuleFor(x => x.AccentColor)

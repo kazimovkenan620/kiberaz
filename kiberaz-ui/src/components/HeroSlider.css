@@ -605,3 +605,34 @@
   .controls-inner { flex-wrap: wrap; justify-content: center; gap: var(--sp-3); }
   .btn-add-course { margin: 0 auto; }
 }
+
+/* ── Validasiya xəta siyahısı ─────────────────────────────────
+   Server bir neçə xəta qaytara bilir. Əvvəl hamısı vergüllə bir sətirdə
+   birləşdirilirdi və oxunmurdu — indi hər xəta ayrıca sətirdir. */
+.form-error-list {
+  list-style: none;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  color: var(--brand-danger);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--brand-danger);
+  border-radius: var(--r-md);
+}
+
+.form-error-list li {
+  position: relative;
+  padding-left: var(--sp-4);
+}
+
+.form-error-list li::before {
+  content: '!';
+  position: absolute;
+  left: 0;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}

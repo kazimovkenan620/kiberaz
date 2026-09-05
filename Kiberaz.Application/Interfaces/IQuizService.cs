@@ -36,4 +36,12 @@ public interface IQuizService
 
     /// <summary>Kateqoriyanı silir — soft delete (Admin panel üçün)</summary>
     Task<bool> DeleteCategoryAsync(int categoryId);
+
+    /// <summary>
+    /// Liderlik lövhəsi — QuizResults üzərindən canlı hesablanır.
+    /// </summary>
+    /// <param name="period">"weekly" | "monthly" | "all" (default: all)</param>
+    /// <param name="categoryId">Yalnız bu kateqoriya üzrə; null = bütün kateqoriyalar</param>
+    /// <param name="limit">Qaytarılacaq sətir sayı</param>
+    Task<List<LeaderboardEntryResponse>> GetLeaderboardAsync(string? period, int? categoryId, int limit);
 }

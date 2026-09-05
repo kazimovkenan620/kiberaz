@@ -314,6 +314,7 @@ builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<ICaptchaService, CaptchaService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 // LiteDbAttemptTracker Singleton-dur: uğursuz giriş cəhdlərini sayır, bu sayğac bütün sorğular arasında ortaq olmalıdır.
 // Yaddaş versiyasından (InMemoryAttemptTracker) fərqli olaraq sayğaclar restart-dan sonra da qalır.
 // TokenService də Singleton-dur — token imzalama açarını yenidən yükləməmək üçün bir dəfə yaradılır.
@@ -381,6 +382,12 @@ using (var scope = app.Services.CreateScope())
 {
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     await DbInitializer.SeedRolesAsync(roleManager);
+
+    // İlk admin: AdminBootstrap:Email konfiqurasiyada varsa, HƏMİN MÖVCUD hesab Admin roluna qaldırılır.
+    // Yeni hesab yaratmır və təsdiqlənməmiş e-poçtu qəbul etmir.
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+    var startupLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminBootstrap");
+    await DbInitializer.SeedAdminAsync(userManager, builder.Configuration, startupLogger);
 }
 
 // Quiz kateqoriyaları və sualları seed-data JSON fayllarından bir dəfə yüklənir — verilənlər bazasında artıq kateqoriya varsa atlanır.

@@ -32,6 +32,7 @@ export interface AuthResponse {
   success: boolean;
   message: string;
   errors?: string[];
+  captchaRequired?: boolean;
   data?: {
     accessToken: string;
     refreshToken: string;
@@ -143,10 +144,57 @@ export function getToken(): string | null {
     return sessionStorage.getItem('access_token');
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const USER_NICKNAME_KEY = 'user_nickname';
+const USER_ROLES_KEY = 'user_roles';
+
+// UI-də yalnız salamlaşma üçün lazım olan ləqəb cari tabın sessiyasında saxlanılır.
+// Köhnə versiyaların localStorage-a yazdığı geniş profil obyekti burada təmizlənir.
+export function getStoredUserNickname(): string | null {
+    localStorage.removeItem('user');
+    return sessionStorage.getItem(USER_NICKNAME_KEY);
+}
+
+export function setStoredUserNickname(nickname: string): void {
+    sessionStorage.setItem(USER_NICKNAME_KEY, nickname);
+    localStorage.removeItem('user');
+}
+
+// ─── Rollar ──────────────────────────────────────────────────
+//
+// ⚠ BU YALNIZ İNTERFEYS ÜÇÜNDÜR, TƏHLÜKƏSİZLİK MEXANİZMİ DEYİL.
+// Dəyər sessionStorage-dadır — istifadəçi onu brauzer konsolundan dəyişib admin
+// düyməsini görünən edə bilər. Bu heç nə vermir: hər admin endpoint-i serverdə
+// [Authorize(Roles = "Admin")] ilə qorunur və saxta rol 403 alır.
+// Məqsəd yalnız lazımsız düymələri gizlətmək və istifadəçiyə öz rolunu göstərməkdir.
+
+export function setStoredUserRoles(roles: string[] | undefined | null): void {
+    sessionStorage.setItem(USER_ROLES_KEY, JSON.stringify(roles ?? []));
+}
+
+export function getStoredUserRoles(): string[] {
+    try {
+        const stored = sessionStorage.getItem(USER_ROLES_KEY);
+        const parsed = stored ? JSON.parse(stored) : [];
+        return Array.isArray(parsed) ? parsed.filter((r): r is string => typeof r === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+export function isAdmin(): boolean {
+    return getStoredUserRoles().some(r => r.toLowerCase() === 'admin');
+}
+
+// İstifadəçiyə göstərilən əsas rol: Admin varsa o, yoxsa ilk rol.
+export function getPrimaryRoleLabel(): string {
+    const roles = getStoredUserRoles();
+    if (roles.length === 0) return '';
+    return roles.find(r => r.toLowerCase() === 'admin') ?? roles[0];
+}
+
 // Yalnız access token saxlanılır; refresh token servər tərəfindən httpOnly cookie kimi idarə edilir,
 // ona görə burada JavaScript koduna heç vaxt açılmır.
-export function setTokens(accessToken: string, _refreshToken?: string): void {
+export function setTokens(accessToken: string): void {
     sessionStorage.setItem('access_token', accessToken);
     // Köhnə localStorage açarlarını təmizlə
     localStorage.removeItem('refresh_token');
@@ -155,9 +203,11 @@ export function setTokens(accessToken: string, _refreshToken?: string): void {
 
 export function logout() {
     sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem(USER_NICKNAME_KEY);
+    sessionStorage.removeItem(USER_ROLES_KEY);
     localStorage.removeItem('refresh_token'); // köhnə format
     localStorage.removeItem('token'); // köhnə format
-    localStorage.removeItem('user');
+    localStorage.removeItem('user'); // köhnə versiyalardakı geniş profil obyekti
 }
 
 // Servər 401 qaytardıqda bu funksiya köhnə access token-i göndərib yenisini alır.
@@ -177,7 +227,13 @@ export async function refreshTokens(): Promise<boolean> {
     if (!response.ok) return false;
     const data: AuthResponse = await response.json();
     if (data.success && data.data) {
-      setTokens(data.data.accessToken, data.data.refreshToken);
+      setTokens(data.data.accessToken);
+
+      // Rollar hər refresh-də yenilənir: admin rolu verildikdə/alındıqda
+      // interfeys növbəti refresh-də dərhal doğru vəziyyətə keçir.
+      setStoredUserRoles(data.data.user?.roles);
+      if (data.data.user?.nickname) setStoredUserNickname(data.data.user.nickname);
+
       return true;
     }
     return false;

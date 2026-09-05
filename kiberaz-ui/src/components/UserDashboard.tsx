@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Shield, User, Mail, ChevronRight, LogOut,
   Globe, Zap, Target, TrendingUp,
@@ -7,7 +7,11 @@ import {
 } from 'lucide-react';
 import { addStudentToClass, createTeacherClass, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
 import type { ProfileResponse, StudentOverviewResponse, TeacherClassResponse } from '../services/userService';
+import { isAdmin } from '../services/authService';
+import { getAdminStats, type AdminStats } from '../services/adminService';
+import { CoursesTab, DashboardTab, ExamsTab, Toast, UsersTab } from './AdminPanel';
 import './UserDashboard.css';
+import './AdminPanel.css';
 
 const genderLabel = (gender?: number) => gender === 2 ? 'female' : 'male';
 const genderValue = (gender: string) => gender === 'female' ? 2 : 1;
@@ -28,7 +32,14 @@ const recentSessions = [
 ];
 
 // ── Tab tipləri ──────────────────────────────────────────────────
-type Tab = 'overview' | 'progress' | 'sessions' | 'students' | 'profile';
+type Tab =
+  | 'overview' | 'progress' | 'sessions' | 'students' | 'profile'
+  // Admin bölmələri — yalnız Admin rolunda göstərilir.
+  | 'adm-overview' | 'adm-courses' | 'adm-users' | 'adm-exams';
+
+// Admin tablarının siyahısı bir yerdədir: yeni bölmə əlavə edəndə şərti
+// hər yerdə təkrar yazmaq lazım gəlmir, bu massivə bir sətir yazılır.
+const ADMIN_TABS: Tab[] = ['adm-overview', 'adm-courses', 'adm-users', 'adm-exams'];
 
 interface Props {
   onLogout: () => void;
@@ -37,10 +48,30 @@ interface Props {
 
 // ════════════════════════════════════════════════════════════════
 export default function UserDashboard({ onLogout, onGoHome }: Props) {
-  const storedUser = localStorage.getItem('user');
-  const cachedUser = storedUser ? JSON.parse(storedUser) : {};
-
   const [tab, setTab] = useState<Tab>('overview');
+
+  // Admin vəziyyəti bir dəfə oxunur və TƏK QAPI kimi işlədilir —
+  // hər bölmədə ayrı-ayrı isAdmin() çağırmaq unudulma riski yaradır.
+  const [isAdminUser] = useState<boolean>(() => isAdmin());
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [adminToast, setAdminToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
+  const showAdminToast = useCallback(
+    (msg: string, type: 'success' | 'error') => setAdminToast({ msg, type }),
+    [],
+  );
+
+  const loadAdminStats = useCallback(async () => {
+    if (!isAdmin()) return;
+    const res = await getAdminStats();
+    setAdminStats(res.success && res.data ? res.data : null);
+  }, []);
+
+  // Statistika yalnız admin bölməsi açılanda çəkilir — adi istifadəçi
+  // kabinetə girəndə lazımsız (və onsuz da 403 alacaq) sorğu getmir.
+  useEffect(() => {
+    if (isAdminUser && ADMIN_TABS.includes(tab)) loadAdminStats();
+  }, [tab, isAdminUser, loadAdminStats]);
   const [editMode, setEditMode] = useState(false);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,10 +87,10 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   const [classError, setClassError] = useState('');
   const [classMsg, setClassMsg] = useState('');
   const [form, setForm] = useState({
-    firstName: cachedUser.firstName ?? '',
-    lastName: cachedUser.lastName ?? '',
-    nickname: cachedUser.nickname ?? '',
-    gender: genderLabel(cachedUser.gender),
+    firstName: '',
+    lastName: '',
+    nickname: '',
+    gender: '',
   });
 
   // ── API-dən canlı profil çək ──────────────────────────────────
@@ -88,7 +119,9 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             setClassLoading(false);
           }
         } else {
-          setApiError('Profil yüklənə bilmədi.');
+          // Serverin əsl mesajı göstərilir. Ümumi "yüklənə bilmədi" mətni səbəbi gizlədir:
+          // 401 (sessiya köhnəlib), 403 (səlahiyyət) və 500 eyni görünürdü.
+          setApiError(res.errors?.[0] || res.message || 'Profil yüklənə bilmədi.');
         }
       } catch {
         setApiError('Serverə qoşulmaq mümkün olmadı.');
@@ -99,11 +132,11 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
     fetchProfile();
   }, []);
 
-  const realNickname = profile?.nickname ?? cachedUser.nickname ?? 'İstifadəçi';
+  const realNickname = profile?.nickname ?? 'İstifadəçi';
   const realJoinDate = profile?.joinDate
     ? new Date(profile.joinDate).toLocaleDateString('az-AZ')
     : '-';
-  const realRoles: string[] = profile?.roles ?? cachedUser.roles ?? ['User'];
+  const realRoles: string[] = profile?.roles ?? ['User'];
   const isTeacher = realRoles.includes('Teacher');
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
@@ -291,6 +324,13 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             ['sessions', 'İmtahanlarım', <ClipboardList size={16} />],
             ...(isTeacher ? [['students', 'Tələbələr', <Users size={16} />] as [Tab, string, React.ReactNode]] : []),
             ['profile', 'Profil', <User size={16} />],
+            // ── Admin bölmələri: TƏK şərtlə açılır ──
+            ...(isAdminUser ? ([
+              ['adm-overview', 'Admin · İcmal', <Shield size={16} />],
+              ['adm-courses', 'Admin · Təlimlər', <BookOpen size={16} />],
+              ['adm-users', 'Admin · İstifadəçilər', <Users size={16} />],
+              ['adm-exams', 'Admin · İmtahanlar', <ClipboardList size={16} />],
+            ] as [Tab, string, React.ReactNode][]) : []),
           ] as [Tab, string, React.ReactNode][]).map(([t, label, icon]) => (
             <button
               key={t}
@@ -638,6 +678,33 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         )}
 
 
+        {/* ═══ ADMIN BÖLMƏLƏRİ ═══
+            Hər biri isAdminUser ilə qapalıdır. Bu yalnız görünüş qatıdır:
+            api/admin endpoint-ləri serverdə Admin rolu tələb edir. */}
+        {isAdminUser && tab === 'adm-overview' && (
+          <div className="ud-section">
+            <DashboardTab stats={adminStats} onRefresh={loadAdminStats} />
+          </div>
+        )}
+
+        {isAdminUser && tab === 'adm-courses' && (
+          <div className="ud-section">
+            <CoursesTab onToast={showAdminToast} />
+          </div>
+        )}
+
+        {isAdminUser && tab === 'adm-users' && (
+          <div className="ud-section">
+            <UsersTab onToast={showAdminToast} />
+          </div>
+        )}
+
+        {isAdminUser && tab === 'adm-exams' && (
+          <div className="ud-section">
+            <ExamsTab onToast={showAdminToast} />
+          </div>
+        )}
+
         {tab === 'profile' && (
           <div className="ud-section">
             <div className="ud-section-header">
@@ -824,6 +891,14 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
           </div>
         )}
       </main>
+
+      {adminToast && (
+        <Toast
+          message={adminToast.msg}
+          type={adminToast.type}
+          onDone={() => setAdminToast(null)}
+        />
+      )}
     </div>
   );
 }

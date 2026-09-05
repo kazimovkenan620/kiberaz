@@ -184,10 +184,12 @@ public class AuthController : ControllerBase
         var frontendUrl = _configuration["FrontendUrl"]
             ?? Environment.GetEnvironmentVariable("FRONTEND_URL")
             ?? "http://localhost:5173";
-        if (!success || string.IsNullOrWhiteSpace(code))
-            return $"{frontendUrl}/#googleLogin=failed";
+        var callbackUrl = $"{frontendUrl.TrimEnd('/')}/google-login-callback";
 
-        return $"{frontendUrl}/#googleLogin=success&code={Uri.EscapeDataString(code)}";
+        if (!success || string.IsNullOrWhiteSpace(code))
+            return $"{callbackUrl}#error=login_failed";
+
+        return $"{callbackUrl}#code={Uri.EscapeDataString(code)}";
     }
 
    [HttpPost("login")]

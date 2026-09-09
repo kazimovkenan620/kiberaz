@@ -51,6 +51,8 @@ public class LiteDbContext : IDisposable
         mapper.Entity<QuizQuestion>().Id(q => q.Id, autoId: true);
         mapper.Entity<QuizResult>().Id(q => q.Id, autoId: true);
         mapper.Entity<LoginAttempt>().Id(a => a.Id);
+        mapper.Entity<ExamSession>().Id(s => s.Id);
+        mapper.Entity<ExamAttempt>().Id(a => a.Id);
 
         // Enum-lar string kimi saxlanır — oxunaqlıdır və migration asanlaşır
         // Belə ki, DB-də "Beginner" yazısı görünür, rəqəm deyil — debug zamanı rahatdır.
@@ -71,6 +73,9 @@ public class LiteDbContext : IDisposable
                 : (Gender)b.AsInt32);
 
         _db = new LiteDatabase(connectionString, mapper);
+        // Expiry checks use UtcNow. LiteDB otherwise returns local dates and can
+        // extend a two-minute login code by the server's timezone offset.
+        _db.UtcDate = true;
 
         ConfigureIndexes();
     }
@@ -121,7 +126,25 @@ public class LiteDbContext : IDisposable
     public ILiteCollection<LoginAttempt> LoginAttempts
         => _db.GetCollection<LoginAttempt>("LoginAttempts");
 
+    /// <summary>
+    /// Bal iddiaları: açar "&lt;userId&gt;:&lt;questionId&gt;" — hər sual bir istifadəçiyə yalnız bir dəfə bal yazır.
+    /// Sənədin özü boşdur, qoruyucu olan `_id` unikallığıdır.
+    /// Kolleksiya əvvəl QuizService-in içində birbaşa yaradılırdı və sxem baxışında görünmürdü.
+    /// </summary>
+    public ILiteCollection<BsonDocument> QuizScoreClaims
+        => _db.GetCollection<BsonDocument>("QuizScoreClaims");
+
     public ILiteDatabase Database => _db;
+
+    // Identity compare-and-write operations must use the same gate across scoped stores.
+    // LiteDB transactions are thread-bound; no await is allowed while holding this gate.
+    public object UsersSyncRoot { get; } = new();
+
+    public ILiteCollection<ExamSession> ExamSessions => _db.GetCollection<ExamSession>("ExamSessions");
+    public ILiteCollection<ExamAttempt> ExamAttempts => _db.GetCollection<ExamAttempt>("ExamAttempts");
+    // Shared by all scoped exam services. No await is allowed inside an exam transaction.
+    public object ExamSyncRoot { get; } = new();
+    public object QuizSyncRoot { get; } = new();
 
     // Tez-tez istifadə olunan sahələrə indeks qurur — böyük data olduqda sorğular daha sürətli işləyir.
     // Unique indekslər eyni e-poçt və ya istifadəçi adının iki dəfə yazılmasının qarşısını alır.
@@ -148,6 +171,11 @@ public class LiteDbContext : IDisposable
 
         // Köhnəlmiş cəhd qeydlərinin toplu silinməsi bu indeks üzərindən işləyir.
         LoginAttempts.EnsureIndex(a => a.ExpiresAt);
+        ExamSessions.EnsureIndex(s => s.Code, unique: true);
+        ExamSessions.EnsureIndex(s => s.TeacherId);
+        ExamAttempts.EnsureIndex(a => a.ParticipationKey, unique: true);
+        ExamAttempts.EnsureIndex(a => a.SessionId);
+        ExamAttempts.EnsureIndex(a => a.StudentId);
     }
 
     // LiteDB faylını bağlayır — using bloku bitdikdə avtomatik çağrılır.

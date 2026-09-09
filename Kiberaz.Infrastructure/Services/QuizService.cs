@@ -1,5 +1,6 @@
 using Kiberaz.Application.DTOs.Quiz;
 using Kiberaz.Application.Interfaces;
+using Kiberaz.Domain.Common;
 using Kiberaz.Domain.Entities;
 using Kiberaz.Domain.Enums;
 using Kiberaz.Infrastructure.Data;
@@ -11,6 +12,13 @@ public class QuizService : IQuizService
     // Dependency Injection: LiteDbContext burada birbaşa yaradılmır — ASP.NET Core onu özü yaradıb konstruktora ötürür.
     // Bu yanaşma sayəsində həm test yazmaq asanlaşır, həm də bağlantı idarəçiliyi mərkəzləşdirilir.
     private readonly LiteDbContext _db;
+
+    // Liderlər lövhəsi bahalı hesablamadır və ictimai endpoint-dən çağırılır —
+    // nəticə Singleton keşdə saxlanılır ki, hər sorğu bazanı tam skan etməsin.
+    private readonly LeaderboardCache _leaderboardCache;
+
+    /// <summary>Liderlər lövhəsində bir dəfəyə saxlanılan maksimum sətir sayı (controller limiti ilə eyni).</summary>
+    private const int MaxLeaderboardEntries = 100;
 
     // Enum dəyərlərini Azərbaycanca mətnə çevirmək üçün lüğət — UI-da göstəriş üçün istifadə olunur.
     // static readonly olduğu üçün bütün obyektlər tərəfindən paylaşılır, yaddaşda bir dəfə yaradılır.
@@ -29,9 +37,10 @@ public class QuizService : IQuizService
         ["Peşəkar"]   = DifficultyLevel.Expert
     };
 
-    public QuizService(LiteDbContext db)
+    public QuizService(LiteDbContext db, LeaderboardCache leaderboardCache)
     {
         _db = db;
+        _leaderboardCache = leaderboardCache;
     }
 
     /// <inheritdoc />
@@ -45,7 +54,7 @@ public class QuizService : IQuizService
         // N+1 problemi: hər kateqoriya üçün ayrı-ayrı sorğu göndərmək əvəzinə bütün sual saylarını bir dəfəyə yükləyib lüğətə yığırıq.
         // Sonra hər kateqoriyanı map edərkən verilənlər bazasına deyil, bu lüğətə müraciət edirik.
         var questionCountsByCategoryId = _db.QuizQuestions
-            .Find(q => !q.IsDeleted)
+            .Find(q => !q.IsDeleted && !q.IsExamOnly)
             .GroupBy(q => q.QuizCategoryId)
             .ToDictionary(g => g.Key, g => g.Count());
 
@@ -77,7 +86,7 @@ public class QuizService : IQuizService
         int count = 10)
     {
         var query = _db.QuizQuestions
-            .Find(q => q.QuizCategoryId == categoryId && !q.IsDeleted)
+            .Find(q => q.QuizCategoryId == categoryId && !q.IsDeleted && !q.IsExamOnly)
             .AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(difficulty) &&
@@ -126,7 +135,7 @@ public class QuizService : IQuizService
     public Task<SubmitAnswerResponse> SubmitAnswerAsync(SubmitAnswerRequest request, string? userId = null)
     {
         var question = _db.QuizQuestions
-            .FindOne(q => q.Id == request.QuestionId && !q.IsDeleted);
+            .FindOne(q => q.Id == request.QuestionId && !q.IsDeleted && !q.IsExamOnly);
 
         if (question is null)
             throw new ArgumentException($"Sual tapılmadı: {request.QuestionId}");
@@ -136,22 +145,36 @@ public class QuizService : IQuizService
             question.CorrectOptionKey,
             StringComparison.OrdinalIgnoreCase);
 
-        var correctOption = question.Options
-            .FirstOrDefault(o => string.Equals(o.Key, question.CorrectOptionKey, StringComparison.OrdinalIgnoreCase));
+        if (!question.Options.Any(o => string.Equals(o.Key, request.SelectedKey, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Cavab variantı düzgün deyil.");
 
-        // Anonim istifadəçilər də cavab göndərə bilər, lakin nəticə yalnız token ilə daxil olmuş istifadəçilər üçün bazaya yazılır.
-        // Bu yanaşma həm açıq test imkanı yaradır, həm də statistika cədvəlini mənasız qeydlərlə şişirtmir.
-        if (!string.IsNullOrWhiteSpace(userId))
+        // Admin hesabının cavabları statistikaya və liderlik lövhəsinə düşməməlidir.
+        // Rol tokenə etibar edilmədən cari LiteDB istifadəçi qeydindən yoxlanılır.
+        var authenticatedUser = string.IsNullOrWhiteSpace(userId) ? null : _db.Users.FindById(userId);
+        if (authenticatedUser is not null && !authenticatedUser.Roles.Contains(AppRoles.Admin))
         {
-            _db.QuizResults.Insert(new QuizResult
+            lock (_db.QuizSyncRoot)
             {
-                UserId      = userId,
-                QuestionId  = question.Id,
-                CategoryId  = question.QuizCategoryId,
-                SelectedKey = request.SelectedKey,
-                IsCorrect   = isCorrect,
-                AnsweredAt  = DateTime.UtcNow
-            });
+                _db.Database.BeginTrans();
+                try
+                {
+                    var claims = _db.QuizScoreClaims;
+                    var key = authenticatedUser.Id + ":" + question.Id;
+                    if (!claims.Exists(LiteDB.Query.EQ("_id", key)))
+                    {
+                        claims.Insert(new LiteDB.BsonDocument { ["_id"] = key });
+                        if (!_db.QuizResults.Exists(r => r.UserId == authenticatedUser.Id && r.QuestionId == question.Id))
+                            _db.QuizResults.Insert(new QuizResult
+                            {
+                                UserId = authenticatedUser.Id, QuestionId = question.Id,
+                                CategoryId = question.QuizCategoryId, SelectedKey = request.SelectedKey,
+                                IsCorrect = isCorrect, AnsweredAt = DateTime.UtcNow
+                            });
+                    }
+                    _db.Database.Commit();
+                }
+                catch { _db.Database.Rollback(); throw; }
+            }
         }
 
         return Task.FromResult(new SubmitAnswerResponse
@@ -187,6 +210,7 @@ public class QuizService : IQuizService
 
         var entity = new QuizQuestion
         {
+            IsExamOnly       = request.IsExamOnly,
             QuizCategoryId   = request.CategoryId,
             Difficulty       = difficulty,
             QuestionText     = request.Question,
@@ -200,10 +224,26 @@ public class QuizService : IQuizService
             }).ToList()
         };
 
-        _db.QuizQuestions.Insert(entity);
+        lock (_db.QuizSyncRoot)
+        {
+            _db.Database.BeginTrans();
+            try
+            {
+            // Take the database write lock before reading the bank, including other processes/imports.
+            _db.Database.GetCollection<LiteDB.BsonDocument>("QuestionBankGate")
+                .Upsert(new LiteDB.BsonDocument { ["_id"] = "gate", ["version"] = Guid.NewGuid().ToString() });
+            if (_db.QuizQuestions.FindAll().Any(q => q.IsExamOnly != entity.IsExamOnly &&
+                QuizSecurity.NormalizeQuestion(q.QuestionText) == QuizSecurity.NormalizeQuestion(entity.QuestionText)))
+                throw new ArgumentException("Açıq və məxfi imtahan bankında eyni sual istifadə edilə bilməz.");
+            _db.QuizQuestions.Insert(entity);
+            _db.Database.Commit();
+            }
+            catch { _db.Database.Rollback(); throw; }
+        }
 
         return Task.FromResult(new QuizQuestionResponse
         {
+            IsExamOnly = entity.IsExamOnly,
             Id         = entity.Id,
             CategoryId = entity.QuizCategoryId,
             Difficulty = DifficultyToAz.GetValueOrDefault(entity.Difficulty, request.Difficulty),
@@ -272,32 +312,56 @@ public class QuizService : IQuizService
     /// <inheritdoc />
     public Task<bool> DeleteCategoryAsync(int categoryId)
     {
-        var category = _db.QuizCategories
-            .FindOne(c => c.Id == categoryId && !c.IsDeleted);
-
-        if (category is null)
-            return Task.FromResult(false);
-
-        category.IsDeleted = true;
-        category.UpdatedAt = DateTime.UtcNow;
-        _db.QuizCategories.Update(category);
-
-        // Kateqoriya silinəndə ona aid bütün suallar da soft delete edilir — "cascade" əməliyyatı.
-        // LiteDB-nin öz cascade mexanizmi yoxdur, buna görə bunu əl ilə foreach ilə həyata keçiririk.
-        var questions = _db.QuizQuestions
-            .Find(q => q.QuizCategoryId == categoryId && !q.IsDeleted)
-            .ToList();
-
-        foreach (var q in questions)
+        // İKİ KOLLEKSİYA, BİR ƏMƏLİYYAT.
+        //
+        // Əvvəl kateqoriya və sualları ayrı-ayrı yazılırdı, tranzaksiyasız. Proses aradakı
+        // pəncərədə dayansa kateqoriya silinmiş, sualları isə canlı qalırdı — və həmin suallar
+        // `GET /api/quiz/questions?categoryId=X` ilə oxunmağa, `submit` ilə bal verməyə davam edirdi
+        // (o yollar yalnız `q.IsDeleted` yoxlayır, kateqoriyanın vəziyyətinə baxmır).
+        // İndi hər ikisi eyni tranzaksiyadadır: ya ikisi də silinir, ya heç biri.
+        //
+        // Kilid QuizSyncRoot-dur — sual/kateqoriya yazılarının hamısı bu qapıdan keçir.
+        // Tranzaksiya thread-ə bağlıdır, ona görə burada `await` YOXDUR.
+        lock (_db.QuizSyncRoot)
         {
-            q.IsDeleted = true;
-            q.UpdatedAt = DateTime.UtcNow;
+            _db.Database.BeginTrans();
+            try
+            {
+                var category = _db.QuizCategories
+                    .FindOne(c => c.Id == categoryId && !c.IsDeleted);
+
+                if (category is null)
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(false);
+                }
+
+                var now = DateTime.UtcNow;
+
+                category.IsDeleted = true;
+                category.UpdatedAt = now;
+                _db.QuizCategories.Update(category);
+
+                // Kateqoriya silinəndə ona aid bütün suallar da soft delete edilir — "cascade" əməliyyatı.
+                // LiteDB-nin öz cascade mexanizmi yoxdur, buna görə bunu əl ilə həyata keçiririk.
+                var questions = _db.QuizQuestions
+                    .Find(q => q.QuizCategoryId == categoryId && !q.IsDeleted)
+                    .ToList();
+
+                foreach (var q in questions)
+                {
+                    q.IsDeleted = true;
+                    q.UpdatedAt = now;
+                }
+
+                if (questions.Count > 0)
+                    _db.QuizQuestions.Update(questions);
+
+                _db.Database.Commit();
+                return Task.FromResult(true);
+            }
+            catch { _db.Database.Rollback(); throw; }
         }
-
-        if (questions.Count > 0)
-            _db.QuizQuestions.Update(questions);
-
-        return Task.FromResult(true);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -316,10 +380,39 @@ public class QuizService : IQuizService
     /// <inheritdoc />
     public Task<List<LeaderboardEntryResponse>> GetLeaderboardAsync(string? period, int? categoryId, int limit)
     {
+        // Dövr normallaşdırılır ki, "Weekly", "weekly" və "WEEKLY" eyni keş açarına düşsün —
+        // əks halda hücumçu böyük-kiçik hərfləri dəyişdirərək keşi yan keçə bilərdi.
+        var normalizedPeriod = (period ?? "all").ToLowerInvariant() switch
+        {
+            "weekly"  => "weekly",
+            "monthly" => "monthly",
+            _         => "all"
+        };
+
+        var safeLimit = Math.Clamp(limit, 1, MaxLeaderboardEntries);
+        var cacheKey  = $"{normalizedPeriod}|{categoryId?.ToString() ?? "all"}";
+
+        // Həmişə tam siyahı (top 100) hesablanıb saxlanılır, sonra tələb olunan qədəri kəsilir.
+        // Sıra yuxarıdan hesablandığı üçün kəsmə nəticəni dəyişmir, amma hər fərqli `limit`
+        // dəyəri üçün ayrıca keş açarı (və ayrıca tam skan) yaranmır.
+        var snapshot = _leaderboardCache.GetOrBuild(
+            cacheKey,
+            () => BuildLeaderboard(normalizedPeriod, categoryId, MaxLeaderboardEntries));
+
+        // Keşdəki siyahı paylaşılandır — kənara həmişə yeni siyahı verilir.
+        return Task.FromResult(snapshot.Take(safeLimit).ToList());
+    }
+
+    /// <summary>
+    /// Liderlər lövhəsini bazadan hesablayır. YALNIZ <see cref="LeaderboardCache"/> tərəfindən,
+    /// keş köhnəldikdə çağırılır — birbaşa çağırmayın, əks halda hər sorğu tam skan edər.
+    /// </summary>
+    private List<LeaderboardEntryResponse> BuildLeaderboard(string period, int? categoryId, int limit)
+    {
         var now = DateTime.UtcNow;
 
         // Cari və əvvəlki dövr eyni uzunluqda götürülür ki, sıra dəyişikliyi (change) ədalətli müqayisə olsun.
-        (DateTime currentFrom, DateTime previousFrom) = (period ?? "all").ToLowerInvariant() switch
+        (DateTime currentFrom, DateTime previousFrom) = period switch
         {
             "weekly"  => (now.AddDays(-7),  now.AddDays(-14)),
             "monthly" => (now.AddDays(-30), now.AddDays(-60)),
@@ -329,14 +422,23 @@ public class QuizService : IQuizService
         var isAllTime = currentFrom == DateTime.MinValue;
 
         // Bazadan yalnız lazım olan aralıq çəkilir.
-        var results = _db.QuizResults
-            .Find(r => r.AnsweredAt >= previousFrom)
+        var results = QuizSecurity.ScoredResults(_db.QuizResults.FindAll())
+            .Where(r => r.AnsweredAt >= previousFrom)
             .Where(r => !string.IsNullOrWhiteSpace(r.UserId))
             .Where(r => categoryId == null || r.CategoryId == categoryId.Value)
             .ToList();
 
+        // Sistem administratoru liderlər lövhəsində GÖRÜNMÜR və sıralamaya təsir etmir.
+        // Süzgəc sabit e-poçta və Admin roluna birlikdə baxır — hesab hər iki halda kənarda qalır.
+        var hiddenUserIds = _db.Users
+            .FindAll()
+            .Where(u => ProtectedAccountPolicy.IsHiddenAccount(u))
+            .Select(u => u.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        results = results.Where(r => !hiddenUserIds.Contains(r.UserId)).ToList();
+
         if (results.Count == 0)
-            return Task.FromResult(new List<LeaderboardEntryResponse>());
+            return [];
 
         // N+1 qarşısı: sual çətinlikləri, istifadəçilər və kateqoriya adları bir dəfə lüğətə yığılır.
         var difficulties = _db.QuizQuestions
@@ -416,7 +518,7 @@ public class QuizService : IQuizService
             });
         }
 
-        return Task.FromResult(entries);
+        return entries;
     }
 
     // Bir dövrün nəticələrini istifadəçi başına yığır.

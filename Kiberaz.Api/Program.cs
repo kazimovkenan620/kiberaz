@@ -9,6 +9,7 @@ using Microsoft.OpenApi.Models;
 using Kiberaz.Application.Interfaces;
 using Kiberaz.Application.Validators;
 using Kiberaz.Domain.Entities;
+using Kiberaz.Domain.Common;
 using Kiberaz.Infrastructure.Data;
 using Kiberaz.Infrastructure.Identity;
 using Kiberaz.Infrastructure.Services;
@@ -17,13 +18,24 @@ using Kiberaz.Api.Filters;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 
 
 
 
+// Isolated PDF worker exits before loading configuration, secrets, Identity or LiteDB.
+if (args is ["--sanitize-pdf"])
+{
+    await PdfProcessSanitizer.RunWorkerAsync();
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+// Deployment secrets and explicit command-line settings take precedence over local files.
+builder.Configuration.AddEnvironmentVariables().AddCommandLine(args);
 
 // ─── 1. LİTEDB ────────────────────────────────────────────────
 // AddSingleton: tətbiq boyunca yalnız bir LiteDbContext obyekti yaradılır — bütün sorğular eyni instansı paylaşır.
@@ -66,6 +78,9 @@ builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var secretKey   = jwtSettings["SecretKey"]
                   ?? throw new InvalidOperationException("JWT SecretKey konfiqurasiyada tapılmadı!");
+if (Encoding.UTF8.GetByteCount(secretKey) < 32 ||
+    (!builder.Environment.IsDevelopment() && secretKey.StartsWith("SuperSecretKeyForDevelopment", StringComparison.Ordinal)))
+    throw new InvalidOperationException("JWT üçün ən azı 32 baytlıq məxfi, təsadüfi açar konfiqurasiya edin.");
 
 builder.Services.AddAuthentication(options =>
 {
@@ -80,6 +95,9 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience         = true,
         ValidateLifetime         = true,
         ValidateIssuerSigningKey = true,
+        RequireSignedTokens      = true,
+        RequireExpirationTime    = true,
+        ValidAlgorithms          = [SecurityAlgorithms.HmacSha256],
         ValidIssuer              = jwtSettings["Issuer"],
         ValidAudience            = jwtSettings["Audience"],
         IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
@@ -118,22 +136,40 @@ builder.Services.AddAuthentication(options =>
                 .GetRequiredService<UserManager<AppUser>>();
 
             var user = await userManager.FindByIdAsync(userId);
-            if (user is null)
+            if (user is null || !user.EmailConfirmed || user.LockoutEnd > DateTimeOffset.UtcNow)
             {
                 // İstifadəçi silinib, amma token hələ ömrünü başa vurmayıb.
                 context.Fail("Token etibarsızdır.");
                 return;
             }
 
-            var storedStamp = await userManager.GetSecurityStampAsync(user);
-
-            // Damğası olmayan köhnə qeydlər bloklanmır — geriyə uyğunluq üçün yoxlama atlanır.
-            if (string.IsNullOrEmpty(storedStamp))
-                return;
+            var storedStamp = user.SecurityStamp;
 
             var tokenStamp = principal.FindFirstValue(TokenService.SecurityStampClaimType);
-            if (!string.Equals(storedStamp, tokenStamp, StringComparison.Ordinal))
+            if (string.IsNullOrWhiteSpace(storedStamp) || string.IsNullOrWhiteSpace(tokenStamp) ||
+                !string.Equals(storedStamp, tokenStamp, StringComparison.Ordinal))
+            {
                 context.Fail("Sessiya etibarsızdır. Yenidən daxil olun.");
+                return;
+            }
+
+            // A valid signature does not grant a role that was removed from the account.
+            var liveRoles = new HashSet<string>(await userManager.GetRolesAsync(user), StringComparer.Ordinal);
+            var tokenRoles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet(StringComparer.Ordinal);
+            if (!liveRoles.SetEquals(tokenRoles))
+            {
+                context.Fail("Hesabın səlahiyyətləri dəyişib. Yenidən daxil olun.");
+                return;
+            }
+
+            // Admin claim-i yalnız kodda sabitlənmiş sistem hesabı üçün etibarlıdır.
+            // LiteDB əl ilə dəyişdirilsə və ya köhnə Admin tokeni qalsa belə sorğu keçmir.
+            var protectedAccount = context.HttpContext.RequestServices
+                .GetRequiredService<ProtectedAccountPolicy>();
+            var isOwner = protectedAccount.IsOwner(user);
+            if ((liveRoles.Contains(AppRoles.Admin) && !isOwner) ||
+                (isOwner && !liveRoles.SetEquals([AppRoles.Admin])))
+                context.Fail("Admin hesabının bütövlüyü pozulub.");
         }
     };
 });
@@ -161,24 +197,95 @@ if (!string.IsNullOrWhiteSpace(googleClientId) && !string.IsNullOrWhiteSpace(goo
             options.ClientSecret = googleClientSecret;
             options.CallbackPath = "/signin-google";
             options.SignInScheme = IdentityConstants.ExternalScheme;
+            options.ClaimActions.MapJsonKey("google_email_verified", "verified_email");
+            options.ClaimActions.MapJsonKey("google_email_verified", "email_verified");
+            options.ClaimActions.MapJsonKey("google_hosted_domain", "hd");
         });
 }
 
 // ─── 3b. AUTHORIZATION ────────────────────────────────────────
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder(JwtBearerDefaults.AuthenticationScheme)
+        .RequireAuthenticatedUser().Build();
+});
 
 //─── 3c. RATE LIMITING ────────────────────────────────────────
-// Rate limiting hər IP ünvanını ayrı "bölmə" (partition) kimi izləyir — bir IP-nin limitin dolması digərlərini etkiləmir.
 // Development mühitində limitlər çox yüksək qoyulur ki, test zamanı bloklanma baş verməsin.
+//
+// Açar seçimi: sorğu autentifikasiya olunubsa HESAB ID-si, əks halda IP.
+// Yalnız IP ilə saymaq iki tərəfdən zəifdir — bax: app.UseRateLimiter() yanındakı qeyd.
+string ClientIp(HttpContext ctx) =>
+    ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+string RateLimitIdentity(HttpContext ctx)
+{
+    var userId = ctx.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    return string.IsNullOrWhiteSpace(userId) ? "ip:" + ClientIp(ctx) : "user:" + userId;
+}
+
+bool isDevEnv = builder.Environment.IsDevelopment();
+
 builder.Services.AddRateLimiter(options =>
 {
     // 429 Too Many Requests — standart HTTP kodu; limiti keçən sorğular bu cavabı alır.
     options.RejectionStatusCode = 429;
 
+    // ── QLOBAL LİMİT — bütün endpoint-lərə, o cümlədən GƏLƏCƏKDƏ yazılacaqlara ──
+    //
+    // Niyə lazımdır: [EnableRateLimiting(...)] yazmağı unudulmuş endpoint HEÇ BİR limit
+    // altında olmur. Bu, "yeni endpoint = yeni limitsiz səth" deməkdir və audit ilə
+    // tutulması çətindir. Qlobal limiter bunu tərsinə çevirir: default = limitli,
+    // adlı siyasət yalnız DAHA DAR limit üçün əlavə edilir.
+    //
+    // Zəncir (CreateChained) hər iki limiti eyni anda tətbiq edir:
+    //   1) hesab/IP başına — normal istifadəçi davranışının tavanı;
+    //   2) xam IP başına — bir maşından çoxlu hesab açaraq 1-ci limiti keçmə cəhdini bağlayır.
+    // Hər ikisi keçilməlidir; biri dolarsa sorğu 429 alır.
+    options.GlobalLimiter = PartitionedRateLimiter.CreateChained(
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: RateLimitIdentity(context),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = isDevEnv ? 100_000 : 240,
+                    Window      = TimeSpan.FromMinutes(1),
+                    QueueLimit  = 0
+                })),
+        PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: "raw-ip:" + ClientIp(context),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = isDevEnv ? 100_000 : 600,
+                    Window      = TimeSpan.FromMinutes(1),
+                    QueueLimit  = 0
+                })));
+
+    // Limit dolduqda boş gövdə qaytarmaq olmaz: front-end JSON gözləyir və
+    // boş 429-u "naməlum xəta" kimi göstərirdi. Standart ApiResponse formatı + Retry-After.
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? (int)Math.Ceiling(retryAfter.TotalSeconds)
+            : 60;
+
+        context.HttpContext.Response.StatusCode  = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json; charset=utf-8";
+        context.HttpContext.Response.Headers.RetryAfter = retryAfterSeconds.ToString();
+
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            success = false,
+            message = $"Çox sayda sorğu göndərildi. {retryAfterSeconds} saniyə sonra yenidən cəhd edin.",
+            errors  = new[] { "RATE_LIMIT" }
+        }, cancellationToken);
+    };
+
     // Auth: qeydiyyat, giriş, token yenilənməsi — 10/dəq
     // Giriş cəhdlərini məhdudlaşdırmaq brute-force şifrə tapmacalarının qarşısını alır.
     options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
-        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        partitionKey: RateLimitIdentity(context),
         factory: _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = builder.Environment.IsDevelopment() ? 1000 : 10,
@@ -189,7 +296,7 @@ builder.Services.AddRateLimiter(options =>
     // Sensitive: şifrə sıfırlama, e-poçt göndərişi — 5/dəq
     // Bu endpoint-lər e-poçt xərcini artıra biləcəyi üçün daha ciddi məhdudlaşdırılıb.
     options.AddPolicy("sensitive", context => RateLimitPartition.GetFixedWindowLimiter(
-        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        partitionKey: RateLimitIdentity(context),
         factory: _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = builder.Environment.IsDevelopment() ? 1000 : 5,
@@ -201,7 +308,7 @@ builder.Services.AddRateLimiter(options =>
     // Yükləmə endpoint-i diskə yazır və heç bir hesabla əlaqələndirilmir, ona görə
     // ümumi "auth" siyasəti ilə deyil, öz daha dar limiti ilə qorunur (disk doldurma vektoru).
     options.AddPolicy("upload", context => RateLimitPartition.GetFixedWindowLimiter(
-        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        partitionKey: RateLimitIdentity(context),
         factory: _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = builder.Environment.IsDevelopment() ? 1000 : 5,
@@ -209,10 +316,23 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit  = 0
         }));
 
+    // Submit: quiz cavabı göndərmə — 30/dəq.
+    // Bu endpoint cavabı yoxlamaqla yanaşı DÜZGÜN AÇARI və bütün izahları qaytarır,
+    // yəni sual bankının məzmununu sızdıra bilən yeganə oxu yoludur. Hesaba bağlı
+    // dar limit toplu çıxarışı praktiki olaraq mümkünsüz edir və izlənə bilən hala salır.
+    options.AddPolicy("submit", context => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: RateLimitIdentity(context),
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = isDevEnv ? 5000 : 30,
+            Window      = TimeSpan.FromMinutes(1),
+            QueueLimit  = 0
+        }));
+
     // General: ümumi public endpoint-lər — 60/dəq
     // Normal istifadəçi davranışı üçün kifayət qədər yüksəkdir, lakin bot skriptlərini yavaşladır.
     options.AddPolicy("general", context => RateLimitPartition.GetFixedWindowLimiter(
-        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        partitionKey: RateLimitIdentity(context),
         factory: _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = builder.Environment.IsDevelopment() ? 5000 : 60,
@@ -248,14 +368,14 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
     if (knownProxies.Length > 0)
     {
+        var parsedProxies = knownProxies.Select(proxy =>
+            System.Net.IPAddress.TryParse(proxy, out var ip) ? ip :
+                throw new InvalidOperationException("ForwardedHeaders:KnownProxies ünvanı etibarsızdır.")).ToArray();
         options.KnownNetworks.Clear();
         options.KnownProxies.Clear();
 
-        foreach (var proxy in knownProxies)
-        {
-            if (System.Net.IPAddress.TryParse(proxy, out var ip))
-                options.KnownProxies.Add(ip);
-        }
+        foreach (var ip in parsedProxies)
+            options.KnownProxies.Add(ip);
     }
 });
 
@@ -312,8 +432,17 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
+builder.Services.AddSingleton(new PdfProcessSanitizer(System.Reflection.Assembly.GetExecutingAssembly().Location));
+// Liderlər lövhəsinin snapshot keşi — Singleton olmalıdır ki, bütün sorğular eyni nüsxəni görsün.
+// Scoped olsaydı hər sorğu öz boş keşini yaradar və keşin heç bir mənası qalmazdı.
+builder.Services.AddSingleton<LeaderboardCache>();
 builder.Services.AddScoped<IQuizService, QuizService>();
+builder.Services.AddScoped<IExamSessionService, ExamSessionService>();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICaptchaService, CaptchaService>();
+// Sahib hesabı siyasəti kodda sabit olan sistem hesabını qoruyur — Singleton.
+// AdminService və UserService bu siyasətə əsaslanaraq qorunan hesaba müdaxiləni rədd edir.
+builder.Services.AddSingleton<ProtectedAccountPolicy>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 // LiteDbAttemptTracker Singleton-dur: uğursuz giriş cəhdlərini sayır, bu sayğac bütün sorğular arasında ortaq olmalıdır.
 // Yaddaş versiyasından (InMemoryAttemptTracker) fərqli olaraq sayğaclar restart-dan sonra da qalır.
@@ -383,11 +512,24 @@ using (var scope = app.Services.CreateScope())
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<AppRole>>();
     await DbInitializer.SeedRolesAsync(roleManager);
 
-    // İlk admin: AdminBootstrap:Email konfiqurasiyada varsa, HƏMİN MÖVCUD hesab Admin roluna qaldırılır.
-    // Yeni hesab yaratmır və təsdiqlənməmiş e-poçtu qəbul etmir.
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
-    var startupLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminBootstrap");
-    await DbInitializer.SeedAdminAsync(userManager, builder.Configuration, startupLogger);
+    // Yalnız kodda sabitlənmiş hesab Admin saxlanılır. Digər bütün Admin rolları
+    // tətbiq sorğu qəbul etməzdən əvvəl silinir və həmin hesabların sessiyaları ləğv olunur.
+    var liteDbContext = scope.ServiceProvider.GetRequiredService<LiteDbContext>();
+    var startupLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SingleAdministrator");
+    DbInitializer.EnforceSingleAdministrator(liteDbContext, startupLogger);
+
+    // Sxem miqrasiyası sorğu qəbulundan ƏVVƏL işləyir: köhnə quiz sənədlərində
+    // olmayan bool sahələr doldurulur, əks halda həmin suallar sorğulara düşmür.
+    // İdempotentdir — düzəldiləcək sənəd yoxdursa heç nə etmir.
+    var migrationLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SchemaMigration");
+    DbInitializer.BackfillQuizQuestionFlags(liteDbContext, migrationLogger);
+
+    // CAPTCHA konfiqurasiyası sorğu qəbulundan ƏVVƏL yoxlanılır.
+    // Production-da test açarı və ya development bypass aşkarlansa tətbiq QALXMIR —
+    // çünki belə server xaricdən tamamilə normal görünür, log-da xəta vermir,
+    // sadəcə bot qapısı açıq qalır. Nasazlıq deploy anında görünməlidir.
+    var captchaLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("CaptchaConfig");
+    CaptchaService.EnsureProductionReady(app.Configuration, app.Environment, captchaLogger);
 }
 
 // Quiz kateqoriyaları və sualları seed-data JSON fayllarından bir dəfə yüklənir — verilənlər bazasında artıq kateqoriya varsa atlanır.
@@ -439,7 +581,9 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
-app.UseStaticFiles();
+// PDFs (including pre-fix uploads) must use the validating download controller.
+app.UseWhen(context => !context.Request.Path.Value!.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase),
+    branch => branch.UseStaticFiles());
 
 if (!app.Environment.IsDevelopment())
 {
@@ -447,11 +591,20 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-app.UseCors("FrontendPolicy");
 app.UseRouting();
-// Rate limiter routing-dən sonra, autentifikasiyadan əvvəl qoyulur — anonim istifadəçiləri də limit altına alır.
-app.UseRateLimiter();
+app.UseCors("FrontendPolicy");
+// SIRA VACİBDİR: limiter autentifikasiyadan SONRA qoyulur.
+//
+// Əvvəl UseAuthentication-dan əvvəl idi — həmin nöqtədə HttpContext.User hələ boş olur,
+// yəni limit açarı yalnız IP ola bilərdi. IP açarı iki tərəfdən zəifdir:
+//   • bir hesab IP dəyişdirərək limiti sonsuz sıfırlayır;
+//   • eyni NAT/məktəb şəbəkəsindəki onlarla real istifadəçi bir bucket-a düşür.
+// Autentifikasiyadan sonra hesab ID-si əlçatandır və limit hesaba bağlanır.
+//
+// Anonim sorğular yenə limitlənir: UseAuthentication heç nəyi rədd etmir, sadəcə
+// token varsa User-i doldurur — token yoxdursa açar avtomatik IP-yə düşür.
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();

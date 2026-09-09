@@ -14,7 +14,11 @@ namespace Kiberaz.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
+// Default limit — metod səviyyəsindəki "auth"/"sensitive" siyasətləri bunu əvəz edir.
+// Atribut yazılmamış (və gələcəkdə yazılacaq) endpoint limitsiz qalmır.
+[EnableRateLimiting("general")]
 [Produces("application/json")]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AuthController : ControllerBase
 {
     // Dependency Injection: bu üç asılılıq konstruktorda qəbul edilir — controller özü onları yaratmır.
@@ -73,6 +77,7 @@ public class AuthController : ControllerBase
     /// <summary>E-poçt təsdiqi linki üçün endpoint</summary>
     [HttpGet("confirm-email")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<IActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
     {
         var result = await _authService.ConfirmEmailAsync(userId, token);
@@ -151,14 +156,23 @@ public class AuthController : ControllerBase
             return Redirect(BuildFrontendGoogleRedirect(null, false));
 
         var email = authenticateResult.Principal.FindFirstValue(ClaimTypes.Email);
-        if (string.IsNullOrWhiteSpace(email))
+        var verified = authenticateResult.Principal.FindFirstValue("google_email_verified");
+        var providerId = authenticateResult.Principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(providerId) ||
+            !string.Equals(verified, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
             return Redirect(BuildFrontendGoogleRedirect(null, false));
+        }
 
         var firstName = authenticateResult.Principal.FindFirstValue(ClaimTypes.GivenName) ?? string.Empty;
         var lastName = authenticateResult.Principal.FindFirstValue(ClaimTypes.Surname) ?? string.Empty;
         // Qısamüddətli bir dəfəlik "code" yaradılır — frontend bunu /google/exchange endpoint-inə göndərərək real JWT alır.
         // Bu iki addımlı axın callback URL-i üzərindən birbaşa token ötürməyin qarşısını alır.
-        var result = await _authService.CreateGoogleLoginCodeAsync(email, firstName, lastName);
+        var hostedDomain = authenticateResult.Principal.FindFirstValue("google_hosted_domain");
+        var authoritativeEmail = email.EndsWith("@gmail.com", StringComparison.OrdinalIgnoreCase) ||
+            !string.IsNullOrWhiteSpace(hostedDomain);
+        var result = await _authService.CreateGoogleLoginCodeAsync(providerId, email, authoritativeEmail, firstName, lastName);
         await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
 
         return Redirect(BuildFrontendGoogleRedirect(result.Data, result.Success));
@@ -225,7 +239,7 @@ public class AuthController : ControllerBase
 
         var result = await _authService.LogoutAsync(userId);
         ClearAuthCookies();
-        return Ok(result);
+        return result.Success ? Ok(result) : BadRequest(result);
     }
 
     /// <summary>Refresh token vasitəsilə yeni token almaq</summary>
@@ -259,17 +273,27 @@ public class AuthController : ControllerBase
     /// <summary>Cari istifadəçi məlumatı — token lazımdır</summary>
     [HttpGet("me")]
     [Authorize]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<CurrentUserResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public IActionResult Me()
     {
         // JWT token-in içindəki "claim"-lər oxunur — verilənlər bazasına sorğu göndərilmir.
         // Bu məlumatlar token imzalandığı anda daxil edilib, buna görə hər sorğuda DB yükü olmadan istifadəçini tanımaq mümkündür.
-        var userId    = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var email     = User.FindFirstValue(ClaimTypes.Email);
-        var firstName = User.FindFirstValue("firstName");
-        var lastName  = User.FindFirstValue("lastName");
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
 
-        return Ok(new { userId, email, firstName, lastName });
+        // Cavab bütün API ilə eyni zərfdədir. Əvvəl bu tək endpoint anonim obyekt qaytarırdı —
+        // frontend onun üçün ayrıca forma saxlamalı olurdu.
+        var current = new CurrentUserResponse
+        {
+            UserId    = userId,
+            Email     = User.FindFirstValue(ClaimTypes.Email) ?? string.Empty,
+            FirstName = User.FindFirstValue("firstName") ?? string.Empty,
+            LastName  = User.FindFirstValue("lastName") ?? string.Empty,
+            Roles     = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList()
+        };
+
+        return Ok(ApiResponse<CurrentUserResponse>.Ok(current));
     }
 }

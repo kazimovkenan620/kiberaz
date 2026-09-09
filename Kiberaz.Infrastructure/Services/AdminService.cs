@@ -21,11 +21,13 @@ namespace Kiberaz.Infrastructure.Services;
 /// </summary>
 public class AdminService : IAdminService
 {
-    private readonly LiteDbContext        _db;
-    private readonly UserManager<AppUser> _userManager;
+    private readonly LiteDbContext           _db;
+    private readonly UserManager<AppUser>    _userManager;
+    private readonly ProtectedAccountPolicy  _protected;
 
-    public AdminService(LiteDbContext db, UserManager<AppUser> userManager)
+    public AdminService(LiteDbContext db, UserManager<AppUser> userManager, ProtectedAccountPolicy protectedAccounts)
     {
+        _protected   = protectedAccounts;
         _db          = db;
         _userManager = userManager;
     }
@@ -47,14 +49,20 @@ public class AdminService : IAdminService
             .Select(q => q.QuizCategoryId)
             .ToHashSet();
 
+        // Sistem administratoru istifadəçi/qeydiyyat göstəricilərinə daxil edilmir.
+        // Müdafiə məqsədilə bazada qalmış istənilən qeyri-qanuni Admin rolu da sayılmır.
+        var ordinaryUsers = _db.Users.FindAll()
+            .Where(u => !ProtectedAccountPolicy.IsHiddenAccount(u))
+            .ToList();
+
         var stats = new AdminStatsResponse
         {
-            TotalUsers       = _db.Users.Count(),
+            TotalUsers       = ordinaryUsers.Count,
             TotalCourses     = courses.Count,
             PendingCourses   = courses.Count(c => c.Status == CourseStatus.Pending),
             TotalExams       = categories.Count,
             ActiveExams      = categories.Count(c => categoryIdsWithQuestions.Contains(c.Id)),
-            NewUsersThisWeek = _db.Users.Find(u => u.CreatedAt >= weekAgo).Count()
+            NewUsersThisWeek = ordinaryUsers.Count(u => u.CreatedAt >= weekAgo)
         };
 
         return Task.FromResult(ApiResponse<AdminStatsResponse>.Ok(stats));
@@ -135,13 +143,54 @@ public class AdminService : IAdminService
     // İSTİFADƏÇİLƏR
     // ═══════════════════════════════════════════════════════════
 
-    public Task<ApiResponse<List<AdminUserResponse>>> GetUsersAsync()
+    /// <summary>
+    /// İstifadəçi siyahısı — axtarış SERVER tərəfdə aparılır və nəticə həmişə məhdudlaşdırılır.
+    ///
+    /// ƏVVƏLKİ PROBLEM: metod bütün istifadəçiləri yaddaşa çəkirdi (FindAll().OrderBy().ToList()).
+    /// 10 min istifadəçidə hər admin sorğusu bütün bazanı RAM-a yükləyirdi — autentifikasiya
+    /// keçidi deyil, amma admin panelini öz-özünə dayandıran böyümə səhvi.
+    ///
+    /// İNDİ: axan (streaming) oxuma üzərində filtr, yaddaşda isə yalnız `MaxUserPageSize` qədər
+    /// ən yeni qeyd saxlanılır — yaddaş sabitdir. Axtarış server tərəfdə olduğu üçün
+    /// məhdudiyyət nəticəni yarımçıq göstərmir: axtarılan istifadəçi hansı sırada olsa da tapılır.
+    /// </summary>
+    public Task<ApiResponse<List<AdminUserResponse>>> GetUsersAsync(
+        string currentAdminId, string? search = null, int take = MaxUserPageSize)
     {
         var now = DateTimeOffset.UtcNow;
+        var limit = Math.Clamp(take, 1, MaxUserPageSize);
+        var needle = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
 
-        var users = _db.Users
-            .FindAll()
-            .OrderByDescending(u => u.CreatedAt)
+        // Yaddaşda yalnız `limit` qədər ən yeni qeyd saxlanılır (CreatedAt azalan sırada).
+        var newest = new List<AppUser>(limit + 1);
+        int matched = 0;
+
+        foreach (var user in _db.Users.FindAll())
+        {
+            // Admin öz hesabını siyahıda görmür. Onsuz da öz rolunu dəyişə və özünü
+            // bloklaya bilmirdi — sətri göstərmək yalnız işləməyən düymələr yaradırdı.
+            // Filtr SERVERDƏDİR: sətir ümumiyyətlə göndərilmir, brauzerdə gizlədilmir.
+            if (ProtectedAccountPolicy.IsHiddenAccount(user))
+                continue;
+
+            if (needle is not null && !MatchesSearch(user, needle))
+                continue;
+
+            matched++;
+
+            if (newest.Count < limit)
+            {
+                newest.Add(user);
+                newest.Sort(NewestFirst);
+            }
+            else if (NewestFirst(user, newest[^1]) < 0)
+            {
+                newest[^1] = user;
+                newest.Sort(NewestFirst);
+            }
+        }
+
+        var users = newest
             .Select(u => new AdminUserResponse
             {
                 Id               = u.Id,
@@ -156,81 +205,92 @@ public class AdminService : IAdminService
             })
             .ToList();
 
-        return Task.FromResult(ApiResponse<List<AdminUserResponse>>.Ok(users));
+        // Mesaj YALNIZ hədd dolduqda doldurulur. Əks halda boş qalır ki, panel
+        // hər yükləmədə lazımsız bildiriş göstərməsin (cədvəl başlığında onsuz da say var).
+        var message = matched > users.Count
+            ? $"{matched} istifadəçidən ən yeni {users.Count} göstərilir. Dəqiqləşdirmək üçün axtarışdan istifadə edin."
+            : string.Empty;
+
+        return Task.FromResult(ApiResponse<List<AdminUserResponse>>.Ok(users, message));
     }
 
-    public async Task<ApiResponse<bool>> ChangeUserRoleAsync(string currentAdminId, string userId, string newRole)
+    public Task<ApiResponse<bool>> ChangeUserRoleAsync(string currentAdminId, string userId, string newRole)
+        => Task.FromResult(ChangeAccount(currentAdminId, userId, user =>
     {
+        // Admin rolu heç kimə verilə bilməz — nə panel, nə də birbaşa API sorğusu ilə.
+        // Sistem administratoru kodda sabitdir və yalnız tətbiqin başlanğıc qaydası ilə təyin olunur.
+        if (string.Equals(newRole, AppRoles.Admin, StringComparison.Ordinal))
+            return ApiResponse<bool>.Fail(ProtectedAccountPolicy.AdminGrantBlockedMessage);
+
         // Yalnız sistemdə mövcud olan rollar qəbul edilir — ixtiyari sətir rol adı kimi yazıla bilməz.
         if (!AllowedRoles.Contains(newRole))
             return ApiResponse<bool>.Fail($"Yanlış rol: {newRole}");
+
+        // ── QORUNAN SAHİB HESABI ──────────────────────────────────────
+        // Sahib hesabın rolu HEÇ KİM tərəfindən, o cümlədən özü tərəfindən dəyişdirilə bilməz.
+        // Yoxlama hədəfin bazadakı e-poçtuna görə aparılır — sorğudakı ID və ya rol iddiasına deyil.
+        if (_protected.IsOwner(user))
+            return ApiResponse<bool>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage);
 
         // Admin öz rolunu dəyişə bilməz: səhvən "User"-ə keçsə panelə bir daha girə bilməz.
         if (string.Equals(currentAdminId, userId, StringComparison.Ordinal))
             return ApiResponse<bool>.Fail("Öz rolunuzu bu paneldən dəyişə bilməzsiniz.");
 
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user is null)
-            return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
-
-        var currentRoles = await _userManager.GetRolesAsync(user);
+        var currentRoles = user.Roles;
 
         if (currentRoles.Count == 1 && currentRoles[0] == newRole)
             return ApiResponse<bool>.Ok(true, "İstifadəçi artıq bu roldadır.");
 
-        // Son admini adi istifadəçiyə çevirmək platformanı idarəçisiz qoyar.
-        if (currentRoles.Contains(AppRoles.Admin) && newRole != AppRoles.Admin && CountAdmins() <= 1)
-            return ApiResponse<bool>.Fail("Sistemdəki son admin rolunu geri ala bilməzsiniz.");
+        // ── MÜƏLLİM ROLUNUN GERİ ALINMASI ─────────────────────────────
+        // İstifadəçi öz rolunu dəyişəndə (UserService.ChangeRoleAsync) sistem bütün
+        // siniflərin silinməsini tələb edir. Admin paneli bu qaydadan kənarda idi:
+        // buradan edilən dəyişiklik müəllimdən rolu alır, lakin sinifləri yerində qoyurdu.
+        // Nəticə "yetim" sinif olur — sahibi rolu olmadığı üçün onu nə görə, nə də silə bilir,
+        // rol geri qaytarılanda isə sinif birdən yenidən peyda olur.
+        // Qayda sistemdə bir dənə olmalıdır, ona görə admin yolu da eyni şərti tələb edir.
+        if (currentRoles.Contains(AppRoles.Teacher) && newRole != AppRoles.Teacher)
+        {
+            var classCount = _db.TeacherClasses.Count(c => c.TeacherId == user.Id);
+            if (classCount > 0)
+                return ApiResponse<bool>.Fail(
+                    $"Bu müəllimin {classCount} sinfi var. Rol dəyişməzdən əvvəl siniflər silinməlidir.");
+        }
 
-        foreach (var role in currentRoles)
-            await _userManager.RemoveFromRoleAsync(user, role);
-
-        await _userManager.AddToRoleAsync(user, newRole);
-
-        // Rollar JWT claim-i kimi daşınır. Damğa yenilənməsə istifadəçi əlindəki tokenlə
-        // 15 dəqiqəyə qədər KÖHNƏ səlahiyyətlərlə işləməyə davam edərdi.
-        await _userManager.UpdateSecurityStampAsync(user);
+        user.Roles = [newRole];
+        RevokeSessions(user);
 
         return ApiResponse<bool>.Ok(true, $"Rol {newRole} olaraq dəyişdirildi.");
-    }
+    }));
 
-    public async Task<ApiResponse<bool>> ToggleUserBlockAsync(string currentAdminId, string userId)
+    public Task<ApiResponse<bool>> ToggleUserBlockAsync(string currentAdminId, string userId)
+        => Task.FromResult(ChangeAccount(currentAdminId, userId, user =>
     {
         // Admin özünü bloklasa hesabına bir daha girə bilməz — bərpası yalnız baza faylına müdaxilə ilə mümkündür.
         if (string.Equals(currentAdminId, userId, StringComparison.Ordinal))
             return ApiResponse<bool>.Fail("Öz hesabınızı bloklaya bilməzsiniz.");
 
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user is null)
-            return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
+        // Sahib hesabı bloklana bilməz — əks halda bir admin platformanın sahibini
+        // öz sistemindən kənarlaşdıra bilərdi.
+        if (_protected.IsOwner(user))
+            return ApiResponse<bool>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage);
 
         var isBlocked = user.LockoutEnd is not null && user.LockoutEnd > DateTimeOffset.UtcNow;
 
         if (!isBlocked)
         {
-            var roles = await _userManager.GetRolesAsync(user);
-            if (roles.Contains(AppRoles.Admin) && CountAdmins() <= 1)
-                return ApiResponse<bool>.Fail("Sistemdəki son admini bloklaya bilməzsiniz.");
-
             user.LockoutEnabled = true;
             user.LockoutEnd     = DateTimeOffset.MaxValue;
-            user.RefreshToken   = null;
-            user.RefreshTokenExpiryTime = null;
-            await _userManager.UpdateAsync(user);
-
-            // Bloklamaq kifayət deyil: əlindəki access token hələ etibarlıdır.
-            // Damğa yenilənəndə OnTokenValidated onu dərhal rədd edir — blok ANİ qüvvəyə minir.
-            await _userManager.UpdateSecurityStampAsync(user);
+            RevokeSessions(user);
 
             return ApiResponse<bool>.Ok(true, "İstifadəçi bloklandı.");
         }
 
         user.LockoutEnd        = null;
         user.AccessFailedCount = 0;
-        await _userManager.UpdateAsync(user);
+        RevokeSessions(user);
 
         return ApiResponse<bool>.Ok(true, "İstifadəçinin bloku götürüldü.");
-    }
+    }));
 
     // ═══════════════════════════════════════════════════════════
     // İMTAHANLAR (quiz kateqoriyaları)
@@ -250,8 +310,14 @@ public class AdminService : IAdminService
             .ToDictionary(g => g.Key, g => g.Count());
 
         // İştirakçı sayı UYDURMA DEYİL — həmin kateqoriyada cavab vermiş unikal istifadəçi sayıdır.
+        var hiddenUserIds = _db.Users
+            .FindAll()
+            .Where(u => ProtectedAccountPolicy.IsHiddenAccount(u))
+            .Select(u => u.Id)
+            .ToHashSet(StringComparer.Ordinal);
         var participants = _db.QuizResults
             .FindAll()
+            .Where(r => !hiddenUserIds.Contains(r.UserId))
             .GroupBy(r => r.CategoryId)
             .ToDictionary(g => g.Key, g => g.Select(r => r.UserId).Distinct().Count());
 
@@ -287,44 +353,115 @@ public class AdminService : IAdminService
         if (!int.TryParse(examId, out var categoryId))
             return Task.FromResult(ApiResponse<bool>.Fail("Yanlış imtahan ID-si."));
 
-        var category = _db.QuizCategories.FindOne(c => c.Id == categoryId && !c.IsDeleted);
-        if (category is null)
-            return Task.FromResult(ApiResponse<bool>.Fail("İmtahan tapılmadı."));
-
-        category.IsDeleted = true;
-        category.UpdatedAt = DateTime.UtcNow;
-        _db.QuizCategories.Update(category);
-
-        // Kateqoriya silinəndə sualları da soft delete edilir (QuizService ilə eyni cascade davranışı).
-        var questions = _db.QuizQuestions
-            .Find(q => q.QuizCategoryId == categoryId && !q.IsDeleted)
-            .ToList();
-
-        foreach (var q in questions)
+        // Kateqoriya + onun sualları BİR tranzaksiyada silinir (QuizService.DeleteCategoryAsync ilə
+        // eyni davranış və eyni kilid). Ayrı-ayrı yazıldıqda proses aradakı pəncərədə dayansa
+        // kateqoriya siyahıdan itir, sualları isə canlı qalır və bal verməyə davam edirdi.
+        // Tranzaksiya thread-ə bağlıdır — burada `await` YOXDUR.
+        lock (_db.QuizSyncRoot)
         {
-            q.IsDeleted = true;
-            q.UpdatedAt = DateTime.UtcNow;
+            _db.Database.BeginTrans();
+            try
+            {
+                var category = _db.QuizCategories.FindOne(c => c.Id == categoryId && !c.IsDeleted);
+                if (category is null)
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(ApiResponse<bool>.Fail("İmtahan tapılmadı."));
+                }
+
+                var now = DateTime.UtcNow;
+
+                category.IsDeleted = true;
+                category.UpdatedAt = now;
+                _db.QuizCategories.Update(category);
+
+                var questions = _db.QuizQuestions
+                    .Find(q => q.QuizCategoryId == categoryId && !q.IsDeleted)
+                    .ToList();
+
+                foreach (var q in questions)
+                {
+                    q.IsDeleted = true;
+                    q.UpdatedAt = now;
+                }
+
+                if (questions.Count > 0)
+                    _db.QuizQuestions.Update(questions);
+
+                _db.Database.Commit();
+                return Task.FromResult(ApiResponse<bool>.Ok(true, "İmtahan silindi."));
+            }
+            catch { _db.Database.Rollback(); throw; }
         }
-
-        if (questions.Count > 0)
-            _db.QuizQuestions.Update(questions);
-
-        return Task.FromResult(ApiResponse<bool>.Ok(true, "İmtahan silindi."));
     }
 
     // ═══════════════════════════════════════════════════════════
     // KÖMƏKÇİLƏR
     // ═══════════════════════════════════════════════════════════
 
+    /// <summary>Bir sorğuda qaytarıla bilən maksimum istifadəçi sayı — yaddaş sərhədi.</summary>
+    private const int MaxUserPageSize = 100;
+
+    // CreatedAt azalan; bərabər tarixdə Id-yə görə sabit sıra (eyni nəticə təkrarlanan sorğularda).
+    private static int NewestFirst(AppUser a, AppUser b)
+    {
+        int byDate = b.CreatedAt.CompareTo(a.CreatedAt);
+        return byDate != 0 ? byDate : string.CompareOrdinal(a.Id, b.Id);
+    }
+
+    // Axtarış ləqəb, e-poçt, ad və soyad üzrə aparılır — admin panelindəki cədvəl sütunları ilə eyni.
+    private static bool MatchesSearch(AppUser user, string needle)
+        => (user.Nickname?.ToLowerInvariant().Contains(needle) ?? false)
+        || (user.Email?.ToLowerInvariant().Contains(needle) ?? false)
+        || (user.FirstName?.ToLowerInvariant().Contains(needle) ?? false)
+        || (user.LastName?.ToLowerInvariant().Contains(needle) ?? false);
+
     private static readonly HashSet<string> AllowedRoles = new(StringComparer.Ordinal)
     {
-        AppRoles.Admin, AppRoles.Moderator, AppRoles.VIP, AppRoles.User, AppRoles.Teacher
+        AppRoles.Moderator, AppRoles.VIP, AppRoles.User, AppRoles.Teacher
     };
 
-    // Admin sayı birbaşa embed edilmiş Roles siyahısından hesablanır — UserManager ilə
-    // hər istifadəçi üçün ayrıca sorğu göndərmək N+1 yaradardı.
-    private int CountAdmins()
-        => _db.Users.FindAll().Count(u => u.Roles.Any(r => r.Equals(AppRoles.Admin, StringComparison.OrdinalIgnoreCase)));
+    // Actor authorization, last-admin checks and revocation share one LiteDB transaction.
+    // No await is allowed here: LiteDB transactions belong to the current thread.
+    private ApiResponse<bool> ChangeAccount(string actorId, string userId, Func<AppUser, ApiResponse<bool>> change)
+    {
+        lock (_db.UsersSyncRoot)
+        {
+            _db.Database.BeginTrans();
+            try
+            {
+                var actor = _db.Users.FindById(actorId);
+                if (actor is null || !actor.EmailConfirmed || actor.LockoutEnd > DateTimeOffset.UtcNow ||
+                    !actor.Roles.Contains(AppRoles.Admin) || !_protected.IsOwner(actor))
+                {
+                    _db.Database.Rollback();
+                    return ApiResponse<bool>.Fail("Admin səlahiyyəti tələb olunur.");
+                }
+                var user = _db.Users.FindById(userId);
+                if (user is null)
+                {
+                    _db.Database.Rollback();
+                    return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
+                }
+                var result = change(user);
+                if (!result.Success) { _db.Database.Rollback(); return result; }
+                user.ConcurrencyStamp = Guid.NewGuid().ToString();
+                if (!_db.Users.Update(user)) throw new InvalidOperationException("Hesab yenilənmədi.");
+                _db.Database.Commit();
+                return result;
+            }
+            catch { _db.Database.Rollback(); throw; }
+        }
+    }
+
+    private static void RevokeSessions(AppUser user)
+    {
+        user.SecurityStamp = Guid.NewGuid().ToString();
+        user.RefreshToken = null;
+        user.RefreshTokenExpiryTime = null;
+        user.GoogleLoginCodeHash = null;
+        user.GoogleLoginCodeExpiryTime = null;
+    }
 
     private ApiResponse<bool> SetCourseStatus(int courseId, CourseStatus status, string message)
     {

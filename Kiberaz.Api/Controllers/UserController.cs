@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Kiberaz.Domain.Common;
 using Kiberaz.Application.DTOs.User;
 using Kiberaz.Application.Interfaces;
@@ -15,6 +16,9 @@ namespace Kiberaz.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+// Sinif səviyyəsində default limit: bu controller-ə sonradan əlavə ediləcək
+// endpoint də avtomatik limit altına düşür, ayrıca atribut yazılması unudulsa belə.
+[EnableRateLimiting("general")]
 public class UserController : ControllerBase
 {
     // Validasiya burada əl ilə çağrılmır: Program.cs-də qlobal qeydiyyatdan keçmiş ValidationFilter
@@ -101,8 +105,11 @@ public class UserController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    // Data Protection tokeni istehlak edən bütün endpoint-lər "sensitive" (5/dəq) altındadır —
+    // bu ikisi sinif səviyyəli "general" (60/dəq) limitində qalmışdı.
     [HttpGet("confirm-email-change")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<IActionResult> ConfirmEmailChange([FromQuery] string userId, [FromQuery] string newEmail, [FromQuery] string token)
     {
         var result = await _userService.ConfirmEmailChangeAsync(userId, newEmail, token);
@@ -114,6 +121,7 @@ public class UserController : ControllerBase
 
     [HttpPost("confirm-email-change")]
     [AllowAnonymous]
+    [EnableRateLimiting("sensitive")]
     public async Task<IActionResult> ConfirmEmailChangePost([FromBody] ConfirmEmailChangeRequest request)
     {
         var result = await _userService.ConfirmEmailChangeAsync(request.UserId, request.NewEmail, request.Token);
@@ -123,6 +131,22 @@ public class UserController : ControllerBase
     /// <summary>
     /// Muellim dashboard-u ucun telebe gostericilerini qaytarir.
     /// </summary>
+    /// <summary>
+    /// Cari istifadəçinin öz göstəriciləri (kabinet statistikası).
+    /// Rol tələbi yoxdur — hər kəs YALNIZ öz məlumatını görür, ID token-dən götürülür.
+    /// </summary>
+    [HttpGet("me/overview")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetMyOverview()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var result = await _userService.GetMyOverviewAsync(userId);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
     [HttpGet("students/{studentId}/overview")]
     // [Authorize(Roles = "Teacher")] həm autentifikasiyanı, həm də rolu yoxlayır — yalnız müəllim tokeni olan istifadəçilər daxil ola bilər.
     // Başqa rol sahibi (məsələn, Student) token ilə gəlsə belə, 403 Forbidden cavabı alacaq.
@@ -181,6 +205,25 @@ public class UserController : ControllerBase
         if (string.IsNullOrEmpty(teacherId)) return Unauthorized();
 
         var result = await _userService.AddStudentToClassAsync(teacherId, classId, request);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Müəllimin öz sinfini silir — rol keçidi üçün ön şərt.
+    /// Sahiblik servis qatında TeacherId ilə yoxlanılır.
+    /// </summary>
+    [HttpDelete("teacher/classes/{classId:int}")]
+    [Authorize(Roles = AppRoles.Teacher)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> DeleteTeacherClass([FromRoute] int classId)
+    {
+        var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(teacherId)) return Unauthorized();
+
+        var result = await _userService.DeleteTeacherClassAsync(teacherId, classId);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 }

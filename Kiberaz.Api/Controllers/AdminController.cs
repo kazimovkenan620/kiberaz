@@ -21,6 +21,7 @@ namespace Kiberaz.Api.Controllers;
 [Authorize(Roles = AppRoles.Admin)]
 [EnableRateLimiting("general")]
 [Produces("application/json")]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;
@@ -50,6 +51,7 @@ public class AdminController : ControllerBase
         => Ok(await _adminService.GetCoursesAsync());
 
     [HttpPost("courses")]
+    [Consumes("application/json")]
     [ProducesResponseType(typeof(ApiResponse<AdminCourseResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateCourse([FromBody] CreateAdminCourseRequest request)
@@ -78,7 +80,9 @@ public class AdminController : ControllerBase
         return result.Success ? Ok(result) : NotFound(result);
     }
 
+    // Dağıdıcı əməliyyat: "general" (60/dəq) əvəzinə "sensitive" (5/dəq).
     [HttpDelete("courses/{id:int}")]
+    [EnableRateLimiting("sensitive")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteCourse(int id)
@@ -95,10 +99,11 @@ public class AdminController : ControllerBase
     /// </summary>
     [HttpGet("users")]
     [ProducesResponseType(typeof(ApiResponse<List<AdminUserResponse>>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetUsers()
-        => Ok(await _adminService.GetUsersAsync());
+    public async Task<IActionResult> GetUsers([FromQuery] string? search = null, [FromQuery] int take = 100)
+        => Ok(await _adminService.GetUsersAsync(CurrentAdminId, search, take));
 
     [HttpPatch("users/{userId}/role")]
+    [Consumes("application/json")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ChangeUserRole(string userId, [FromBody] AdminChangeUserRoleRequest request)
@@ -123,7 +128,9 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> GetExams()
         => Ok(await _adminService.GetExamsAsync());
 
+    // Bir kateqoriya + onun BÜTÜN suallarını silir — ən dağıdıcı admin əməliyyatıdır.
     [HttpDelete("exams/{id}")]
+    [EnableRateLimiting("sensitive")]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteExam(string id)

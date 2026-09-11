@@ -1,373 +1,192 @@
-import { useState } from 'react';
-import { ClipboardList, Plus, LogIn, Copy, Check, Users, Clock, FileText, X, Zap, BookOpen, Globe, Shield } from 'lucide-react';
-import { examSessions } from '../data/mockData';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, ClipboardList, Clock, Copy, FileText, LogIn, Plus, RefreshCw, Shield, Users, X } from 'lucide-react';
+import { getStoredUserRoles, getToken } from '../services/authService';
+import {
+  closeExamSession, createExamSession, getExamAttempt, getExamCategories, getExamDashboard,
+  getExamOverview, joinExamSession, saveExamAnswer, submitExamAttempt,
+  type ExamAttempt, type ExamCategory, type ExamDashboard, type ExamOverview, type ExamSessionInfo,
+} from '../services/examSessionService';
 import './ExamSession.css';
 
-// ── Sabit məlumatlar ──────────────────────────────────────────
-const statusMap: Record<string, { label: string; className: string; icon: string }> = {
-  'Aktiv':      { label: 'Aktiv',      className: 'status-active',   icon: '🟢' },
-  'Gözlənilir': { label: 'Gözlənilir', className: 'status-waiting',  icon: '🟡' },
-  'Tamamlandı': { label: 'Tamamlandı', className: 'status-finished', icon: '⚪' },
-};
+const errorText = (result: { message: string; errors?: string[] }) => result.errors?.[0] || result.message;
+const formatDate = (value: string) => new Intl.DateTimeFormat('az-AZ', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+}).format(new Date(value));
 
-const categories = [
-  { id: 'crypto',  label: 'Kriptoqrafiya',       icon: <BookOpen size={15} />,  color: '#a855f7', max: 30 },
-  { id: 'network', label: 'Şəbəkə Təhlükəsizliyi', icon: <Globe size={15} />,    color: '#3b82f6', max: 40 },
-  { id: 'web',     label: 'Veb Təhlükəsizliyi',  icon: <Zap size={15} />,       color: '#ef4444', max: 50 },
-  { id: 'general', label: 'Ümumi Hazırlıq',      icon: <Shield size={15} />,    color: '#00e5a0', max: 40 },
-];
-
-// Tövsiyə edilən hazır paketlər
-const presets = [
-  {
-    id: 'quick',
-    label: 'Sürətli Test',
-    desc: '15 dəq · 10 sual · Ümumi mövzular',
-    icon: '⚡',
-    color: '#00e5a0',
-    duration: 15,
-    counts: { crypto: 0, network: 3, web: 4, general: 3 },
-  },
-  {
-    id: 'standard',
-    label: 'Standart İmtahan',
-    desc: '45 dəq · 25 sual · Qarışıq kateqoriyalar',
-    icon: '📋',
-    color: '#3b82f6',
-    duration: 45,
-    counts: { crypto: 5, network: 7, web: 8, general: 5 },
-  },
-  {
-    id: 'deep',
-    label: 'Dərin Analiz',
-    desc: '90 dəq · 50 sual · Bütün sahələr',
-    icon: '🔬',
-    color: '#a855f7',
-    duration: 90,
-    counts: { crypto: 12, network: 14, web: 16, general: 8 },
-  },
-];
-
-// ── "Sessiya Yarat" Modal ─────────────────────────────────────
-function CreateSessionModal({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState<'preset' | 'custom' | 'done'>('preset');
+function CreateSessionModal({ onClose, onCreated }: {
+  onClose: () => void; onCreated: (session: ExamSessionInfo) => void;
+}) {
+  const [categories, setCategories] = useState<ExamCategory[]>([]);
+  const [counts, setCounts] = useState<Record<number, number>>({});
+  const [title, setTitle] = useState('');
   const [duration, setDuration] = useState(45);
-  const [counts, setCounts] = useState<Record<string, number>>({ crypto: 5, network: 7, web: 8, general: 5 });
-  const [sessionName, setSessionName] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [created, setCreated] = useState<ExamSessionInfo | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
 
-  const totalQ = Object.values(counts).reduce((s, v) => s + v, 0);
+  useEffect(() => {
+    let active = true;
+    getExamCategories().then(result => {
+      if (!active) return;
+      if (result.success && result.data) setCategories(result.data.filter(c => c.questionCount > 0));
+      else setError(errorText(result));
+      setLoading(false);
+    }).catch(() => { if (active) { setError('Serverlə əlaqə yaradıla bilmədi.'); setLoading(false); } });
+    return () => { active = false; };
+  }, []);
 
-  const applyPreset = (p: typeof presets[0]) => {
-    setDuration(p.duration);
-    setCounts({ ...p.counts });
-    setStep('custom');
+  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  const changeCount = (category: ExamCategory, delta: number) => setCounts(current => ({
+    ...current,
+    [category.id]: Math.max(0, Math.min(category.questionCount, (current[category.id] ?? 0) + delta)),
+  }));
+
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!title.trim() || total < 1 || total > 50) return;
+    setLoading(true); setError('');
+    try {
+      const result = await createExamSession({
+        title: title.trim(), durationMinutes: duration,
+        categories: Object.entries(counts).filter(([, count]) => count > 0)
+          .map(([categoryId, count]) => ({ categoryId: Number(categoryId), count })),
+      });
+      if (result.success && result.data) { setCreated(result.data); onCreated(result.data); }
+      else setError(errorText(result));
+    } catch { setError('Serverlə əlaqə yaradıla bilmədi.'); }
+    finally { setLoading(false); }
   };
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sessionName.trim() || totalQ === 0) return;
-    setSubmitted(true);
-    // TODO: POST /api/exam-sessions/create
+  const copy = async () => {
+    if (!created) return;
+    await navigator.clipboard.writeText(created.code);
+    setCopied(true); window.setTimeout(() => setCopied(false), 1800);
   };
 
-  return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
-      <div className="modal-panel es-modal">
-        {/* Header */}
-        <div className="modal-header">
-          <div>
-            <div className="modal-kicker"><span className="kicker-pulse" /> İMTAHAN SİSTEMİ</div>
-            <h2 className="modal-title">Sessiya Yarat</h2>
-          </div>
-          <button className="modal-close" onClick={onClose} aria-label="Bağla"><X size={18} /></button>
-        </div>
-
-        {submitted ? (
-          /* ── Uğur ekranı ── */
-          <div className="modal-success">
-            <div className="success-icon">✓</div>
-            <h3>Sessiya Yaradıldı!</h3>
-            <p>Tələbələrə sessiya kodunu paylaşın. Onlar kod ilə imtahana qoşula bilərlər.</p>
-            <div className="es-generated-code">KBR-{Math.random().toString(36).substring(2,6).toUpperCase()}</div>
-            <button className="es-btn-primary" onClick={onClose}>Bağla</button>
-          </div>
-        ) : (
-          <form className="modal-form" onSubmit={handleCreate}>
-
-            {step === 'preset' && (
-              <>
-                {/* Tövsiyə olunan paketlər */}
-                <div className="form-section-label">⚡ Tövsiyə Olunan Hazır Paketlər</div>
-                <div className="es-presets">
-                  {presets.map(p => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      className="es-preset-card"
-                      style={{ '--p-clr': p.color } as React.CSSProperties}
-                      onClick={() => applyPreset(p)}
-                    >
-                      <span className="es-preset-icon">{p.icon}</span>
-                      <span className="es-preset-label">{p.label}</span>
-                      <span className="es-preset-desc">{p.desc}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="es-divider">
-                  <span />
-                  <span>və ya özün konfiqurasiya et</span>
-                  <span />
-                </div>
-                <button type="button" className="es-btn-outline" onClick={() => setStep('custom')}>
-                  Əl ilə Konfiqurasiya
-                </button>
-              </>
-            )}
-
-            {step === 'custom' && (
-              <>
-                {/* Sessiya adı */}
-                <div className="form-section-label">📝 Sessiya Məlumatları</div>
-                <div className="form-field">
-                  <label htmlFor="es-name">Sessiya Adı *</label>
-                  <input
-                    id="es-name"
-                    type="text"
-                    placeholder="Məs: Web Security Final İmtahanı"
-                    value={sessionName}
-                    onChange={e => setSessionName(e.target.value)}
-                    required
-                  />
-                </div>
-
-                {/* Müddət */}
-                <div className="form-section-label">⏱ İmtahan Müddəti</div>
-                <div className="es-duration-row">
-                  {[15, 30, 45, 60, 90, 120].map(d => (
-                    <button
-                      key={d}
-                      type="button"
-                      className={`es-dur-btn ${duration === d ? 'active' : ''}`}
-                      onClick={() => setDuration(d)}
-                    >
-                      {d} dəq
-                    </button>
-                  ))}
-                </div>
-
-                {/* Kateqoriyalar */}
-                <div className="form-section-label">📚 Kateqoriya üzrə Sual Sayı</div>
-                <div className="es-categories">
-                  {categories.map(cat => (
-                    <div key={cat.id} className="es-cat-row" style={{ '--c-clr': cat.color } as React.CSSProperties}>
-                      <span className="es-cat-icon">{cat.icon}</span>
-                      <span className="es-cat-label">{cat.label}</span>
-                      <div className="es-cat-controls">
-                        <button
-                          type="button"
-                          className="es-cnt-btn"
-                          onClick={() => setCounts(p => ({ ...p, [cat.id]: Math.max(0, p[cat.id] - 1) }))}
-                        >−</button>
-                        <span className="es-cnt-val">{counts[cat.id]}</span>
-                        <button
-                          type="button"
-                          className="es-cnt-btn"
-                          onClick={() => setCounts(p => ({ ...p, [cat.id]: Math.min(cat.max, p[cat.id] + 1) }))}
-                        >+</button>
-                      </div>
-                      <span className="es-cat-max">maks {cat.max}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Xülasə */}
-                <div className="es-summary">
-                  <span>Cəmi: <strong>{totalQ} sual</strong></span>
-                  <span>Müddət: <strong>{duration} dəqiqə</strong></span>
-                  <span>Hər suala: <strong>{totalQ > 0 ? Math.floor((duration * 60) / totalQ) : 0} san</strong></span>
-                </div>
-
-                <div className="modal-footer">
-                  <p className="modal-note">* Sessiya yaradıldıqdan sonra unikal kod avtomatik generasiya olunacaq.</p>
-                  <div className="modal-footer-actions">
-                    <button type="button" className="es-btn-outline" onClick={() => setStep('preset')}>Geri</button>
-                    <button
-                      type="submit"
-                      className="es-btn-primary"
-                      disabled={totalQ === 0 || !sessionName.trim()}
-                    >
-                      <Plus size={15} /> Sessiya Yarat
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </form>
-        )}
-      </div>
+  return <div className="es-backdrop" role="dialog" aria-modal="true" aria-labelledby="es-create-title">
+    <div className="es-modal">
+      <div className="es-modal-head"><div><span className="es-kicker">İMTAHAN SİSTEMİ</span><h3 id="es-create-title">Sessiya yarat</h3></div><button className="es-icon-btn" onClick={onClose} aria-label="Bağla"><X size={18} /></button></div>
+      {created ? <div className="es-success"><span className="es-success-mark"><Check size={26} /></span><h4>Sessiya hazırdır</h4><p>Tələbələr bu kodla imtahana qoşula bilər.</p><button className="es-code es-code-button" onClick={() => void copy()}>{created.code} {copied ? <Check size={16} /> : <Copy size={16} />}</button><button className="btn btn-primary" onClick={onClose}>Panelə keç</button></div> :
+        <form className="es-form" onSubmit={create}>
+          <label>Sessiyanın adı<input value={title} onChange={e => setTitle(e.target.value)} maxLength={120} required placeholder="Web Security yekun imtahanı" /></label>
+          <fieldset><legend>Müddət</legend><div className="es-choice-row">{[15, 30, 45, 60, 90, 120].map(value => <button key={value} type="button" className={duration === value ? 'active' : ''} onClick={() => setDuration(value)}>{value} dəq</button>)}</div></fieldset>
+          <fieldset><legend>Kateqoriyalar və sual sayı</legend>{loading && <p className="es-muted">Kateqoriyalar yüklənir...</p>}<div className="es-category-list">{categories.map(category => <div className="es-category" key={category.id}><span><strong>{category.title}</strong><small>{category.questionCount} sual mövcuddur</small></span><span className="es-counter"><button type="button" onClick={() => changeCount(category, -1)} aria-label={`${category.title} azalt`}>−</button><b>{counts[category.id] ?? 0}</b><button type="button" onClick={() => changeCount(category, 1)} aria-label={`${category.title} artır`}>+</button></span></div>)}</div></fieldset>
+          <div className="es-form-summary"><span>{total} sual</span><span>{duration} dəqiqə</span><span>{total ? Math.floor(duration * 60 / total) : 0} san/sual</span></div>
+          {total > 50 && <p className="es-error">Bir sessiyada maksimum 50 sual seçilə bilər.</p>}{error && <p className="es-error" role="alert">{error}</p>}
+          <button className="btn btn-primary" disabled={loading || !title.trim() || total < 1 || total > 50}><Plus size={16} />{loading ? 'Gözləyin...' : 'Sessiyanı yarat'}</button>
+        </form>}
     </div>
-  );
+  </div>;
 }
 
-// ── Ana Komponent ─────────────────────────────────────────────
-export default function ExamSession() {
-  const [sessionCode, setSessionCode] = useState('');
+function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => void }) {
+  const [attempt, setAttempt] = useState(initial);
+  const [index, setIndex] = useState(0);
+  const [remaining, setRemaining] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const submitting = useRef(false);
+
+  const submit = async () => {
+    if (submitting.current || attempt.submittedAt) return;
+    submitting.current = true; setSaving(true); setError('');
+    try { const result = await submitExamAttempt(attempt.id); if (result.success && result.data) setAttempt(result.data); else setError(errorText(result)); }
+    catch { setError('Nəticə serverə göndərilə bilmədi.'); }
+    finally { submitting.current = false; setSaving(false); }
+  };
+
+  useEffect(() => {
+    const serverOffset = new Date(attempt.serverNow).getTime() - Date.now();
+    const tick = () => {
+      const value = Math.max(0, Math.ceil((new Date(attempt.expiresAt).getTime() - (Date.now() + serverOffset)) / 1000));
+      setRemaining(value);
+      if (value === 0 && !attempt.submittedAt) void submit();
+    };
+    const timer = window.setInterval(tick, 1000);
+    void Promise.resolve().then(tick);
+    return () => window.clearInterval(timer);
+  });
+
+  const choose = async (questionId: string, optionKey: string) => {
+    if (saving || attempt.submittedAt) return;
+    setSaving(true); setError('');
+    try {
+      const result = await saveExamAnswer(attempt.id, questionId, optionKey, attempt.revision);
+      if (result.success && result.data) setAttempt(result.data);
+      else { setError(errorText(result)); const fresh = await getExamAttempt(attempt.id); if (fresh.success && fresh.data) setAttempt(fresh.data); }
+    } catch { setError('Cavab saxlanmadı. İnternet bağlantısını yoxlayın.'); }
+    finally { setSaving(false); }
+  };
+
+  if (attempt.submittedAt) return <div className="es-player es-result"><span className="es-success-mark"><Check size={28} /></span><span className="es-kicker">İMTAHAN TAMAMLANDI</span><h3>{attempt.session.title}</h3><div className="es-score">{attempt.percentage ?? 0}%</div><p>{attempt.correctCount} / {attempt.questions.length} düzgün cavab</p><button className="btn btn-primary" onClick={onExit}>Sessiyalara qayıt</button></div>;
+
+  const question = attempt.questions[index];
+  const minutes = Math.floor(remaining / 60).toString().padStart(2, '0');
+  const seconds = (remaining % 60).toString().padStart(2, '0');
+  return <div className="es-player">
+    <div className="es-player-head"><div><span className="es-kicker">{question.category}</span><h3>{attempt.session.title}</h3></div><div className="es-timer"><Clock size={17} />{minutes}:{seconds}</div></div>
+    <div className="es-progress"><span style={{ width: `${((index + 1) / attempt.questions.length) * 100}%` }} /></div>
+    <div className="es-question-meta"><span>Sual {index + 1} / {attempt.questions.length}</span><span>{Object.keys(attempt.answers).length} cavablandı</span></div>
+    <h4 className="es-question-text">{question.text}</h4>
+    <div className="es-options">{question.options.map(option => <button key={option.key} className={attempt.answers[question.id] === option.key ? 'selected' : ''} onClick={() => void choose(question.id, option.key)} disabled={saving}><b>{option.key}</b><span>{option.text}</span>{attempt.answers[question.id] === option.key && <Check size={17} />}</button>)}</div>
+    {error && <p className="es-error" role="alert">{error}</p>}
+    <div className="es-player-actions"><button className="btn btn-secondary" onClick={() => setIndex(value => Math.max(0, value - 1))} disabled={index === 0}><ChevronLeft size={16} />Əvvəlki</button>{index < attempt.questions.length - 1 ? <button className="btn btn-primary" onClick={() => setIndex(value => value + 1)}>Növbəti<ChevronRight size={16} /></button> : <button className="btn btn-primary" onClick={() => void submit()} disabled={saving}>{saving ? 'Göndərilir...' : 'İmtahanı bitir'}</button>}</div>
+  </div>;
+}
+
+function TeacherDashboard({ code, onBack, onClosed }: { code: string; onBack: () => void; onClosed: () => void }) {
+  const [dashboard, setDashboard] = useState<ExamDashboard | null>(null);
+  const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const load = useCallback(async () => { try { const result = await getExamDashboard(code); if (result.success && result.data) { setDashboard(result.data); setError(''); } else setError(errorText(result)); } catch { setError('Panel yenilənmədi.'); } }, [code]);
+  useEffect(() => { const timer = window.setInterval(() => void load(), 10000); void Promise.resolve().then(load); return () => window.clearInterval(timer); }, [load]);
+  const close = async () => { const result = await closeExamSession(code); if (result.success) { await load(); onClosed(); } else setError(errorText(result)); };
+  if (!dashboard) return <div className="es-player es-loading"><p>{error || 'Panel yüklənir...'}</p><button className="btn btn-secondary" onClick={onBack}>Geri</button></div>;
+  const completed = dashboard.participants.filter(p => p.submittedAt).length;
+  return <div className="es-player">
+    <div className="es-player-head"><div><span className="es-kicker">MÜƏLLİM PANELİ</span><h3>{dashboard.session.title}</h3></div><button className="es-code es-code-button" onClick={async () => { await navigator.clipboard.writeText(code); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }}>{code}{copied ? <Check size={15} /> : <Copy size={15} />}</button></div>
+    <div className="es-stat-grid"><div><Users size={18} /><strong>{dashboard.participants.length}</strong><span>İştirakçı</span></div><div><Check size={18} /><strong>{completed}</strong><span>Tamamlayan</span></div><div><FileText size={18} /><strong>{dashboard.session.questionCount}</strong><span>Sual</span></div></div>
+    <div className="es-table"><div className="es-table-row es-table-head"><span>Tələbə</span><span>İrəliləyiş</span><span>Nəticə</span></div>{dashboard.participants.length === 0 ? <p className="es-empty">Hələ heç kim qoşulmayıb.</p> : dashboard.participants.map(p => <div className="es-table-row" key={p.id}><span>{p.name}</span><span>{p.answeredCount}/{dashboard.session.questionCount}</span><span>{p.submittedAt ? `${p.percentage ?? 0}%` : 'Davam edir'}</span></div>)}</div>
+    {error && <p className="es-error">{error}</p>}
+    <div className="es-player-actions"><button className="btn btn-secondary" onClick={onBack}>Geri</button><button className="btn btn-secondary" onClick={() => void load()}><RefreshCw size={15} />Yenilə</button>{!dashboard.session.isClosed && <button className="btn btn-primary" onClick={() => void close()}>Sessiyanı bağla</button>}</div>
+  </div>;
+}
+
+export default function ExamSession() {
+  const loggedIn = Boolean(getToken());
+  const roles = getStoredUserRoles().map(role => role.toLowerCase());
+  const admin = roles.includes('admin');
+  const teacher = !admin && roles.includes('teacher');
+  const [overview, setOverview] = useState<ExamOverview | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
+  const [dashboardCode, setDashboardCode] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const demoCode = 'KBR-7X4M';
+  const loadOverview = useCallback(async () => { if (!getToken() || admin) { setOverview(null); return; } try { const result = await getExamOverview(); if (result.success && result.data) setOverview(result.data); } catch { /* action errors are shown separately */ } }, [admin]);
+  useEffect(() => { if (loggedIn && !admin) void Promise.resolve().then(loadOverview); }, [loggedIn, admin, loadOverview]);
+  const join = async (event: React.FormEvent) => { event.preventDefault(); if (!code.trim()) return; setLoading(true); setError(''); try { const result = await joinExamSession(code); if (result.success && result.data) setAttempt(result.data); else setError(errorText(result)); } catch { setError('Serverlə əlaqə yaradıla bilmədi.'); } finally { setLoading(false); } };
+  const resume = async (id: string) => { setLoading(true); setError(''); try { const result = await getExamAttempt(id); if (result.success && result.data) setAttempt(result.data); else setError(errorText(result)); } catch { setError('İmtahan yüklənmədi.'); } finally { setLoading(false); } };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(demoCode).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const handleJoin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!sessionCode.trim()) return;
-    // TODO: POST /api/exam-sessions/join
-  };
-
-  return (
-    <>
-      <section id="exam-session" className="exam-section" aria-labelledby="exam-section-title">
-        <div className="container">
-          {/* Header */}
-          <div className="section-header">
-            <div className="section-tag">
-              <ClipboardList size={14} />
-              İmtahan Sistemi
-            </div>
-            <h2 className="section-title" id="exam-section-title">
-              İmtahan <span className="gradient-text">Sessiyaları</span>
-            </h2>
-            <p className="section-description">
-              Müəllimlər öz tələbələri üçün kateqoriya və sual sayı seçərək xüsusi imtahan
-              sessiyaları yarada bilər. Tələbələr sessiya kodu ilə qoşulur.
-            </p>
-          </div>
-
-          <div className="exam-layout">
-            {/* ── Sol: Əməliyyatlar ── */}
-            <div className="exam-left">
-              {/* Sessiya Yarat */}
-              <div className="exam-action-card" style={{ '--action-color': 'var(--brand-primary)' } as React.CSSProperties}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(37,99,235,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--brand-primary)' }}>
-                    <Plus size={20} />
-                  </div>
-                  <div className="exam-action-title">Sessiya Yarat</div>
-                </div>
-                <p className="exam-action-desc">
-                  Kateqoriya, sual sayı və vaxtı seçərək tələbələriniz üçün fərdi imtahan sessiyası hazırlayın.
-                  Hazır paket seçimləri də mövcuddur.
-                </p>
-                <button id="exam-create-btn" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                  <Plus size={16} /> Sessiya Yarat
-                </button>
-              </div>
-
-              {/* Sessiyaya Qoşul */}
-              <div className="exam-action-card" style={{ '--action-color': 'var(--color-success)' } as React.CSSProperties}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-success)' }}>
-                    <LogIn size={20} />
-                  </div>
-                  <div className="exam-action-title">Sessiyaya Qoşul</div>
-                </div>
-                <p className="exam-action-desc">Müəllimdən aldığınız sessiya kodunu daxil edərək imtahana qoşulun. Kod formatı: KBR-XXXX</p>
-                <form id="exam-join-form" className="exam-join-form" onSubmit={handleJoin}>
-                  <input
-                    id="exam-session-code-input"
-                    className="exam-join-input"
-                    type="text"
-                    placeholder="KBR-XXXX"
-                    value={sessionCode}
-                    onChange={e => setSessionCode(e.target.value.toUpperCase())}
-                    maxLength={8}
-                    aria-label="Sessiya kodu"
-                  />
-                  <button id="exam-join-btn" type="submit" className="btn btn-success">
-                    <LogIn size={16} /> Qoşul
-                  </button>
-                </form>
-              </div>
-            </div>
-
-            {/* ── Sağ: Dashboard ── */}
-            <div className="exam-right">
-              <div className="exam-dashboard-card">
-                <div className="exam-dashboard-header">
-                  <div className="exam-dashboard-title">📊 Müəllim Paneli — Nümunə</div>
-                  <div className="exam-status-dot">Canlı</div>
-                </div>
-                <div className="exam-dashboard-body">
-                  <div className="exam-session-code">
-                    <div>
-                      <div className="exam-session-code-label">Sessiya Kodu</div>
-                      <div className="exam-session-code-value">{demoCode}</div>
-                    </div>
-                    <button id="exam-copy-code-btn" className="exam-session-code-copy" onClick={handleCopy} aria-label="Kopyala">
-                      {copied ? <Check size={14} /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                  <div className="exam-dashboard-stats">
-                    <div className="exam-dashboard-stat">
-                      <div className="exam-dashboard-stat-num">24</div>
-                      <div className="exam-dashboard-stat-label"><Users size={10} style={{ display: 'inline', marginRight: 2 }} />Tələbə</div>
-                    </div>
-                    <div className="exam-dashboard-stat">
-                      <div className="exam-dashboard-stat-num">18</div>
-                      <div className="exam-dashboard-stat-label"><FileText size={10} style={{ display: 'inline', marginRight: 2 }} />Sual</div>
-                    </div>
-                    <div className="exam-dashboard-stat">
-                      <div className="exam-dashboard-stat-num">45</div>
-                      <div className="exam-dashboard-stat-label"><Clock size={10} style={{ display: 'inline', marginRight: 2 }} />Dəq.</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--surface-subtle)', borderRadius: 'var(--radius-lg)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' }}>
-                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--text-secondary)' }}>İrəliləyiş</span>
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>18 / 24 tamamladı</span>
-                    </div>
-                    <div style={{ height: 6, background: 'var(--neutral-200)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                      <div style={{ width: '75%', height: '100%', background: 'linear-gradient(90deg, #3b82f6, #8b5cf6)', borderRadius: 'var(--radius-full)' }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-                  <span aria-hidden="true">📋</span> Aktiv Sessiyalar
-                </div>
-                <div className="exam-sessions-list">
-                  {examSessions.map(session => {
-                    const status = statusMap[session.status];
-                    return (
-                      <div key={session.id} id={`exam-session-item-${session.id}`} className="exam-session-item" role="listitem">
-                        <span className={`exam-session-status ${status.className}`}>{status.icon} {session.status}</span>
-                        <div className="exam-session-info">
-                          <div className="exam-session-title">{session.title}</div>
-                          <div className="exam-session-meta">{session.instructor} · {session.studentCount} tələbə · {session.duration}</div>
-                        </div>
-                        <span className="badge" style={{ background: 'var(--neutral-100)', color: 'var(--text-tertiary)', fontSize: 'var(--text-xs)' }}>
-                          {session.category}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {showCreate && <CreateSessionModal onClose={() => setShowCreate(false)} />}
-    </>
-  );
+  if (attempt) return <section id="exam-session" className="exam-section"><div className="container"><ExamPlayer initial={attempt} onExit={() => { setAttempt(null); void loadOverview(); }} /></div></section>;
+  if (dashboardCode) return <section id="exam-session" className="exam-section"><div className="container"><TeacherDashboard code={dashboardCode} onBack={() => setDashboardCode(null)} onClosed={() => void loadOverview()} /></div></section>;
+  const recentSession = overview?.sessions[0];
+  return <>
+    <section id="exam-session" className="exam-section" aria-labelledby="exam-section-title"><div className="container">
+      <div className="section-header"><div className="section-tag"><ClipboardList size={14} />İmtahan Sistemi</div><h2 className="section-title" id="exam-section-title">İmtahan <span className="gradient-text">sessiyaları</span></h2><p className="section-description">Müəllim real sual bankından sessiya yaradır, tələbə kodla qoşulur və nəticə avtomatik hesablanır.</p></div>
+      {!loggedIn && <div className="es-auth-note"><LogIn size={20} /><div><strong>İmtahan sistemi üçün hesaba daxil olun</strong><p>Sessiya yaratmaq, qoşulmaq və nəticələri saxlamaq üçün giriş tələb olunur.</p></div></div>}
+      {loggedIn && admin && <div className="es-auth-note"><Shield size={20} /><div><strong>Admin hesabı üçün imtahan fəaliyyəti bağlıdır</strong><p>İdarəetmə əməliyyatlarını kabinetdəki Admin Panel bölməsindən aparın.</p></div></div>}
+      <div className="exam-layout"><div className="exam-left">
+        <div className="exam-action-card"><div className="es-action-title"><Plus size={20} /><strong>Sessiya yarat</strong></div><p className="exam-action-desc">Mövcud kateqoriyalardan sual seçin, vaxt təyin edin və unikal kodu tələbələrlə paylaşın.</p><button className="btn btn-primary" disabled={!loggedIn || !teacher} onClick={() => setShowCreate(true)}><Plus size={16} />Sessiya yarat</button>{loggedIn && !teacher && !admin && <small className="es-hint">Bu funksiya müəllim hesabları üçündür.</small>}</div>
+        <div className="exam-action-card"><div className="es-action-title"><LogIn size={20} /><strong>Sessiyaya qoşul</strong></div><p className="exam-action-desc">Müəllimdən aldığınız KBR-XXXXXXXXXXXXXXXX kodunu daxil edin.</p><form className="exam-join-form" onSubmit={join}><input className="exam-join-input" value={code} onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-F0-9-]/g, ''))} placeholder="KBR-1234567890ABCDEF" maxLength={20} disabled={!loggedIn || admin || loading} aria-label="Sessiya kodu" /><button className="btn btn-success" disabled={!loggedIn || admin || loading}><LogIn size={16} />{loading ? 'Yoxlanır...' : 'Qoşul'}</button></form>{error && <p className="es-error" role="alert">{error}</p>}</div>
+      </div><div className="exam-right">
+        {teacher && recentSession && <div className="exam-dashboard-card"><div className="exam-dashboard-header"><strong>Son sessiyanız</strong><span>{recentSession.isClosed ? 'Bağlı' : 'Aktiv'}</span></div><div className="exam-dashboard-body"><div className="exam-session-code"><div><small>Sessiya kodu</small><div className="exam-session-code-value">{recentSession.code}</div></div><button className="es-icon-btn" onClick={() => void navigator.clipboard.writeText(recentSession.code)} aria-label="Kodu kopyala"><Copy size={15} /></button></div><div className="exam-dashboard-stats"><div><strong>{recentSession.questionCount}</strong><small>Sual</small></div><div><strong>{recentSession.durationMinutes}</strong><small>Dəqiqə</small></div></div><button className="btn btn-primary" onClick={() => setDashboardCode(recentSession.code)}>Canlı paneli aç</button></div></div>}
+        {!admin && <div><h3 className="es-list-title">{teacher ? 'Sessiyalarım' : 'İmtahan tarixçəm'}</h3><div className="exam-sessions-list">{teacher ? overview?.sessions.map(session => <button className="exam-session-item" key={session.id} onClick={() => setDashboardCode(session.code)}><span className={session.isClosed ? 'status-finished' : 'status-active'}>{session.isClosed ? 'Bağlı' : 'Aktiv'}</span><span className="exam-session-info"><strong>{session.title}</strong><small>{session.questionCount} sual · {session.durationMinutes} dəq · {formatDate(session.createdAt)}</small></span><ChevronRight size={16} /></button>) : overview?.attempts.map(item => <button className="exam-session-item" key={item.id} onClick={() => void resume(item.id)}><span className={item.submittedAt ? 'status-finished' : 'status-active'}>{item.submittedAt ? `${item.percentage ?? 0}%` : 'Davam edir'}</span><span className="exam-session-info"><strong>{item.session.title}</strong><small>{item.session.teacherName} · {item.session.questionCount} sual</small></span><ChevronRight size={16} /></button>)}{loggedIn && ((teacher && !overview?.sessions.length) || (!teacher && !overview?.attempts.length)) && <p className="es-empty">Hələ heç bir qeyd yoxdur.</p>}</div></div>}
+      </div></div>
+    </div></section>
+    {showCreate && <CreateSessionModal onClose={() => setShowCreate(false)} onCreated={() => void loadOverview()} />}
+  </>;
 }

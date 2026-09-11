@@ -10,6 +10,7 @@ namespace Kiberaz.Application.Interfaces;
 /// </summary>
 public interface IUploadService
 {
+    Task<byte[]> ReadSafePdfAsync(string fileName);
     /// <summary>
     /// Faylı Stream vasitəsilə təhlükəsiz şəkildə serverə yükləyir və URL-ni qaytarır.
     /// </summary>

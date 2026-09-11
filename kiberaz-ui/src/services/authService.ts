@@ -82,7 +82,25 @@ export async function resendConfirmationEmail(email: string): Promise<{ success:
       body: JSON.stringify({ email }),
     });
 
-    return response.json();
+    // 429 (rate limit) boş gövdə ilə gəlir, 500 isə HTML qaytara bilər —
+    // əvvəl response.json() belə hallarda exception atırdı və istifadəçi
+    // "Serverlə əlaqə yaradıla bilmədi" görürdü, halbuki server cavab vermişdi.
+    let body: { success?: boolean; message?: string; errors?: string[] } | null = null;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+
+    if (body && typeof body.success === 'boolean') {
+      return body as { success: boolean; message: string; errors?: string[] };
+    }
+
+    if (response.status === 429) {
+      return { success: false, message: 'Çox sayda cəhd edildi. Bir dəqiqə sonra yenidən yoxlayın.' };
+    }
+
+    return { success: false, message: `Sorğu icra edilmədi (${response.status}).` };
 }
 
 export async function forgotPassword(email: string, captchaToken: string): Promise<{ success: boolean; message: string; errors?: string[] }> {

@@ -7,6 +7,8 @@ namespace Kiberaz.Domain.Entities;
 // Suallar həmişə seçimləri ilə birlikdə oxunduğu üçün "birlikdə saxla" prinsipi seçilib — JOIN sorğusu lazım olmur.
 public class QuizQuestion : BaseEntity
 {
+    // Existing questions were public; never silently promote them to a private bank.
+    public bool IsExamOnly { get; set; }
     // Sualın aid olduğu kateqoriyanın ID-si — SQL-dəki FK kimi işləyir, amma constraint yoxdur.
     public int QuizCategoryId { get; set; }
 

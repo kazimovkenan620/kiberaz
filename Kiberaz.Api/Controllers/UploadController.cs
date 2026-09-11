@@ -7,18 +7,22 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Kiberaz.Application.DTOs.Common;
 using Kiberaz.Application.Interfaces;
+using Kiberaz.Infrastructure.Services;
 
 namespace Kiberaz.Api.Controllers;
 
 /// <summary>
 /// Platformada fayl yükləmə (File Upload) əməliyyatlarını idarə edən controller.
 /// Təhlükəsizlik üçün bütün yükləmələr üçün ciddi validasiyalar və limitlər tətbiq olunur.
-/// CourseController.CreateCourse hər kəsə (AllowAnonymous) açıq olduğu üçün, kurs formundakı
-/// şəkil/PDF yükləməsi də eyni şəkildə anonim istifadəçilərə açılır — əks halda daxil olmayan
-/// istifadəçi faylı seçəndə 401 alır və bu, HeroSlider-də aldadıcı "server əlaqəsi" xətası kimi görünür.
-/// "auth" rate-limit siyasəti CreateCourse ilə eyni cədvəldədir ki, anonim sui-istifadə məhdudlaşsın.
+/// GİRİŞ TƏLƏB OLUNUR. Əvvəl bütün controller [AllowAnonymous] idi, çünki təlim formu
+/// anonim işləyirdi. Bu, kimliyi bilinməyən istifadəçiyə serverin diskinə fayl yazmaq
+/// imkanı verirdi — həm disk doldurma (DoS), həm də zərərli məzmun yerləşdirmə vektoru,
+/// üstəlik faylı kimin qoyduğunu müəyyən etmək mümkün deyildi.
+/// CreateCourse indi giriş tələb etdiyi üçün yükləmənin anonim qalması üçün səbəb də qalmır.
+///
+/// İSTİSNA: DownloadPdf anonim qalır — sillabus public təlim səhifəsində göstərilir.
 /// </summary>
-[AllowAnonymous]
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 [EnableRateLimiting("upload")]
@@ -35,6 +39,23 @@ public class UploadController : ControllerBase
     public UploadController(IUploadService uploadService)
     {
         _uploadService = uploadService;
+    }
+
+    // Public oxu: təlim sillabusu sayta girən hər kəsə göstərilir.
+    [HttpGet("/uploads/syllabus/{fileName}")]
+    [AllowAnonymous]
+    [EnableRateLimiting("general")]
+    public async Task<IActionResult> DownloadPdf(string fileName)
+    {
+        try
+        {
+            var bytes = await _uploadService.ReadSafePdfAsync(fileName);
+            Response.Headers["Content-Security-Policy"] = "sandbox; default-src 'none'";
+            Response.Headers["Cache-Control"] = "no-store";
+            return File(bytes, "application/pdf", "syllabus.pdf");
+        }
+        catch (UploadCapacityException e) { return StatusCode(503, ApiResponse<object>.Fail(e.Message)); }
+        catch (Exception e) when (e is ArgumentException or IOException) { return NotFound(); }
     }
 
     /// <summary>
@@ -64,6 +85,7 @@ public class UploadController : ControllerBase
             
             return Ok(ApiResponse<string>.Ok(fileUrl, "Müəllim şəkli uğurla yükləndi."));
         }
+        catch (UploadCapacityException ex) { return StatusCode(503, ApiResponse<object>.Fail(ex.Message)); }
         catch (ArgumentException ex)
         {
             return BadRequest(ApiResponse<object>.Fail(ex.Message));
@@ -101,6 +123,7 @@ public class UploadController : ControllerBase
             
             return Ok(ApiResponse<string>.Ok(fileUrl, "Təlim sillabusu uğurla yükləndi."));
         }
+        catch (UploadCapacityException ex) { return StatusCode(503, ApiResponse<object>.Fail(ex.Message)); }
         catch (ArgumentException ex)
         {
             return BadRequest(ApiResponse<object>.Fail(ex.Message));

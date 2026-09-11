@@ -43,6 +43,8 @@ export type StudentOverviewResponse = {
     solved: number;
     total: number;
     percentage: number;
+    /** Bu sahədə ən son cavab verilən an — "Son fəallıq" göstəricisi üçün. */
+    lastActivity: string | null;
   }[];
 };
 
@@ -129,6 +131,13 @@ export async function requestPasswordChange(): Promise<ApiResponse<boolean>> {
 
 // studentId URL-ə daxil ediləndən əvvəl encodeURIComponent ilə kodlanır;
 // bu, xüsusi simvolların URL-i sındırmasının qarşısını alır.
+// Cari istifadəçinin öz göstəriciləri. Server ID-ni token-dən götürür,
+// ona görə burada heç bir identifikator ötürülmür.
+export async function getMyOverview(): Promise<ApiResponse<StudentOverviewResponse>> {
+  const response = await apiFetch('/user/me/overview', { method: 'GET' });
+  return readApiResponse<StudentOverviewResponse>(response);
+}
+
 export async function getStudentOverview(studentId: string): Promise<ApiResponse<StudentOverviewResponse>> {
   const response = await apiFetch(`/user/students/${encodeURIComponent(studentId)}/overview`, {
     method: 'GET',
@@ -157,4 +166,29 @@ export async function addStudentToClass(classId: number, studentId: string): Pro
     body: JSON.stringify({ studentId }),
   });
   return readApiResponse<TeacherClassResponse>(response);
+}
+
+// Sinfi silir. Müəllim → tələbə rol keçidi üçün ön şərtdir:
+// server sinifi olan müəllimin rolunu dəyişmir.
+export async function deleteTeacherClass(classId: number): Promise<ApiResponse<boolean>> {
+  const response = await apiFetch(`/user/teacher/classes/${classId}`, {
+    method: 'DELETE',
+  });
+  return readApiResponse<boolean>(response);
+}
+
+// Yalnız bu iki dəyər qəbul edilir. Tip səviyyəsində məhdudlaşdırmaq
+// 'Admin' kimi dəyərin təsadüfən göndərilməsini kompilyasiya vaxtı bağlayır —
+// server onsuz da rədd edir, bu isə səhvi daha erkən tutur.
+export type SwitchableRole = 'User' | 'Teacher';
+
+// Rol keçidi. UĞURDAN SONRA SESSİYA ETİBARSIZDIR:
+// server SecurityStamp-i yeniləyir və refresh token-i silir, ona görə
+// çağıran tərəf mütləq logout edib istifadəçini yenidən girişə yönləndirməlidir.
+export async function changeRole(newRole: SwitchableRole): Promise<ApiResponse<boolean>> {
+  const response = await apiFetch('/user/role', {
+    method: 'PATCH',
+    body: JSON.stringify({ newRole }),
+  });
+  return readApiResponse<boolean>(response);
 }

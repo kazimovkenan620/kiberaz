@@ -15,6 +15,10 @@ namespace Kiberaz.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+// Sinif səviyyəsində limit: bu controller-ə SONRADAN əlavə ediləcək endpoint
+// avtomatik "general" altına düşür. Metod səviyyəsindəki siyasət bunu əvəz edir
+// (məs. submit → "submit"), yəni default limitli, istisna daha dardır.
+[EnableRateLimiting("general")]
 public class QuizController : ControllerBase
 {
     // IQuizService interfeysi vasitəsilə işləyirik — konkret QuizService sinifini deyil, onun müqaviləsini tanıyırıq.
@@ -91,21 +95,28 @@ public class QuizController : ControllerBase
 
     /// <summary>
     /// İstifadəçinin cavabını server tərəfdə yoxlayır və düzgün açarı qaytarır.
-    /// Anonim istifadəçilər də cavab göndərə bilər (nəticə saxlanmır).
-    /// Autentifikasiya olunmuş istifadəçilərin nəticəsi statistika üçün saxlanır.
+    ///
+    /// GİRİŞ TƏLƏB OLUNUR. Əvvəl [AllowAnonymous] idi və bu, sual bankı üçün açıq
+    /// oxu kanalı yaradırdı: endpoint hər çağırışda CorrectKey-i və bütün variantların
+    /// izahını qaytarır, cavab isə yoxlanılmır — yəni questionId-ləri ardıcıl gəzərək
+    /// bütün cavab açarlarını kimliyi bilinməyən bir skript çıxara bilərdi.
+    /// İndi cavab yalnız hesabla göndərilir: limit hesaba bağlanır və sui-istifadə izlənə bilir.
     /// </summary>
     [HttpPost("submit")]
-    [AllowAnonymous]
-    [EnableRateLimiting("general")]
+    [Authorize]
+    [EnableRateLimiting("submit")]
     [ProducesResponseType(typeof(ApiResponse<SubmitAnswerResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SubmitAnswer([FromBody] SubmitAnswerRequest request)
     {
         try
         {
-            // [AllowAnonymous] olduğu üçün token olmadan da bu endpoint-ə müraciət mümkündür.
-            // Əgər istifadəçi daxil olubsa userId null olmayacaq, əks halda null qaytarılır — servis bu fərqi idarə edir.
+            // [Authorize] sayəsində buraya yalnız etibarlı token ilə gəlinir.
+            // Yenə də claim-in yoxluğunu yoxlayırıq: token varsa, amma NameIdentifier
+            // yoxdursa, servisə null userId ötürmək nəticəni səssizcə itirərdi.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
 
             SubmitAnswerResponse result = await _quizService.SubmitAnswerAsync(request, userId);
             return Ok(ApiResponse<SubmitAnswerResponse>.Ok(result));

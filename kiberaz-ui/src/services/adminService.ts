@@ -141,8 +141,12 @@ export async function createAdminCourse(
 // İSTİFADƏÇİLƏR
 // ============================================================
 
-export async function getAdminUsers(): Promise<ApiResponse<AdminUser[]>> {
-  return request<AdminUser[]>('/admin/users');
+// Axtarış SERVER tərəfdə aparılır: siyahı məhdudlaşdırıldığı üçün müştəri tərəfdə
+// filtrləmək axtarışı yarımçıq edərdi (yüklənməmiş istifadəçilər tapılmazdı).
+export async function getAdminUsers(search?: string, take = 100): Promise<ApiResponse<AdminUser[]>> {
+  const params = new URLSearchParams({ take: String(take) });
+  if (search?.trim()) params.set('search', search.trim());
+  return request<AdminUser[]>(`/admin/users?${params.toString()}`);
 }
 
 // Server yalnız mövcud rolları qəbul edir və adminin ÖZ rolunu dəyişməsini bloklayır.

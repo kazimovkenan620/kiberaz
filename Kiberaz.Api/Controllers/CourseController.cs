@@ -13,6 +13,8 @@ namespace Kiberaz.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
+// Sonradan əlavə ediləcək endpoint limitsiz qalmasın deyə sinif səviyyəsində default.
+[EnableRateLimiting("general")]
 public class CourseController : ControllerBase
 {
     private readonly ICourseService _courseService;
@@ -23,20 +25,24 @@ public class CourseController : ControllerBase
     }
 
     /// <summary>
-    /// Yeni təlim yaradır.
-    /// Hər kəs təlim təklif edə bilər (AllowAnonymous), Rate Limiting ilə qorunur.
+    /// Yeni təlim təklif edir (Pending statusunda, admin təsdiqindən sonra saytda görünür).
+    ///
+    /// GİRİŞ TƏLƏB OLUNUR. Əvvəl [AllowAnonymous] idi: anonim skript moderasiya növbəsini
+    /// və faylları saxlayan diski limitsiz doldura bilirdi, göndərəni müəyyən etmək
+    /// isə mümkün deyildi. İndi hər təklif bir hesaba bağlanır.
     /// </summary>
     [HttpPost]
-    [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    [Authorize]
+    [EnableRateLimiting("sensitive")]
     [ProducesResponseType(typeof(Application.DTOs.Common.ApiResponse<CourseResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(Application.DTOs.Common.ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateCourse([FromBody] CreateCourseRequest request)
     {
-        // İstifadəçi daxil olubsa userId-ni götürürük
-        string? userId = User.Identity?.IsAuthenticated == true
-            ? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            : null;
+        // [Authorize] burada token-i təmin edir; claim-in yoxluğu yenə də yoxlanılır ki,
+        // təlim "sahibsiz" qeyd olunmasın.
+        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(Application.DTOs.Common.ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
 
         var result = await _courseService.CreateCourseAsync(request, userId);
 

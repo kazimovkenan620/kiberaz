@@ -1,5 +1,6 @@
 import type { KnowledgeCategory, Question, DifficultyLevel, OptionKey } from '../data/mockData';
 import { apiFetch } from './apiClient';
+import { getToken } from './authService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5251/api';
 
@@ -93,16 +94,43 @@ export async function fetchQuizQuestions(
   count: number = 10,
   topicFilter?: NetworkTopicFilter,
 ): Promise<Question[]> {
-  // Fix 6: Qarışıq rejimində hər alt-kateqoriyadan count/2 çəkilir (əvvəl count idi)
-  // Network Security və Network Attacks sualları ayrı-ayrı çəkilib, qarışdırılır və kəsilir.
+  // Qarışıq rejim: suallar iki kateqoriyaya bölünüb (Network Security = 2, Network Attacks = 8),
+  // ona görə hər ikisindən çəkilib qarışdırılır.
+  //
+  // ⚠ ƏVVƏLKİ BUG: hər tərəfdən DƏQİQ count/2 istənilirdi və bir tərəf az qaytaranda
+  // fərq kompensasiya edilmirdi. Məsələn "Başlanğıc" səviyyəsində Network Attacks
+  // kateqoriyasında heç bir sual yoxdur — nəticədə 10 sual istəyən istifadəçi 5 sual alırdı,
+  // halbuki digər kateqoriyada 77 uyğun sual var idi. İstifadəçiyə heç bir xəbərdarlıq da verilmirdi.
+  //
+  // İNDİ: hər tərəfdən `count` qədər çəkilir (server onsuz da 50 ilə məhdudlaşdırır),
+  // balanslı şəkildə yarı-yarı götürülür, çatmayan tərəfin payı isə digərindən tamamlanır.
   if (categoryId === NETWORK_MAIN_ID && (!topicFilter || topicFilter === 'Qarışıq')) {
-    const half = Math.ceil(count / 2);
     try {
       const [securityQuestions, attackQuestions] = await Promise.all([
-        fetchQuizQuestions(NETWORK_MAIN_ID, difficulty, half, 'Network Security'),
-        fetchQuizQuestions(NETWORK_SUB_ID, difficulty, half, 'Network Attacks'),
+        fetchQuizQuestions(NETWORK_MAIN_ID, difficulty, count, 'Network Security'),
+        fetchQuizQuestions(NETWORK_SUB_ID, difficulty, count, 'Network Attacks'),
       ]);
-      return shuffle([...securityQuestions, ...attackQuestions]).slice(0, count);
+
+      const half = Math.ceil(count / 2);
+
+      // Əvvəlcə balanslı pay: hər tərəfdən mümkün qədər yarı.
+      const securityTake = Math.min(securityQuestions.length, half);
+      const attackTake = Math.min(attackQuestions.length, count - securityTake);
+      const picked = [
+        ...securityQuestions.slice(0, securityTake),
+        ...attackQuestions.slice(0, attackTake),
+      ];
+
+      // Bir tərəf az qaytarıbsa, qalan yer digər tərəfin artıq suallarından doldurulur.
+      if (picked.length < count) {
+        const leftovers = [
+          ...securityQuestions.slice(securityTake),
+          ...attackQuestions.slice(attackTake),
+        ];
+        picked.push(...leftovers.slice(0, count - picked.length));
+      }
+
+      return shuffle(picked);
     } catch {
       return [];
     }
@@ -156,24 +184,55 @@ export async function fetchQuizQuestions(
   }
 }
 
-// Fix 3: bütün 4 variantın izahı qaytarılır indi
 // Cavab göndərildikdən sonra servər hansının düzgün olduğunu və hər variantın izahını qaytarır;
 // bu məlumat birbaşa UI-da göstərilir ki, istifadəçi niyə səhv etdiyini anlasın.
+//
+// Endpoint artıq GİRİŞ TƏLƏB EDİR. Əvvəl funksiya bütün uğursuzluqlarda `null` qaytarırdı —
+// yəni "giriş lazımdır", "limit doldu" və "server xətası" UI-da eyni mətnlə görünürdü.
+// İndi nəticə ayrı-ayrı hallara bölünür ki, istifadəçiyə düzgün addım deyilsin.
+export type SubmitAnswerResult =
+  | { status: 'ok'; isCorrect: boolean; correctKey: OptionKey; options: { key: OptionKey; explanation: string }[] }
+  | { status: 'auth-required' }
+  | { status: 'rate-limited'; message: string }
+  | { status: 'error'; message: string };
+
 export async function submitAnswer(
   questionId: number,
   selectedKey: string,
-): Promise<{ isCorrect: boolean; correctKey: OptionKey; options: { key: OptionKey; explanation: string }[] } | null> {
+): Promise<SubmitAnswerResult> {
+  // Token yoxdursa serverə heç getmirik: cavab onsuz da 401 olacaq,
+  // bu isə apiClient-də lazımsız refresh cəhdini tetikleyir.
+  if (!getToken()) return { status: 'auth-required' };
+
   try {
     const res = await apiFetch('/quiz/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ questionId, selectedKey }),
     });
-    if (!res.ok) return null;
+
+    // apiFetch 401-də bir dəfə refresh edib təkrarlayır; yenə 401-dirsə sessiya həqiqətən bitib.
+    if (res.status === 401) return { status: 'auth-required' };
+
+    if (res.status === 429) {
+      const retryAfter = Number(res.headers.get('Retry-After'));
+      return {
+        status: 'rate-limited',
+        message: Number.isFinite(retryAfter) && retryAfter > 0
+          ? `Çox sürətli cavab göndərilir. ${retryAfter} saniyə sonra davam edin.`
+          : 'Çox sürətli cavab göndərilir. Bir az sonra davam edin.',
+      };
+    }
+
+    if (!res.ok) return { status: 'error', message: `Cavab yoxlanılmadı (${res.status}).` };
+
     const json: ApiResponse<ApiSubmitAnswerResponse> = await res.json();
-    if (!json.success || !json.data) return null;
+    if (!json.success || !json.data) {
+      return { status: 'error', message: json.message || 'Cavab yoxlanılmadı.' };
+    }
 
     return {
+      status:     'ok',
       isCorrect:  json.data.isCorrect,
       correctKey: json.data.correctKey as OptionKey,
       options:    (json.data.options ?? []).map(o => ({
@@ -182,7 +241,7 @@ export async function submitAnswer(
       })),
     };
   } catch {
-    return null;
+    return { status: 'error', message: 'Serverlə əlaqə yaradıla bilmədi.' };
   }
 }
 

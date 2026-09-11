@@ -1,5 +1,5 @@
 // 🛡️ Kurs API servisi — backend ilə əlaqə
-import { getToken } from './authService';
+import { apiFetch } from './apiClient';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5251/api';
 
@@ -57,15 +57,39 @@ export interface ApiResponse<T> {
 
 // ─── API Çağırışları ──────────────────────────────────────────
 
-/// Yeni kurs yaratma
+// Yazma endpoint-ləri artıq giriş tələb edir. response.json() birbaşa çağırmaq olmaz:
+// 401/429/500 cavabları boş və ya HTML gövdə ilə gələ bilər, bu isə exception atır və
+// istifadəçi səbəbi yox, ümumi "əlaqə xətası" görür.
+async function readWriteResponse<T>(response: Response): Promise<ApiResponse<T>> {
+  let body: ApiResponse<T> | null = null;
+  try { body = await response.json(); } catch { body = null; }
+
+  if (body && typeof body.success === 'boolean') return body;
+
+  if (response.status === 401) {
+    return { success: false, message: 'Bu əməliyyat üçün daxil olun.', errors: ['AUTH_REQUIRED'] };
+  }
+  if (response.status === 429) {
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    return {
+      success: false,
+      message: Number.isFinite(retryAfter) && retryAfter > 0
+        ? `Çox sayda sorğu göndərildi. ${retryAfter} saniyə sonra yenidən cəhd edin.`
+        : 'Çox sayda sorğu göndərildi. Bir az sonra yenidən cəhd edin.',
+      errors: ['RATE_LIMIT'],
+    };
+  }
+  return { success: false, message: `Sorğu icra edilmədi (${response.status}).` };
+}
+
+/// Yeni kurs yaratma — giriş tələb olunur (apiFetch token əlavə edir və 401-də yeniləyir).
 export async function createCourse(request: CreateCourseRequest): Promise<ApiResponse<CourseResponse>> {
-  const response = await fetch(`${API_URL}/course`, {
+  const response = await apiFetch('/course', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
 
-  return response.json();
+  return readWriteResponse<CourseResponse>(response);
 }
 
 /// Təsdiqlənmiş kursları siyahılama — HeroSlider üçün
@@ -88,38 +112,32 @@ export async function getCourseById(id: number): Promise<ApiResponse<CourseRespo
   return response.json();
 }
 
-// Backend-də UploadController artıq [AllowAnonymous] — daxil olmayan istifadəçi də kurs formunda
-// şəkil/PDF yükləyə bilir (CreateCourse özü də hər kəsə açıqdır, bu ikisi eyni davranışda olmalıdır).
-// Token varsa yenə göndərilir (zərəri yoxdur, gələcəkdə audit üçün faydalı ola bilər), amma tələb olunmur.
-function authHeaders(): HeadersInit | undefined {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : undefined;
-}
+// UploadController artıq [Authorize]-dır: anonim istifadəçinin serverin diskinə fayl
+// yazması disk doldurma və izlənməyən məzmun yerləşdirmə vektoru idi.
+// apiFetch həm token-i əlavə edir, həm də FormData üçün Content-Type-a toxunmur.
 
-/// Müəllim şəklini serverə yükləmə
+/// Müəllim şəklini serverə yükləmə — giriş tələb olunur.
 export async function uploadInstructorPhoto(file: File): Promise<ApiResponse<string>> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_URL}/upload/photo`, {
+  const response = await apiFetch('/upload/photo', {
     method: 'POST',
-    headers: authHeaders(), // Qeyd: Content-Type qəsdən təyin edilmir — brauzer FormData üçün multipart boundary-ni özü qoyur.
     body: formData,
   });
 
-  return response.json();
+  return readWriteResponse<string>(response);
 }
 
-/// Kurs sillabusunu (PDF) serverə yükləmə
+/// Kurs sillabusunu (PDF) serverə yükləmə — giriş tələb olunur.
 export async function uploadSyllabusPdf(file: File): Promise<ApiResponse<string>> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_URL}/upload/syllabus`, {
+  const response = await apiFetch('/upload/syllabus', {
     method: 'POST',
-    headers: authHeaders(),
     body: formData,
   });
 
-  return response.json();
+  return readWriteResponse<string>(response);
 }

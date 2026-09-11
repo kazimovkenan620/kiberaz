@@ -13,6 +13,7 @@
 // Backend işləyirsə əvvəlcə onu dayandır (LiteDB fayl kilidi).
 
 using LiteDB;
+using Kiberaz.Domain.Common;
 using Kiberaz.Domain.Entities;
 
 var argList = args.ToList();
@@ -101,6 +102,20 @@ else
         (email is not null && string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)) ||
         (nickname is not null && string.Equals(u.Nickname, nickname, StringComparison.OrdinalIgnoreCase)))
         .ToList();
+}
+
+// QORUNAN SİSTEM ADMİNİ: bu alət də sabit admin hesabını silə bilmir.
+var protectedTargets = targets
+    .Where(u => SystemAccounts.IsAdministratorEmail(u.NormalizedEmail ?? u.Email))
+    .ToList();
+
+if (protectedTargets.Count > 0)
+{
+    Console.WriteLine();
+    Console.WriteLine("XƏTA: seçim dəyişdirilməz sistem administratorunu əhatə edir:");
+    foreach (var u in protectedTargets)
+        Console.WriteLine($"  • {u.Nickname} ({u.Email})");
+    return 1;
 }
 
 if (targets.Count == 0)

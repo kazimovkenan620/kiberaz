@@ -606,6 +606,18 @@
   text-align: center;
 }
 
+.ud-empty-note {
+  margin: 0;
+  padding: var(--sp-5) var(--sp-4);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--bg-card-alt);
+}
+
 .ud-icon-btn {
   width: 34px;
   height: 34px;
@@ -747,6 +759,261 @@
   transition: all var(--ease-fast);
 }
 .ud-copy-btn:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+
+/* ── Fırlanan yükləyici ─────────────────────────────────────
+   Komponentdə `animation: spin ...` inline yazılırdı, lakin heç bir faylda
+   `spin` keyframe-i təyin olunmamışdı — yəni bütün yükləyicilər donmuş görünürdü.
+   Keyframe qlobaldır, ona görə köhnə inline istifadələr də bununla işləyir. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.ud-spin { animation: spin 1s linear infinite; }
+
+.ud-profile-active { color: var(--brand-success); }
+
+/* ── Hesab tipi (rol keçidi) kartı ──────────────────────────── */
+/* Ölçü və forma profil kartı ilə eynidir — iki kart eyni sütunda düzülür. */
+.ud-role-card {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-mild);
+  border-radius: var(--r-2xl);
+  padding: var(--sp-6);
+  max-width: 600px;
+  width: 100%;
+  margin: var(--sp-5) auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* Deaktiv düymələr "basıla bilər" görünməməlidir. Qlobal qayda yazmırıq ki,
+   kabinetin digər bölmələrindəki mövcud davranış dəyişməsin. */
+.ud-role-card .ud-btn-primary:disabled,
+.ud-role-card .ud-btn-outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ud-role-card .ud-btn-primary:disabled:hover,
+.ud-role-card .ud-btn-outline:disabled:hover {
+  filter: none;
+  transform: none;
+  border-color: var(--border-mild);
+}
+
+.ud-role-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.ud-role-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+}
+
+.ud-role-pill {
+  padding: 4px 14px;
+  border-radius: var(--r-full);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.ud-role-pill--user {
+  color: var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 30%, transparent);
+}
+
+.ud-role-pill--teacher {
+  color: var(--brand-success);
+  background: color-mix(in srgb, var(--brand-success) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-success) 30%, transparent);
+}
+
+.ud-role-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.ud-role-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--brand-gold);
+  background: color-mix(in srgb, var(--brand-gold) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-gold) 25%, transparent);
+  border-radius: var(--r-md);
+}
+
+.ud-role-warn svg { flex: 0 0 auto; margin-top: 2px; }
+
+.ud-role-gate,
+.ud-role-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.ud-role-class-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ud-role-class-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+}
+
+.ud-role-class-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.ud-role-class-name small {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.ud-role-actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
+
+.ud-btn-danger {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: 8px 16px; border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--brand-danger) 10%, transparent);
+  color: var(--brand-danger);
+  font-weight: 600; font-size: 12.5px; font-family: var(--font-body);
+  border: 1px solid color-mix(in srgb, var(--brand-danger) 30%, transparent);
+  cursor: pointer;
+  transition: all var(--ease-fast);
+  flex: 0 0 auto;
+}
+
+.ud-btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--brand-danger) 20%, transparent);
+}
+
+.ud-btn-danger:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.ud-role-ok,
+.ud-role-err {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.ud-role-ok  { color: var(--brand-success); font-weight: 500; }
+.ud-role-err { color: var(--brand-danger); }
+
+/* ── Silmə təsdiqi ──────────────────────────────────────────
+   Sinif silinməsi geri qaytarıla bilməyən əməliyyatdır: təsadüfi klik
+   ilə icra olunmaması üçün ayrıca təsdiq tələb olunur. */
+.ud-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: var(--bg-overlay);
+  backdrop-filter: blur(4px);
+}
+
+.ud-confirm-panel {
+  width: 100%;
+  max-width: 440px;
+  padding: var(--sp-6);
+  background: var(--bg-card);
+  border: 1px solid var(--border-mild);
+  border-radius: var(--r-2xl);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  text-align: center;
+}
+
+.ud-confirm-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--r-full);
+  color: var(--brand-danger);
+  background: color-mix(in srgb, var(--brand-danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-danger) 28%, transparent);
+}
+
+.ud-confirm-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ud-confirm-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.ud-confirm-text strong { color: var(--text-primary); }
+
+.ud-confirm-actions {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--sp-2);
+}
+
+.ud-confirm-actions .ud-btn-outline:disabled,
+.ud-confirm-actions .ud-btn-danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 
 
 .ud-profile-meta {

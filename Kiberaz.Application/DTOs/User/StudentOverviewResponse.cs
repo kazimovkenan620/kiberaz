@@ -38,4 +38,10 @@ public class StudentProgressAreaDto
     public int Solved { get; set; }
     public int Total { get; set; }
     public int Percentage { get; set; }
+
+    /// <summary>
+    /// Bu sahədə ən son cavab verilən an. Kabinetdəki "Son fəallıq" göstəricisi
+    /// üçün lazımdır — əvvəl orada sabit mətn ("2 gün əvvəl") yazılırdı.
+    /// </summary>
+    public DateTime? LastActivity { get; set; }
 }

@@ -24,7 +24,12 @@ public interface IAdminService
     Task<ApiResponse<AdminCourseResponse>> CreateCourseAsync(CreateAdminCourseRequest request);
 
     // ─── İstifadəçilər ───────────────────────────────────────
-    Task<ApiResponse<List<AdminUserResponse>>> GetUsersAsync();
+    /// <summary>
+    /// İstifadəçi siyahısı. Axtarış server tərəfdə aparılır, nəticə həmişə məhdudlaşdırılır —
+    /// bütün bazanı yaddaşa çəkmək qarşısı alınır.
+    /// </summary>
+    /// <param name="currentAdminId">Cari admin — öz hesabı siyahıya daxil edilmir.</param>
+    Task<ApiResponse<List<AdminUserResponse>>> GetUsersAsync(string currentAdminId, string? search = null, int take = 100);
     Task<ApiResponse<bool>> ChangeUserRoleAsync(string currentAdminId, string userId, string newRole);
     Task<ApiResponse<bool>> ToggleUserBlockAsync(string currentAdminId, string userId);
 

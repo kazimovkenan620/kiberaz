@@ -96,6 +96,20 @@ export function DashboardTab({ stats, onRefresh }: { stats: AdminStats | null; o
 // ── Courses Tab ───────────────────────────────────────────────
 type CourseStatusFilter = 'all' | 'Pending' | 'Approved' | 'Rejected';
 
+// Yalnız http(s) linkləri klikləmək üçün göstərilir.
+// Səbəb: <a href="javascript:..."> admin panelində kliklənəndə kod CARİ ORİGİN-də,
+// yəni admin sessiyasında icra olunur — target="_blank" və rel="noreferrer" bunu dayandırmır.
+// Server tərəfdə də https tələbi var; bu, ikinci qatdır (köhnə qeydlər üçün).
+function isSafeExternalLink(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 const STATUS_FILTERS: { value: CourseStatusFilter; label: string }[] = [
   { value: 'all', label: 'Hamısı' },
   { value: 'Pending', label: '⏳ Gözləyən' },
@@ -341,7 +355,7 @@ export function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success'
                             <XCircle size={12} /> Rədd et
                           </button>
                         )}
-                        {course.link && (
+                        {isSafeExternalLink(course.link) && (
                           <a href={course.link} target="_blank" rel="noreferrer" className="admin-btn admin-btn-ghost admin-btn-sm">
                             <Eye size={12} /> Bax
                           </a>
@@ -363,49 +377,61 @@ export function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success'
 }
 
 // ── Users Tab ─────────────────────────────────────────────────
-const ALL_ROLES = ['Admin', 'Moderator', 'Teacher', 'VIP', 'User'];
+const MANAGEABLE_ROLES = ['Moderator', 'Teacher', 'VIP', 'User'];
+
+// Sistem administratoru bu siyahıya serverdən heç vaxt gəlmir.
+// Burada yalnız idarə edilə bilən adi istifadəçi rolları göstərilir.
+function primaryRole(roles: string[]): string {
+  return MANAGEABLE_ROLES.find(r => roles.includes(r)) ?? 'User';
+}
 
 export function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const load = useCallback(async () => {
+  // Axtarış SERVER tərəfdə aparılır: siyahı məhdudlaşdırıldığı üçün müştəri tərəfdə
+  // filtrləmək yüklənməmiş istifadəçiləri gizlədərdi.
+  const load = useCallback(async (query = '') => {
     setLoading(true);
-    const res = await getAdminUsers();
+    const res = await getAdminUsers(query);
 
     // Əvvəl uğursuz cavab sükutla udulurdu: 403/500 halında siyahı boş qalır və
     // ekranda "Nəticə tapılmadı" görünürdü — yəni səlahiyyət xətası "data yoxdur" kimi oxunurdu.
     if (res.success && res.data) {
       setUsers(res.data);
       setLoadError('');
+      // Hədd dolduqda server bunu mesajda bildirir — admin siyahını tam sanmasın.
+      setNotice(res.data.length > 0 ? (res.message ?? '') : '');
     } else {
       setUsers([]);
+      setNotice('');
       setLoadError(res.message || 'Məlumat yüklənə bilmədi.');
     }
 
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Yazarkən hər hərfdə sorğu getməsin deyə 350 ms gecikmə.
+  useEffect(() => {
+    const timer = setTimeout(() => load(search), 350);
+    return () => clearTimeout(timer);
+  }, [search, load]);
 
-  const filtered = users.filter(u =>
-    u.nickname.toLowerCase().includes(search.toLowerCase()) ||
-    u.firstName.toLowerCase().includes(search.toLowerCase()) ||
-    u.lastName.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filtrləmə serverdə aparılır — burada təkrar süzgəc yoxdur.
+  const filtered = users;
 
   const handleRoleChange = async (userId: string, role: string) => {
     const res = await changeUserRole(userId, role);
-    if (res.success) { onToast(res.message, 'success'); load(); }
+    if (res.success) { onToast(res.message, 'success'); load(search); }
     else onToast(res.errors?.[0] || 'Xəta', 'error');
   };
 
   const handleBlock = async (userId: string) => {
     const res = await toggleUserBlock(userId);
-    if (res.success) { onToast(res.message, 'success'); load(); }
+    if (res.success) { onToast(res.message, 'success'); load(search); }
     else onToast(res.errors?.[0] || 'Xəta', 'error');
   };
 
@@ -433,6 +459,12 @@ export function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' |
             </div>
           </div>
         </div>
+
+        {notice && !loading && (
+          <div className="admin-filter-row" style={{ borderBottom: 'none' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{notice}</span>
+          </div>
+        )}
 
         {loading ? (
           <div className="admin-empty">⏳ Yüklənir...</div>
@@ -467,7 +499,7 @@ export function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' |
                     <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{user.email}</td>
                     <td>
                       <select
-                        value={user.roles[0] || 'User'}
+                        value={primaryRole(user.roles)}
                         onChange={e => handleRoleChange(user.id, e.target.value)}
                         style={{
                           background: 'rgba(255,255,255,0.04)',
@@ -481,7 +513,7 @@ export function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' |
                           outline: 'none',
                         }}
                       >
-                        {ALL_ROLES.map(r => (
+                        {MANAGEABLE_ROLES.map(r => (
                           <option key={r} value={r} style={{ background: '#0d1526' }}>{r}</option>
                         ))}
                       </select>
@@ -551,7 +583,18 @@ export function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' |
   );
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Bu imtahan sessiyasını silmək istədiyinizə əminsiniz?')) return;
+    // Bu əməliyyat KASKADLIDIR: kateqoriya ilə birlikdə içindəki bütün suallar da silinir.
+    // Əvvəlki mətn yalnız "sessiya" deyirdi və 219 suallıq kateqoriyanın bir kliklə
+    // yox olmasını gizlədirdi. İndi real təsir və sual sayı göstərilir.
+    const exam = exams.find(e => e.id === id);
+    const questionInfo = exam ? ` (${exam.duration})` : '';
+    const warning =
+      `DİQQƏT — bu əməliyyat kaskadlıdır.\n\n` +
+      `"${exam?.title ?? id}" kateqoriyası${questionInfo} silinəcək.\n` +
+      `Bu kateqoriyaya aid BÜTÜN suallar da birlikdə silinəcək və panel üzərindən geri qaytarıla bilməz.\n\n` +
+      `Davam edilsin?`;
+
+    if (!confirm(warning)) return;
     const res = await deleteExam(id);
     if (res.success) { onToast(res.message, 'success'); load(); }
     else onToast(res.errors?.[0] || 'Xəta', 'error');

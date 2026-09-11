@@ -48,6 +48,8 @@ export default function QuizView({ categoryId, onGoHome }: QuizViewProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Fix 5: submitAnswer uğursuz olduqda xəta mesajı
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Giriş tələbi adi xətadan ayrılır: mətn deyil, ayrıca panel göstərilir.
+  const [authRequired, setAuthRequired] = useState(false);
   // Fix 1: server nəticəsi ayrı saxlanılır (score üçün etibarlı mənbə)
   const [serverResults, setServerResults] = useState<Record<number, { isCorrect: boolean; correctKey: OptionKey }>>({});
 
@@ -95,10 +97,21 @@ export default function QuizView({ categoryId, onGoHome }: QuizViewProps) {
     setAnswers(prev => ({ ...prev, [current.id]: key }));
     setIsSubmitting(true);
     setSubmitError(null);
+    setAuthRequired(false);
 
     const result = await submitAnswer(current.id, key);
 
-    if (result) {
+    // Seçimi geri alan ortaq addım: cavab qeyd olunmuş kimi qalmamalıdır.
+    const rollbackSelection = () => {
+      setSelected(null);
+      setAnswers(prev => {
+        const next = { ...prev };
+        delete next[current.id];
+        return next;
+      });
+    };
+
+    if (result.status === 'ok') {
       // Fix 1: server nəticəsini ayrı state-də saxla (score üçün)
       setServerResults(prev => ({
         ...prev,
@@ -117,15 +130,13 @@ export default function QuizView({ categoryId, onGoHome }: QuizViewProps) {
             }
           : q,
       ));
+    } else if (result.status === 'auth-required') {
+      // Sualları hər kəs görə bilər, cavabın yoxlanışı isə hesaba bağlıdır.
+      setAuthRequired(true);
+      rollbackSelection();
     } else {
-      // Fix 5: submitAnswer uğursuz oldu — xəta göstər, cavabı geri al
-      setSubmitError('Cavab yoxlanılarkən xəta baş verdi. Yenidən cəhd edin.');
-      setSelected(null);
-      setAnswers(prev => {
-        const next = { ...prev };
-        delete next[current.id];
-        return next;
-      });
+      setSubmitError(result.message);
+      rollbackSelection();
     }
 
     setIsSubmitting(false);
@@ -429,6 +440,24 @@ export default function QuizView({ categoryId, onGoHome }: QuizViewProps) {
           </div>
           <p className="qv-question-text">{current.question}</p>
         </div>
+
+        {/* Giriş tələb olunur — cavabın yoxlanışı hesaba bağlıdır */}
+        {authRequired && (
+          <div className="qv-auth-gate">
+            <strong>Cavabı yoxlamaq üçün daxil olun.</strong>
+            <span>
+              Sualları giriş etmədən oxuya bilərsiniz, lakin cavabın düzgünlüyü və izahlar
+              yalnız hesabla göstərilir — həm də nəticəniz kabinetinizdə toplanır.
+            </span>
+            <button
+              type="button"
+              className="qv-auth-gate-btn"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            >
+              Yuxarıdakı giriş formasına keç
+            </button>
+          </div>
+        )}
 
         {/* Fix 5: submit xətası */}
         {submitError && (

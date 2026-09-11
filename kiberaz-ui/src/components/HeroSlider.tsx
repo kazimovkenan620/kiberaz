@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Plus, X, Clock, BarChart2, Globe, BookOpen, Send, Star, ChevronRight, ChevronLeft } from 'lucide-react';
 import { createCourse, getApprovedCourses, uploadInstructorPhoto, uploadSyllabusPdf, type CourseResponse, type CreateCourseRequest } from '../services/courseService';
+import { getToken } from '../services/authService';
 import './HeroSlider.css';
 
 const AUTO_INTERVAL = 8000;
@@ -90,6 +91,14 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
     setLoading(true);
     setErrors([]);
 
+    // Təlim göndərmə və fayl yükləmə artıq hesaba bağlıdır. Bunu formanı
+    // doldurduqdan SONRA serverdən öyrənmək pis təcrübədir — burada dərhal deyilir.
+    if (!getToken()) {
+      setErrors(['Təlim göndərmək üçün daxil olun. Giriş forması səhifənin yuxarısındadır.']);
+      setLoading(false);
+      return;
+    }
+
     const form = e.target as HTMLFormElement;
 
     // 1. Faylları təhlükəsiz şəkildə yükləyirik
@@ -174,6 +183,11 @@ function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCou
           </div>
         ) : (
           <form className="modal-form" onSubmit={handleSubmit}>
+            {!getToken() && (
+              <ul className="form-error-list" role="status">
+                <li>Təlim təklifi göndərmək üçün hesabla daxil olmalısınız — bu, təklifin sizin adınıza qeyd olunması üçün lazımdır.</li>
+              </ul>
+            )}
             <div className="form-section-label">👤 Müəllim Məlumatları</div>
             <div className="form-grid-2">
               <div className="form-field"><label htmlFor="instructor">Müəllim Adı *</label><input id="instructor" type="text" placeholder="Ad Soyad" required /></div>

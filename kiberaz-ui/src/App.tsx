@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronUp } from 'lucide-react';
 import Navbar from './components/Navbar';
 import HeroSlider from './components/HeroSlider';
@@ -142,8 +142,8 @@ function ResetPasswordPage() {
   };
 
   return (
-    <main className="app-main" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <form onSubmit={submit} className="modal-panel" style={{ width: '100%', maxWidth: 440 }}>
+    <main className="app-main reset-page">
+      <form onSubmit={submit} className="modal-panel reset-panel">
         <h1 className="modal-title">Şifrəni yenilə</h1>
         <div className="form-field">
           <label htmlFor="reset-pass">Yeni şifrə</label>
@@ -167,8 +167,29 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
   const [message, setMessage] = useState('Yoxlanilir...');
   const [error, setError] = useState('');
 
+  // TƏK İCRA QORUYUCUSU.
+  //
+  // React StrictMode (main.tsx) development-də hər effekti QƏSDƏN iki dəfə işə salır.
+  // Qoruyucu olmadan təsdiq sorğusu serverə İKİ DƏFƏ, özü də paralel gedirdi:
+  // birinci sorğu əməliyyatı tamamlayıb SecurityStamp/ConcurrencyStamp-i yeniləyirdi,
+  // ikincisi isə köhnəlmiş vəziyyətlə uğursuz olurdu — və ekranda göstərilən son nəticə
+  // məhz ikincinin XƏTASI olurdu. Nəticədə e-poçt uğurla dəyişdiyi halda istifadəçi
+  // "Hesab dəyişib" / "Təsdiq linki etibarsızdır" mesajı görürdü.
+  //
+  // useRef state deyil: dəyişməsi yenidən render tetiklemir və StrictMode-un ikinci
+  // çağırışında da eyni obyekt qalır, ona görə ikinci icranı dayandıra bilir.
+  const startedRef = useRef(false);
+
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const params = new URLSearchParams((window.location.hash || window.location.search).replace(/^[#?]/, ''));
+
+    // Parametrlər sorğudan ƏVVƏL URL-dən silinir. Əvvəl bu, cavab gəldikdən sonra
+    // edilirdi — yəni səhifə yeniləndikdə link ikinci dəfə işlənə bilirdi.
+    window.history.replaceState(null, '', window.location.pathname);
+
     const run = async () => {
       try {
         const result = type === 'email'
@@ -179,8 +200,6 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
               token: params.get('token') || '',
             });
 
-        // Təsdiq parametrləri URL-dən silinir ki, istifadəçi səhifəni yeniləyəndə ikinci dəfə işlənməsin.
-        window.history.replaceState(null, '', window.location.pathname);
         if (result.success) setMessage(result.message || 'Əməliyyat təsdiqləndi.');
         else setError(result.errors?.[0] || result.message || 'Link etibarsızdır və ya vaxtı bitib.');
       } catch {
@@ -194,7 +213,7 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
   return (
     <main className="app-main" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
       <section className="modal-panel" style={{ width: '100%', maxWidth: 440, textAlign: 'center' }}>
-        <h1 className="modal-title">Tesdiq</h1>
+        <h1 className="modal-title">Təsdiq</h1>
         {!error && <p style={{ color: '#22c55e' }}>{message}</p>}
         {error && <p style={{ color: '#ef4444' }}>{error}</p>}
       </section>
@@ -208,12 +227,27 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
 function GoogleLoginCallbackPage({ onSuccess }: { onSuccess: () => void }) {
   const [error, setError] = useState('');
 
+  // ConfirmActionPage ilə eyni səbəb: StrictMode effekti iki dəfə işə salır.
+  // Bu səhifədə nəticə daha pisdir — birinci icra kodu URL-dən silir, ikincisi isə
+  // BOŞ kodu serverə göndərib uğursuz olur və giriş uğurlu olduğu halda ekranda
+  // "Google ilə giriş tamamlanmadı" qalır. Kod həm də birdəfəlikdir: serverdə
+  // artıq tükədilib.
+  const startedRef = useRef(false);
+
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
     const code = params.get('code') ?? '';
 
     // Bir dəfəlik kod brauzer tarixçəsində və ünvan sətrində qalmasın.
     window.history.replaceState(null, '', window.location.pathname);
+
+    if (!code) {
+      setError('Google giriş kodu tapılmadı. Yenidən cəhd edin.');
+      return;
+    }
 
     exchangeGoogleLoginCode(code)
       .then((response) => {
@@ -261,7 +295,6 @@ export default function App() {
   const handleGoogleLoginSuccess = useCallback(() => {
     setIsLoggedIn(true);
     setShowDashboard(true);
-    setShowAdminPanel(false);
   }, []);
 
   const handleLogout = () => {

@@ -80,6 +80,7 @@ public class AppUser
     // Google ilə giriş üçün müvəqqəti kod — hash halında saxlanır, 2 dəqiqə etibarlıdır.
     public string?   GoogleLoginCodeHash       { get; set; }
     public DateTime? GoogleLoginCodeExpiryTime { get; set; }
+    public string? GoogleLoginCodeSecurityStamp { get; set; }
 
     // ─── NoSQL Embedding ────────────────────────────────────────────────
 

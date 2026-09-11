@@ -18,7 +18,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const token = getToken();
   const headers = new Headers(init.headers);
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  headers.set('Content-Type', headers.get('Content-Type') ?? 'application/json');
+
+  // FormData göndərildikdə Content-Type ƏLLƏ QOYULMAMALIDIR: brauzer multipart
+  // boundary-ni özü əlavə edir, biz "application/json" yazsaq server gövdəni
+  // ayrıştıra bilmir və fayl yükləmə səssizcə sınır.
+  if (!(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
 
   let response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include' });
 

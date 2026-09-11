@@ -413,6 +413,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
 
   const [loginError, setLoginError] = useState('');
   const [resendMessage, setResendMessage] = useState('');
+  const [resendOk, setResendOk] = useState(true);
   const [resending, setResending] = useState(false);
   const [loginCaptchaToken, setLoginCaptchaToken] = useState('');
   const [loginNeedsCaptcha, setLoginNeedsCaptcha] = useState(false);
@@ -486,8 +487,14 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
     setResendMessage('');
     try {
       const response = await resendConfirmationEmail(email);
-      setResendMessage(response.message || 'Təsdiq linki e-poçtunuza göndərildi.');
+      // Əvvəl success bayrağı NƏZƏRƏ ALINMIRDI: uğursuz cavab da yaşıl rəngdə
+      // "göndərildi" kimi görünürdü.
+      setResendOk(response.success);
+      setResendMessage(response.message || (response.success
+        ? 'Təsdiq linki e-poçtunuza göndərildi.'
+        : 'Təsdiq linki göndərilə bilmədi.'));
     } catch {
+      setResendOk(false);
       setResendMessage('Serverlə əlaqə yaradıla bilmədi.');
     } finally {
       setResending(false);
@@ -610,7 +617,11 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
                           {resending ? 'Göndərilir...' : 'Linki yenidən göndər'}
                         </button>
                       )}
-                      {resendMessage && <span style={{ display: 'block', color: '#22c55e', marginTop: 4 }}>{resendMessage}</span>}
+                      {resendMessage && (
+                        <span style={{ display: 'block', marginTop: 4, color: resendOk ? 'var(--brand-success)' : 'var(--brand-danger)' }}>
+                          {resendMessage}
+                        </span>
+                      )}
                     </span>
                   )}
                 </form>
@@ -687,7 +698,11 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
                       {resending ? 'Göndərilir...' : 'Linki yenidən göndər'}
                     </button>
                   )}
-                  {resendMessage && <span style={{ display: 'block', color: '#22c55e', marginTop: 4 }}>{resendMessage}</span>}
+                  {resendMessage && (
+                        <span style={{ display: 'block', marginTop: 4, color: resendOk ? 'var(--brand-success)' : 'var(--brand-danger)' }}>
+                          {resendMessage}
+                        </span>
+                      )}
                 </span>
               )}
               <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>

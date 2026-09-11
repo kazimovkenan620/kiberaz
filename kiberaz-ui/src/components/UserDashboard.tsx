@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Shield, User, Mail, ChevronRight, LogOut,
   Globe, Zap, Target, TrendingUp,
   ClipboardList, CheckCircle, Clock, Star, Edit3, Home, Loader, BookOpen, Save, Users, Plus, UserPlus, School, Eye, Lock,
-  Copy, Check,
+  Copy, Check, Trash2, ArrowLeftRight, AlertTriangle,
 } from 'lucide-react';
-import { addStudentToClass, createTeacherClass, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
-import type { ProfileResponse, StudentOverviewResponse, TeacherClassResponse } from '../services/userService';
+import { addStudentToClass, changeRole, createTeacherClass, deleteTeacherClass, getMyOverview, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
+import type { ProfileResponse, StudentOverviewResponse, SwitchableRole, TeacherClassResponse } from '../services/userService';
 import { isAdmin } from '../services/authService';
 import { getAdminStats, type AdminStats } from '../services/adminService';
 import { CoursesTab, DashboardTab, ExamsTab, Toast, UsersTab } from './AdminPanel';
@@ -17,19 +17,31 @@ const genderLabel = (gender?: number) => gender === 2 ? 'female' : 'male';
 const genderValue = (gender: string) => gender === 'female' ? 2 : 1;
 
 // ── Sahə irəliləyişi ────────────────────────────────────────────
-const categoryProgress = [
-  { id: 'crypto', label: 'Kriptoqrafiya', icon: <BookOpen size={16} />, color: '#a855f7', solved: 34, total: 95, lastActive: '2 gün əvvəl' },
-  { id: 'network', label: 'Şəbəkə Təhlükəsizliyi', icon: <Globe size={16} />, color: '#3b82f6', solved: 67, total: 130, lastActive: 'Bu gün' },
-  { id: 'web', label: 'Veb Təhlükəsizliyi', icon: <Zap size={16} />, color: '#ef4444', solved: 42, total: 175, lastActive: 'Dünən' },
-  { id: 'general', label: 'Ümumi Hazırlıq', icon: <Shield size={16} />, color: '#00e5a0', solved: 55, total: 140, lastActive: '3 gün əvvəl' },
+// Saha kartlarının ikonu və rəngi bazadan gəlmir — kateqoriya sırasına görə
+// dövri şəkildə paylanır ki, hər sahə fərqli görünsün.
+const AREA_ICONS = [
+  <Globe size={16} />, <Zap size={16} />, <Shield size={16} />, <BookOpen size={16} />, <Target size={16} />,
 ];
+const AREA_COLORS = ['#3b82f6', '#ef4444', '#00e5a0', '#a855f7', '#f5a623'];
 
-// ── Son imtahan sessiyaları ──────────────────────────────────────
-const recentSessions = [
-  { id: 'S1', title: 'Network Security Final', date: '10 May 2025', score: 85, total: 20, duration: '45 dəq', status: 'Tamamlandı' },
-  { id: 'S2', title: 'Web Security Quiz', date: '07 May 2025', score: 72, total: 15, duration: '30 dəq', status: 'Tamamlandı' },
-  { id: 'S3', title: 'Kriptoqrafiya Test', date: '03 May 2025', score: 60, total: 10, duration: '20 dəq', status: 'Tamamlandı' },
-];
+// "Son fəallıq" mətnini ISO tarixdən qurur. Əvvəl burada sabit mətn ("2 gün əvvəl") yazılırdı.
+function relativeTime(iso: string | null): string {
+  if (!iso) return 'Fəallıq yoxdur';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'Fəallıq yoxdur';
+
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'Bu gün';
+  if (days === 1) return 'Dünən';
+  if (days < 30) return `${days} gün əvvəl`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? '1 ay əvvəl' : `${months} ay əvvəl`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('az-AZ', { day: '2-digit', month: 'short', year: 'numeric' });
+}
 
 // ── Tab tipləri ──────────────────────────────────────────────────
 type Tab =
@@ -48,11 +60,10 @@ interface Props {
 
 // ════════════════════════════════════════════════════════════════
 export default function UserDashboard({ onLogout, onGoHome }: Props) {
-  const [tab, setTab] = useState<Tab>('overview');
-
   // Admin vəziyyəti bir dəfə oxunur və TƏK QAPI kimi işlədilir —
   // hər bölmədə ayrı-ayrı isAdmin() çağırmaq unudulma riski yaradır.
   const [isAdminUser] = useState<boolean>(() => isAdmin());
+  const [tab, setTab] = useState<Tab>(() => isAdmin() ? 'adm-overview' : 'overview');
   const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
   const [adminToast, setAdminToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
@@ -70,14 +81,29 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   // Statistika yalnız admin bölməsi açılanda çəkilir — adi istifadəçi
   // kabinetə girəndə lazımsız (və onsuz da 403 alacaq) sorğu getmir.
   useEffect(() => {
-    if (isAdminUser && ADMIN_TABS.includes(tab)) loadAdminStats();
-  }, [tab, isAdminUser, loadAdminStats]);
+    if (!isAdminUser || !ADMIN_TABS.includes(tab)) return;
+
+    let cancelled = false;
+    void getAdminStats().then((res) => {
+      if (!cancelled) {
+        setAdminStats(res.success && res.data ? res.data : null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, isAdminUser]);
   const [editMode, setEditMode] = useState(false);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
   const [studentId, setStudentId] = useState('');
   const [studentOverview, setStudentOverview] = useState<StudentOverviewResponse | null>(null);
+
+  // Kabinetin BÜTÜN göstəriciləri buradan gəlir — əvvəl fayl başındakı sabit massivlər idi.
+  const [myOverview, setMyOverview] = useState<StudentOverviewResponse | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [studentLoading, setStudentLoading] = useState(false);
   const [studentError, setStudentError] = useState('');
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassResponse[]>([]);
@@ -106,7 +132,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             nickname: res.data.nickname,
             gender: genderLabel(res.data.gender),
           });
-          if (res.data.roles.includes('Teacher')) {
+          if (!isAdminUser && res.data.roles.includes('Teacher')) {
             setClassLoading(true);
             const classesRes = await getTeacherClasses();
             if (classesRes.success && classesRes.data) {
@@ -130,14 +156,27 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
       }
     };
     fetchProfile();
-  }, []);
+  }, [isAdminUser]);
 
   const realNickname = profile?.nickname ?? 'İstifadəçi';
   const realJoinDate = profile?.joinDate
     ? new Date(profile.joinDate).toLocaleDateString('az-AZ')
     : '-';
   const realRoles: string[] = profile?.roles ?? ['User'];
-  const isTeacher = realRoles.includes('Teacher');
+  const isTeacher = !isAdminUser && realRoles.includes('Teacher');
+
+  // ── Rol keçidi üçün törəmə dəyərlər ──────────────────────────
+  // Yalnız İstifadəçi ⇄ Müəllim keçidi var. Admin bu kartı ümumiyyətlə görmür:
+  // server admin hesabının rol keçidini rədd edir, ona görə düymə də göstərilmir.
+  const currentRole: SwitchableRole = realRoles.includes('Teacher') ? 'Teacher' : 'User';
+  const targetRole: SwitchableRole = currentRole === 'Teacher' ? 'User' : 'Teacher';
+  const ROLE_LABELS: Record<SwitchableRole, string> = { User: 'İstifadəçi', Teacher: 'Müəllim' };
+
+  // Müəllim → tələbə keçidini server sinif varsa bloklayır (BOŞ sinif də sayılır).
+  // Şərti burada eyni məntiqlə təkrarlayırıq ki, istifadəçi düyməni basmadan
+  // nəyin lazım olduğunu görsün — yekun qərar yenə serverindir.
+  const blockingClasses: TeacherClassResponse[] = currentRole === 'Teacher' ? teacherClasses : [];
+  const roleSwitchBlocked = blockingClasses.length > 0;
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -149,6 +188,18 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   const [securityMsg, setSecurityMsg] = useState('');
   const [securityError, setSecurityError] = useState('');
   const [userIdCopied, setUserIdCopied] = useState(false);
+
+  // ── Rol keçidi (tələbə ⇄ müəllim) ────────────────────────────
+  // roleConfirm: təsdiq addımı. Rol keçidi sessiyanı bağlayır, ona görə
+  // tək kliklə icra olunmur — istifadəçi nəticəni bilərək təsdiqləyir.
+  const [roleConfirm, setRoleConfirm] = useState(false);
+  const [roleSwitching, setRoleSwitching] = useState(false);
+  const [roleMsg, setRoleMsg] = useState('');
+  const [roleError, setRoleError] = useState('');
+  const [deletingClassId, setDeletingClassId] = useState<number | null>(null);
+  // Silmə birbaşa icra olunmur: əvvəlcə hansı sinfin silinəcəyi adı və tələbə sayı ilə
+  // təsdiqlədilir. Sinif silinməsi geri qaytarıla bilməyən əməliyyatdır.
+  const [classPendingDelete, setClassPendingDelete] = useState<TeacherClassResponse | null>(null);
 
   const handleSave = async () => {
     setSaving(true); setSaveMsg(''); setSaveError('');
@@ -206,9 +257,111 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
     }
   };
 
-  const totalSolved = categoryProgress.reduce((s, c) => s + c.solved, 0);
-  const totalQ = categoryProgress.reduce((s, c) => s + c.total, 0);
-  const overallPct = Math.round((totalSolved / totalQ) * 100);
+  // Sinifi silir. Müəllim → tələbə keçidi üçün server bütün siniflərin
+  // silinməsini tələb edir, ona görə silmə düyməsi burada, keçid kartının içindədir.
+  const handleDeleteClass = async (classId: number) => {
+    setRoleError('');
+    setRoleMsg('');
+    setClassPendingDelete(null);
+    setDeletingClassId(classId);
+    try {
+      const res = await deleteTeacherClass(classId);
+      if (res.success) {
+        // Yeni siyahı əvvəlcə hesablanır: setState updater-inin içindən başqa
+        // setState çağırmaq StrictMode-da ikiqat icra olunan anti-pattern-dir.
+        const next = teacherClasses.filter(item => item.id !== classId);
+        setTeacherClasses(next);
+        // Silinən sinif seçili idisə, seçimi boşda qoymuruq.
+        setSelectedClassId(current => (current === classId ? next[0]?.id ?? null : current));
+        setRoleMsg('Sinif silindi.');
+      } else {
+        setRoleError(res.errors?.[0] || res.message || 'Sinif silinmədi.');
+      }
+    } catch {
+      setRoleError('Serverlə əlaqə yaradıla bilmədi.');
+    } finally {
+      setDeletingClassId(null);
+    }
+  };
+
+  // Rol keçidi. Server uğur halında SecurityStamp-i yeniləyir və refresh token-i silir —
+  // yəni cari access token növbəti sorğuda etibarsızdır. Ona görə burada mütləq
+  // logout edilir: əks halda istifadəçi köhnə rolla "yarı-işləyən" kabinetdə qalar.
+  const handleChangeRole = async () => {
+    setRoleSwitching(true);
+    setRoleError('');
+    setRoleMsg('');
+    try {
+      const res = await changeRole(targetRole);
+      if (res.success) {
+        setRoleConfirm(false);
+        setRoleMsg(res.message || 'Rol dəyişdirildi. Yenidən daxil olun.');
+        // Mesaj oxunsun deyə qısa fasilə, sonra sessiya bağlanır.
+        setTimeout(() => onLogout(), 2200);
+      } else {
+        setRoleError(res.errors?.[0] || res.message || 'Rol dəyişdirilmədi.');
+      }
+    } catch {
+      setRoleError('Serverlə əlaqə yaradıla bilmədi.');
+    } finally {
+      setRoleSwitching(false);
+    }
+  };
+
+  // Təsdiq pəncərəsi Escape ilə bağlanır. Silmə gedərkən bağlanmır ki,
+  // istifadəçi əməliyyatın yarımçıq qaldığını düşünməsin.
+  useEffect(() => {
+    if (!classPendingDelete) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && deletingClassId === null) setClassPendingDelete(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [classPendingDelete, deletingClassId]);
+
+  // Öz göstəricilərini çək — ID serverdə token-dən götürülür.
+  useEffect(() => {
+    let cancelled = false;
+    getMyOverview()
+      .then(res => { if (!cancelled) setMyOverview(res.success && res.data ? res.data : null); })
+      .finally(() => { if (!cancelled) setOverviewLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // JSX-in gözlədiyi forma saxlanılır, mənbə isə real dataya bağlanır.
+  const categoryProgress = useMemo(
+    () => (myOverview?.progressAreas ?? []).map((area, i) => ({
+      id: `area-${i}`,
+      label: area.area,
+      icon: AREA_ICONS[i % AREA_ICONS.length],
+      color: AREA_COLORS[i % AREA_COLORS.length],
+      solved: area.solved,
+      total: area.total,
+      lastActive: relativeTime(area.lastActivity),
+    })),
+    [myOverview],
+  );
+
+  const recentSessions = useMemo(
+    () => (myOverview?.examSessions ?? []).map(s => ({
+      id: s.id,
+      title: s.title,
+      date: formatDate(s.date),
+      score: s.score,
+      total: s.maxScore,
+      percentage: s.percentage,
+      // Backend imtahan müddətini saxlamır (sessiya anlayışı yoxdur) — onun yerinə
+      // həmin sahədə cavablanan sual sayı göstərilir.
+      questionCount: s.maxScore,
+      status: s.status,
+    })),
+    [myOverview],
+  );
+
+  const totalSolved = myOverview?.summary.totalPoints ?? 0;
+  const overallPct = myOverview?.summary.overallProgress ?? 0;
+  const averageScore = myOverview?.summary.averageScore ?? 0;
+  const examsTaken = myOverview?.summary.examsTaken ?? 0;
   const selectedClass = teacherClasses.find(item => item.id === selectedClassId) ?? teacherClasses[0] ?? null;
 
   const handleCreateClass = async (e: React.FormEvent) => {
@@ -314,24 +467,22 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         <div className="ud-sidebar-top">
           <div className="ud-avatar">{realNickname.slice(0, 2).toUpperCase()}</div>
           <div className="ud-sidebar-name" style={{ color: 'var(--brand-primary)' }}>{realNickname}</div>
-          <div className="ud-sidebar-email">İstifadəçi Kabinetim</div>
+          <div className="ud-sidebar-email">{isAdminUser ? 'Admin Panel' : 'İstifadəçi Kabinetim'}</div>
         </div>
 
         <nav className="ud-nav">
-          {([
-            ['overview', 'Ümumi Baxış', <TrendingUp size={16} />],
-            ['progress', 'İrəliləyiş', <Target size={16} />],
-            ['sessions', 'İmtahanlarım', <ClipboardList size={16} />],
-            ...(isTeacher ? [['students', 'Tələbələr', <Users size={16} />] as [Tab, string, React.ReactNode]] : []),
-            ['profile', 'Profil', <User size={16} />],
-            // ── Admin bölmələri: TƏK şərtlə açılır ──
-            ...(isAdminUser ? ([
+          {(isAdminUser ? ([
               ['adm-overview', 'Admin · İcmal', <Shield size={16} />],
               ['adm-courses', 'Admin · Təlimlər', <BookOpen size={16} />],
               ['adm-users', 'Admin · İstifadəçilər', <Users size={16} />],
               ['adm-exams', 'Admin · İmtahanlar', <ClipboardList size={16} />],
-            ] as [Tab, string, React.ReactNode][]) : []),
-          ] as [Tab, string, React.ReactNode][]).map(([t, label, icon]) => (
+            ] as [Tab, string, React.ReactNode][]) : ([
+              ['overview', 'Ümumi Baxış', <TrendingUp size={16} />],
+              ['progress', 'İrəliləyiş', <Target size={16} />],
+              ['sessions', 'İmtahanlarım', <ClipboardList size={16} />],
+              ...(isTeacher ? [['students', 'Tələbələr', <Users size={16} />] as [Tab, string, React.ReactNode]] : []),
+              ['profile', 'Profil', <User size={16} />],
+            ] as [Tab, string, React.ReactNode][])).map(([t, label, icon]) => (
             <button
               key={t}
               className={`ud-nav-btn ${tab === t ? 'active' : ''}`}
@@ -355,7 +506,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
       <main className="ud-main">
 
         {/* ═══ OVERVIEW ═══ */}
-        {tab === 'overview' && (
+        {!isAdminUser && tab === 'overview' && (
           <div className="ud-section ud-overview">
             <div className="ud-section-header">
               <h1 className="ud-page-title">
@@ -369,8 +520,8 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
               {[
                 { icon: <CheckCircle size={20} />, color: '#00e5a0', label: 'Həll edilən sual', value: totalSolved },
                 { icon: <Target size={20} />, color: '#3b82f6', label: 'Ümumi irəliləyiş', value: `${overallPct}%` },
-                { icon: <ClipboardList size={20} />, color: '#f5a623', label: 'Keçirilən imtahan', value: recentSessions.length },
-                { icon: <Star size={20} />, color: '#a855f7', label: 'Ortalama xal', value: '72%' },
+                { icon: <ClipboardList size={20} />, color: '#f5a623', label: 'Keçirilən imtahan', value: examsTaken },
+                { icon: <Star size={20} />, color: '#a855f7', label: 'Ortalama xal', value: `${averageScore}%` },
               ].map((s, i) => (
                 <div key={i} className="ud-stat-card" style={{ '--s-clr': s.color } as React.CSSProperties}>
                   <div className="ud-stat-icon">{s.icon}</div>
@@ -408,13 +559,16 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             {/* Son imtahan */}
             <div className="ud-card">
               <div className="ud-card-title">📝 Son imtahan sessiyaları</div>
+              {!overviewLoading && recentSessions.length === 0 && (
+                <p className="ud-empty-note">Hələ imtahan keçirməmisiniz. İlk testi həll edin — nəticələr burada görünəcək.</p>
+              )}
               {recentSessions.slice(0, 2).map(s => (
                 <div key={s.id} className="ud-session-row">
                   <div className="ud-session-info">
                     <div className="ud-session-title">{s.title}</div>
-                    <div className="ud-session-meta"><Clock size={11} /> {s.duration} · {s.date}</div>
+                    <div className="ud-session-meta"><Clock size={11} /> {s.questionCount} sual · {s.date}</div>
                   </div>
-                  <div className="ud-session-score" style={{ color: s.score >= 70 ? '#00e5a0' : s.score >= 50 ? '#f5a623' : '#ef4444' }}>
+                  <div className="ud-session-score" style={{ color: s.percentage >= 70 ? 'var(--brand-success)' : s.percentage >= 50 ? 'var(--brand-gold)' : 'var(--brand-danger)' }}>
                     {s.score}/{s.total}
                   </div>
                 </div>
@@ -424,12 +578,16 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         )}
 
         {/* ═══ PROGRESS ═══ */}
-        {tab === 'progress' && (
+        {!isAdminUser && tab === 'progress' && (
           <div className="ud-section">
             <div className="ud-section-header">
               <h2 className="ud-page-title">Sahə üzrə <span>İrəliləyiş</span></h2>
               <p className="ud-page-sub">Hər kateqoriyada nə qədər irəlilədiniz</p>
             </div>
+
+            {!overviewLoading && categoryProgress.length === 0 && (
+              <p className="ud-empty-note">Hələ heç bir sual həll etməmisiniz. Quiz bölməsindən başlayın.</p>
+            )}
 
             <div className="ud-progress-cards">
               {categoryProgress.map(cat => {
@@ -464,7 +622,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         )}
 
         {/* ═══ SESSIONS ═══ */}
-        {tab === 'sessions' && (
+        {!isAdminUser && tab === 'sessions' && (
           <div className="ud-section">
             <div className="ud-section-header">
               <h2 className="ud-page-title">İmtahan <span>Sessiyalarım</span></h2>
@@ -475,20 +633,23 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
               <div className="ud-table-head">
                 <span>Sessiya</span>
                 <span>Tarix</span>
-                <span>Müddət</span>
+                <span>Sual sayı</span>
                 <span>Xal</span>
                 <span>Status</span>
               </div>
+              {!overviewLoading && recentSessions.length === 0 && (
+                <p className="ud-empty-note">Nəticə yoxdur.</p>
+              )}
               {recentSessions.map(s => {
-                const pct = Math.round((s.score / s.total) * 100);
-                const clr = pct >= 70 ? '#00e5a0' : pct >= 50 ? '#f5a623' : '#ef4444';
+                const pct = s.percentage;
+                const clr = pct >= 70 ? 'var(--brand-success)' : pct >= 50 ? 'var(--brand-gold)' : 'var(--brand-danger)';
                 return (
                   <div key={s.id} className="ud-table-row">
                     <span className="ud-table-title">{s.title}</span>
                     <span className="ud-table-meta">{s.date}</span>
-                    <span className="ud-table-meta"><Clock size={11} /> {s.duration}</span>
+                    <span className="ud-table-meta"><Clock size={11} /> {s.questionCount} sual</span>
                     <span className="ud-table-score" style={{ color: clr }}>{s.score}/{s.total} ({pct}%)</span>
-                    <span className="ud-table-status" style={{ color: '#00e5a0' }}>
+                    <span className="ud-table-status" style={{ color: 'var(--brand-success)' }}>
                       <CheckCircle size={12} /> {s.status}
                     </span>
                   </div>
@@ -499,10 +660,10 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         )}
 
         {/* ═══ PROFILE ═══ */}
-        {tab === 'students' && isTeacher && (
+        {!isAdminUser && tab === 'students' && isTeacher && (
           <div className="ud-section">
             <div className="ud-section-header">
-              <h2 className="ud-page-title">Sinif <span>Izleme</span></h2>
+              <h2 className="ud-page-title">Sinif <span>İzləmə</span></h2>
               <p className="ud-page-sub">Sinif açın, tələbə ID-si ilə şagird əlavə edin və göstəricilərini izləyin</p>
             </div>
 
@@ -705,7 +866,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
           </div>
         )}
 
-        {tab === 'profile' && (
+        {!isAdminUser && tab === 'profile' && (
           <div className="ud-section">
             <div className="ud-section-header">
               <h2 className="ud-page-title">Mənim <span>Profilim</span></h2>
@@ -885,12 +1046,156 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
               <div className="ud-profile-meta">
                 <span>🗓 Qeydiyyat tarixi: {realJoinDate}</span>
                 <span>·</span>
-                <span style={{ color: '#00e5a0' }}>✓ Aktiv Hesab</span>
+                <span className="ud-profile-active">✓ Aktiv Hesab</span>
               </div>
+            </div>
+
+            {/* ── Hesab tipi (rol keçidi) ─────────────────────────────
+                Yalnız İstifadəçi ⇄ Müəllim. Server admin hesabını rədd etdiyi üçün
+                bu kart admin kabinetində ümumiyyətlə render olunmur. */}
+            <div className="ud-role-card">
+              <div className="ud-role-head">
+                <h3 className="ud-role-title"><ArrowLeftRight size={16} /> Hesab tipi</h3>
+                <span className={`ud-role-pill ud-role-pill--${currentRole.toLowerCase()}`}>
+                  {ROLE_LABELS[currentRole]}
+                </span>
+              </div>
+
+              <p className="ud-role-desc">
+                {currentRole === 'User'
+                  ? 'Müəllim hesabına keçsəniz sinif yarada və tələbələrinizin göstəricilərini izləyə bilərsiniz.'
+                  : 'Tələbə hesabına qayıtsanız sinif idarəetməsi bağlanır, öz nəticələriniz isə olduğu kimi qalır.'}
+              </p>
+
+              {/* Siniflər yüklənməyibsə susmuruq: əks halda keçid mümkün görünür,
+                  server isə rədd edir və istifadəçi səbəbi anlamır. */}
+              {currentRole === 'Teacher' && classError && (
+                <div className="ud-role-warn">
+                  <AlertTriangle size={14} /> Sinif siyahısı yüklənmədi ({classError}) — keçid serverdə yoxlanacaq.
+                </div>
+              )}
+
+              {roleSwitchBlocked ? (
+                <div className="ud-role-gate">
+                  <div className="ud-role-warn">
+                    <AlertTriangle size={14} />
+                    Tələbə roluna keçmək üçün əvvəlcə bütün sinifləri silin ({blockingClasses.length}).
+                  </div>
+
+                  <ul className="ud-role-class-list">
+                    {blockingClasses.map(item => (
+                      <li key={item.id} className="ud-role-class-item">
+                        <span className="ud-role-class-name">
+                          <School size={14} /> {item.name}
+                          <small>{item.studentCount} tələbə</small>
+                        </span>
+                        <button
+                          type="button"
+                          className="ud-btn-danger"
+                          onClick={() => setClassPendingDelete(item)}
+                          disabled={deletingClassId !== null}
+                        >
+                          {deletingClassId === item.id
+                            ? <><Loader size={14} className="ud-spin" /> Silinir...</>
+                            : <><Trash2 size={14} /> Sil</>}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <span className="ud-helper-text">
+                    Sinif silindikdə yalnız sinfə bağlılıq itir — tələbə hesabları və onların nəticələri silinmir.
+                  </span>
+                </div>
+              ) : roleConfirm ? (
+                <div className="ud-role-confirm">
+                  <div className="ud-role-warn">
+                    <AlertTriangle size={14} />
+                    Rol dəyişdikdən sonra sessiya bağlanır və yenidən daxil olmalısınız.
+                  </div>
+                  <div className="ud-role-actions">
+                    <button
+                      type="button"
+                      className="ud-btn-primary"
+                      onClick={handleChangeRole}
+                      disabled={roleSwitching}
+                    >
+                      {roleSwitching
+                        ? <><Loader size={15} className="ud-spin" /> Dəyişdirilir...</>
+                        : <>Bəli, {ROLE_LABELS[targetRole]} et</>}
+                    </button>
+                    <button
+                      type="button"
+                      className="ud-btn-outline"
+                      onClick={() => { setRoleConfirm(false); setRoleError(''); }}
+                      disabled={roleSwitching}
+                    >
+                      Ləğv et
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="ud-role-actions">
+                  <button
+                    type="button"
+                    className="ud-btn-primary"
+                    onClick={() => { setRoleConfirm(true); setRoleError(''); setRoleMsg(''); }}
+                    disabled={roleSwitching}
+                  >
+                    <ArrowLeftRight size={15} /> {ROLE_LABELS[targetRole]} roluna keç
+                  </button>
+                </div>
+              )}
+
+              {roleMsg && <p className="ud-role-ok">{roleMsg}</p>}
+              {roleError && <p className="ud-role-err">{roleError}</p>}
             </div>
           </div>
         )}
       </main>
+
+      {/* Sinif silmə təsdiqi — geri qaytarıla bilməyən əməliyyat üçün açıq razılıq.
+          role="alertdialog": ekran oxuyucu bunu adi panel deyil, xəbərdarlıq kimi elan edir. */}
+      {classPendingDelete && (
+        <div
+          className="ud-confirm-backdrop"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="ud-confirm-title"
+          onClick={() => setClassPendingDelete(null)}
+        >
+          <div className="ud-confirm-panel" onClick={e => e.stopPropagation()}>
+            <div className="ud-confirm-icon"><AlertTriangle size={22} /></div>
+            <h3 id="ud-confirm-title" className="ud-confirm-title">Sinfi silmək istədiyinizə əminsiniz?</h3>
+            <p className="ud-confirm-text">
+              <strong>«{classPendingDelete.name}»</strong> sinfi silinəcək
+              {classPendingDelete.studentCount > 0
+                ? <> və {classPendingDelete.studentCount} tələbənin bu sinfə bağlılığı itəcək.</>
+                : <>.</>}
+              {' '}Tələbə hesabları və onların nəticələri silinmir. Bu əməliyyat geri qaytarıla bilməz.
+            </p>
+            <div className="ud-confirm-actions">
+              <button
+                type="button"
+                className="ud-btn-danger"
+                onClick={() => handleDeleteClass(classPendingDelete.id)}
+                disabled={deletingClassId !== null}
+                autoFocus
+              >
+                <Trash2 size={14} /> Bəli, sil
+              </button>
+              <button
+                type="button"
+                className="ud-btn-outline"
+                onClick={() => setClassPendingDelete(null)}
+                disabled={deletingClassId !== null}
+              >
+                Ləğv et
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {adminToast && (
         <Toast

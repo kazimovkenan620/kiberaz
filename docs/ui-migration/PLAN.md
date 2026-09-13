@@ -54,7 +54,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | done |
 | 7 | Admin (overview, courses, users, exams) | done |
 | 8 | Auth special pages | done |
-| 9 | Responsive + accessibility pass | todo |
+| 9 | Responsive + accessibility pass | done |
 | 10 | Legacy cleanup | todo |
 | 11 | Regression + quality gate + final report | todo |
 
@@ -79,6 +79,18 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 9
+- Checked at 1440 / 1280 / 1024 / 768 / 430 / 390 with Playwright (home, quiz active, cabinet overview, students,
+  admin users, register/login modals, mobile menu, sidebar drawer). `scrollWidth > clientWidth` was false on every
+  checked screen (no horizontal page scroll); tables scroll inside their own `.table-wrap`.
+- Adaptations in place: public nav → hamburger + drawer (≤1024); dashboard sidebar → drawer with a "Bölmələr"
+  control (≤1024); rail stacks under main (≤1280) / full width (≤1024); quiz/exam become single column; navigator
+  grid re-flows (8 / 6 columns); course grid 3 → 2 → 1; modals become bottom sheets (≤640) with full-width actions.
+- Fix: the mobile menu user chip was missing the name (rule scoped to the header now).
+- Accessibility already in the system: skip link kept, semantic dialogs with focus trap/restore/Escape, labelled
+  icon buttons, `aria-pressed` on segmented controls, tab keyboard navigation, option states with icon + text +
+  visually-hidden text, `prefers-reduced-motion` respected, visible focus rings everywhere.
 
 ### Phase 8
 - Reset password / e-mail confirmation / e-mail change confirmation / Google callback pages share

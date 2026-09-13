@@ -132,8 +132,8 @@
 }
 @media (max-width: 640px) {
   .header__auth { display: none; }
-  .user-menu__text { display: none; }
-  .user-menu__trigger { padding: 0 2px; }
+  .header .user-menu__text { display: none; }
+  .header .user-menu__trigger { padding: 0 2px; }
 }
 
 /* ── Auth formaları (Login / Register / Forgot) ── */

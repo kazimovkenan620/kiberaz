@@ -46,7 +46,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | # | Phase | Status |
 |---|---|---|
 | 0 | Baseline, branch, PLAN.md | done |
-| 1 | Design foundation (tokens, themes, typography, base primitives, ThemeToggle) | todo |
+| 1 | Design foundation (tokens, themes, typography, base primitives, ThemeToggle) | done |
 | 2 | Shared shells (header, layout, dashboard shell, modal, footer, states, scroll-top, cookie) | todo |
 | 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | todo |
 | 4 | Quiz (setup, active, auth gate, result) | todo |
@@ -60,7 +60,14 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 
 ## 4. Files created / heavily modified / deleted
 
-(kept current per phase)
+### Phase 1
+- Rewritten: `kiberaz-ui/src/index.css` (new token system, light/dark, reset, base primitives: buttons,
+  cards, badges, fields, tabs, progress, tables, states, modal, toast), `kiberaz-ui/index.html`
+  (Inter + JetBrains Mono, pre-paint theme script, theme-color meta).
+- Created: `src/hooks/useTheme.ts`, `src/components/ui/{Button,IconButton,Badge,Card,StatCard,ProgressBar,
+  Tabs,FormField,SearchField,Modal,ConfirmDialog,States,ThemeToggle,Toast,index}.tsx`,
+  `src/utils/{buttonClass,formA11y,courseAccent,categoryIcon}.ts(x)`.
+- Verification: `tsc` ✅, `npm run build` ✅, `eslint src/components/ui src/hooks src/utils` ✅.
 
 ## 5. Design decisions
 

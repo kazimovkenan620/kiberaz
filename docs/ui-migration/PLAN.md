@@ -53,7 +53,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 5 | Exam (create, join, player, teacher dashboard) | done |
 | 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | done |
 | 7 | Admin (overview, courses, users, exams) | done |
-| 8 | Auth special pages | todo |
+| 8 | Auth special pages | done |
 | 9 | Responsive + accessibility pass | todo |
 | 10 | Legacy cleanup | todo |
 | 11 | Regression + quality gate + final report | todo |
@@ -79,6 +79,13 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 8
+- Reset password / e-mail confirmation / e-mail change confirmation / Google callback pages share
+  `AuthPageShell` (brand + theme toggle + centered card) — implemented with the App rewrite in Phase 2 and verified
+  here. Token/URL handling untouched: params are read once, stripped from the URL before the request, redirect
+  targets stay hardcoded; errors show only the server's message or a generic Azerbaijani text.
+- Verification: Playwright screenshots (reset light 1440, Google callback dark 390, confirm light 1440).
 
 ### Phase 7
 - Rewritten: `AdminPanel.tsx/.css` — `DashboardTab` (real `AdminStats` fields as stat blocks), `CoursesTab`

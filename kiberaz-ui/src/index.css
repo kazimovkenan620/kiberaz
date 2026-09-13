@@ -141,6 +141,11 @@
   --illu-line: rgba(47, 143, 255, 0.55);
   --illu-node: #7FB8FF;
   --illu-text: #E8EEF6;
+
+  /* Yan panel brend kartı */
+  --promo-bg: #0B0F14;
+  --promo-text: #F7F9FC;
+  --promo-border: #0B0F14;
 }
 
 /* ─── 3. Dark mövzu ───────────────────────────────────────────── */
@@ -199,6 +204,10 @@
   --illu-line: rgba(47, 143, 255, 0.55);
   --illu-node: #7FB8FF;
   --illu-text: #E8EEF6;
+
+  --promo-bg: #141A23;
+  --promo-text: #F7F9FC;
+  --promo-border: #31404E;
 }
 
 /* ─── 4. Reset ────────────────────────────────────────────────── */
@@ -452,7 +461,7 @@ p  { overflow-wrap: anywhere; }
 .stat__body { display: flex; flex-direction: column; min-width: 0; }
 .stat__value { font-size: var(--text-lg); font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .stat__label { font-size: var(--text-xs); color: var(--text-2); }
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--sp-3); }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-3); }
 
 /* ─── 9. Nişanlar ────────────────────────────────────────────── */
 .badge {

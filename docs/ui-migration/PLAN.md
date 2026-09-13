@@ -51,7 +51,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | done |
 | 4 | Quiz (setup, active, auth gate, result) | done |
 | 5 | Exam (create, join, player, teacher dashboard) | done |
-| 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | todo |
+| 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | done |
 | 7 | Admin (overview, courses, users, exams) | todo |
 | 8 | Auth special pages | todo |
 | 9 | Responsive + accessibility pass | todo |
@@ -79,6 +79,19 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 6
+- Rewritten: `UserDashboard.tsx/.css` on `DashboardShell` + `Sidebar` (user header, tabs, Ana səhifə / Çıxış
+  footer). Overview: welcome header, identity card with real `overallProgress`, stat blocks (totalPoints,
+  examsTaken, averageScore, bestScore — real summary fields), progress rows, recent sessions; right rail with
+  "Son fəaliyyət" (areas sorted by real `lastActivity`) and account card. Progress: cards per area (dead "Davam et"
+  no-op button removed). Sessions: table. Teacher: class manager (create / add student), class chips, students
+  table with progress, student overview panel (closable). Profile: identity + editable fields + ID copy + gender
+  radios; security card (e-mail change / password link); account-type card with the teacher→student block list,
+  inline confirm step for role switch (still logs out after success), class deletion via shared `ConfirmDialog`
+  (stays open with busy state during the request). All service calls and state semantics unchanged.
+- Tokens: `--promo-*` for the sidebar brand card; stat grid min column 150px.
+- Verification: `tsc` ✅, `eslint` ✅ on touched files, Playwright screenshots of all teacher tabs in both themes.
 
 ### Phase 5
 - Rewritten: `ExamSession.tsx/.css` — section (action cards, join form, teacher "last session" card, session /

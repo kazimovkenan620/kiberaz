@@ -21,7 +21,7 @@ function getInitialNavbarUser(): { nickname: string } | null {
   return token && nickname ? { nickname } : null;
 }
 
-const ROLE_LABELS: Record<string, string> = { admin: 'Admin', teacher: 'Müəllim', user: 'Tələbə', moderator: 'Moderator', vip: 'VIP' };
+const ROLE_LABELS: Record<string, string> = { admin: 'Admin', teacher: 'Müəllim', user: 'İstifadəçi', moderator: 'Moderator', vip: 'VIP' };
 const roleDisplay = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
 
 type AuthModal = 'login' | 'register' | 'forgot' | null;
@@ -51,6 +51,19 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
   // Rol nişanı ləqəbin yanında göstərilir. Ayrıca "Admin" düyməsi yoxdur —
   // admin bölmələri Kabinetim içindədir və orada rol ilə açılır.
   const [roleLabel, setRoleLabel] = useState<string>(() => getPrimaryRoleLabel());
+
+  // Giriş vəziyyəti App-dan gəlir (kabinetdən çıxış, rol keçidi, Google callback).
+  // Prop dəyişəndə yerli istifadəçi state-i render zamanı sinxronlaşdırılır —
+  // əks halda çıxışdan sonra başlıqda köhnə ləqəb və "Kabinetim" menyusu qalırdı.
+  const [prevLoggedIn, setPrevLoggedIn] = useState(isLoggedIn);
+  if (prevLoggedIn !== isLoggedIn) {
+    setPrevLoggedIn(isLoggedIn);
+    setUser(isLoggedIn ? getInitialNavbarUser() : null);
+    setRoleLabel(isLoggedIn ? getPrimaryRoleLabel() : '');
+  }
+
+  // CAPTCHA tələbi server "captchaRequired" dedikdən sonra modal bağlanıb açılsa da qalır.
+  const [loginNeedsCaptcha, setLoginNeedsCaptcha] = useState(false);
 
   const handleScroll = useCallback(() => setScrolled(window.scrollY > 8), []);
 
@@ -130,6 +143,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
     setStoredUserRoles(u.roles);
     setUser({ nickname: u.nickname });
     setRoleLabel(getPrimaryRoleLabel());
+    setLoginNeedsCaptcha(false);
     setAuthModal(null);
     onLoginDemo?.();
   };
@@ -263,6 +277,8 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
         <LoginModal
           onClose={() => setAuthModal(null)}
           onLoggedIn={handleLoggedIn}
+          needsCaptcha={loginNeedsCaptcha}
+          onNeedsCaptcha={setLoginNeedsCaptcha}
           onForgot={email => { setForgotEmail(email); setAuthModal('forgot'); }}
           onSwitchToRegister={() => setAuthModal('register')}
         />

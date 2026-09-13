@@ -41,6 +41,8 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | `npx tsc --noEmit -p tsconfig.app.json` | ✅ pass |
 | `npm run lint` | ❌ 9 errors + 1 warning (pre-existing, see §7) |
 
+Final (HEAD of the branch): build ✅ · lint ✅ (0 problems) · tsc ✅ · `git diff --check` ✅.
+
 ## 3. Phases
 
 | # | Phase | Status |
@@ -56,7 +58,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 8 | Auth special pages | done |
 | 9 | Responsive + accessibility pass | done |
 | 10 | Legacy cleanup | done |
-| 11 | Regression + quality gate + final report | todo |
+| 11 | Regression + quality gate + final report | done |
 
 ## 4. Files created / heavily modified / deleted
 
@@ -79,6 +81,27 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 11
+- Independent hostile review of `git diff origin/develop..HEAD` (separate agent) + browser verification. Findings fixed:
+  1. HIGH — header kept the old user/menu after logging out from the cabinet or after a role switch (Navbar is
+     now always mounted). Fix: Navbar syncs its local user/role state from the `isLoggedIn` prop (render-time
+     state adjustment). Verified: after cabinet "Çıxış" the header shows "Daxil ol", token is null.
+  2. HIGH — `Modal` initial focus targeted `[autofocus]` (React never emits that attribute) and re-ran its effect on
+     every parent render (inline `onClose`), stealing focus once per second inside the exam timer. Fix: effect
+     depends only on `open`, callbacks via ref, initial focus respects React's `autoFocus` and otherwise skips the
+     close button; body overflow restored to its previous value. Verified: exam finish dialog keeps focus stable
+     while the timer ticks; login modal focuses the e-mail field.
+  3. MEDIUM — navigator allowed jumping forward to unanswered questions (old flow forced answering in order).
+     Fix: navigator only reaches already-opened questions (`furthestIdx`); "Növbəti" still appears only after an answer.
+  4. MEDIUM — quiz keyboard shortcuts (A–D) fired behind an open modal. Fix: ignored while a dialog is open.
+  5. LOW — CAPTCHA-required flag now lives in Navbar so it survives closing/reopening the login modal; Turnstile
+     token cleared when the theme (and therefore the widget) changes; role label "User" shown as "İstifadəçi"
+     everywhere.
+- Pre-existing `no-useless-assignment` in `authService.ts` / `courseService.ts` fixed (declaration without the
+  unused `= null` initializer — no behavioral change). This is the only touch to `services/`.
+- Final gate: `npm run build` ✅ · `npm run lint` ✅ (0 problems) · `npx tsc --noEmit -p tsconfig.app.json` ✅ ·
+  `git diff --check` ✅ · `git status --short` clean. No backend file changed (no backend gates needed).
 
 ### Phase 10
 - Repo scan: no cyan/gold/purple neon values, no legacy token names (`--bg-base`, `--brand-primary`, `--glow-*`,
@@ -202,5 +225,13 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 
 ## 8. Open questions / known gaps
 
-- Git push from the workspace is not authorized for this repository; delivery is via files written to the
-  user's folder + a git bundle of the branch.
+- Git push from the workspace is not authorized for this repository; delivery is a git bundle of the branch
+  placed in the repository folder (`ui-migration-light-dark.bundle`).
+- Element ids used by automation changed where the UI changed: the inline header login inputs
+  (`navbar-email`, `navbar-password`, `mob-email`, `mob-password`) are replaced by the login modal
+  (`login-email`, `login-password`, `login-submit`); `navbar-login-btn`/`mob-login` now open the modal.
+  No test suite in the repo references the old ids.
+- Fonts load from Google Fonts (as before). If the host must work offline, self-host Inter/JetBrains Mono.
+- `Intl.DateTimeFormat('az-AZ', { month: 'short' })` renders "M09" in browsers without Azerbaijani ICU data
+  (pre-existing behavior of `ExamSession`/`UserDashboard`; unchanged).
+- Category `difficulty` from the API is shown in the quiz kicker only when present.

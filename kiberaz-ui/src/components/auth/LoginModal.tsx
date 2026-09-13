@@ -18,9 +18,13 @@ interface Props {
   onLoggedIn: (user: LoggedInUser, accessToken: string) => void;
   onForgot: (email: string) => void;
   onSwitchToRegister: () => void;
+  // Server "captchaRequired" qaytardıqdan sonra bayraq Navbar-da saxlanılır ki,
+  // modal bağlanıb yenidən açılanda CAPTCHA tələbi itməsin.
+  needsCaptcha: boolean;
+  onNeedsCaptcha: (value: boolean) => void;
 }
 
-export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRegister }: Props) {
+export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRegister, needsCaptcha, onNeedsCaptcha }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -30,7 +34,6 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
   const [resendOk, setResendOk] = useState(true);
   const [resending, setResending] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
-  const [needsCaptcha, setNeedsCaptcha] = useState(false);
 
   const canResendConfirmation = loginError.toLowerCase().includes('aktiv') && email.includes('@');
 
@@ -51,11 +54,10 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
       });
       if (response.success && response.data) {
         const u = response.data.user;
-        setNeedsCaptcha(false);
         setCaptchaToken('');
         onLoggedIn({ nickname: u.nickname, roles: u.roles }, response.data.accessToken);
       } else {
-        if (response.captchaRequired) setNeedsCaptcha(true);
+        if (response.captchaRequired) onNeedsCaptcha(true);
         setLoginError(response.message || response.errors?.[0] || 'Giriş uğursuz oldu');
       }
     } catch {

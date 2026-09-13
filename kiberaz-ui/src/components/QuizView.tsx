@@ -55,6 +55,9 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
   // ── In-quiz state ──────────────────────────────────────────
   const [questions, setQuestions]     = useState<Question[]>([]);
   const [currentIdx, setCurrentIdx]   = useState(0);
+  // Naviqator yalnız artıq çatılmış suallara keçid verir — irəli atlamaq olmur,
+  // "Növbəti" düyməsi isə yalnız cavabdan sonra görünür (köhnə axın qorunur).
+  const [furthestIdx, setFurthestIdx] = useState(0);
   const [selected, setSelected]       = useState<OptionKey | null>(null);
   const [answers, setAnswers]         = useState<Record<number, OptionKey>>({});
   const [finished, setFinished]       = useState(false);
@@ -89,6 +92,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
     }
     setQuestions(fetched);
     setCurrentIdx(0);
+    setFurthestIdx(0);
     setSelected(null);
     setAnswers({});
     setFinished(false);
@@ -158,11 +162,12 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
   }, [answers, current, isSubmitting]);
 
   const goTo = useCallback((idx: number) => {
-    if (idx < 0 || idx >= total) return;
+    if (idx < 0 || idx >= total || idx > furthestIdx + 1) return;
     setCurrentIdx(idx);
+    setFurthestIdx(f => Math.max(f, idx));
     // Cavab verilibsə bərpa olunur (yalnız oxunur), yoxsa təmizlənir
     setSelected(answers[questions[idx]?.id] ?? null);
-  }, [total, answers, questions]);
+  }, [total, answers, questions, furthestIdx]);
 
   const handleNext = useCallback(() => {
     if (currentIdx < total - 1) goTo(currentIdx + 1);
@@ -176,6 +181,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
   const handleRestart = useCallback(() => {
     setQuizStarted(false);
     setCurrentIdx(0);
+    setFurthestIdx(0);
     setSelected(null);
     setAnswers({});
     setFinished(false);
@@ -210,6 +216,8 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      // Modal/dialog açıqdırsa (giriş pəncərəsi, təsdiq) qısayollar işləmir.
+      if (target?.closest('[role="dialog"], [role="alertdialog"]') || document.querySelector('.modal-backdrop')) return;
       if (e.altKey || e.ctrlKey || e.metaKey) return;
       const k = e.key.toLowerCase();
       const map: Record<string, OptionKey> = { a: 'A', b: 'B', c: 'C', d: 'D', '1': 'A', '2': 'B', '3': 'C', '4': 'D' };
@@ -474,22 +482,23 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
           <li><span className="qnav-legend__dot qnav-legend__dot--correct" /> Düzgün</li>
           <li><span className="qnav-legend__dot qnav-legend__dot--wrong" /> Yanlış</li>
           <li><span className="qnav-legend__dot qnav-legend__dot--current" /> Hazırkı</li>
-          <li><span className="qnav-legend__dot" /> Cavablanmayıb</li>
+          <li><span className="qnav-legend__dot" /> Açılmayıb</li>
         </ul>
         <div className="qnav-grid" role="group" aria-label="Suallar">
           {questions.map((q, i) => {
             const r = serverResults[q.id];
             const state = r ? (r.isCorrect ? 'correct' : 'wrong') : 'open';
             const isCurrent = i === currentIdx;
+            const reachable = i <= furthestIdx;
             return (
               <button
                 key={q.id}
                 type="button"
                 className={`qnav-btn qnav-btn--${state}${isCurrent ? ' is-current' : ''}`}
                 aria-current={isCurrent ? 'step' : undefined}
-                aria-label={`Sual ${i + 1}${r ? (r.isCorrect ? ', düzgün' : ', yanlış') : ', cavablanmayıb'}`}
+                aria-label={`Sual ${i + 1}${r ? (r.isCorrect ? ', düzgün' : ', yanlış') : reachable ? ', cavablanmayıb' : ', hələ açılmayıb'}`}
                 onClick={() => { if (!isSubmitting) goTo(i); }}
-                disabled={isSubmitting}
+                disabled={isSubmitting || !reachable}
               >
                 {i + 1}
               </button>

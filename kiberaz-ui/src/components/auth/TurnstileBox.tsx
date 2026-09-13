@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -13,6 +14,14 @@ interface Props {
 
 export default function TurnstileBox({ onToken, compact }: Props) {
   const { theme } = useTheme();
+
+  // Mövzu dəyişəndə widget yenidən render olunur — köhnə token etibarsız sayılır.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    onToken('');
+  }, [theme, onToken]);
+
   return (
     <div className="turnstile-box">
       <Turnstile

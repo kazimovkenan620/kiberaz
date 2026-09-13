@@ -34,20 +34,33 @@ export default function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
+  // Effekt yalnız `open` dəyişəndə işləyir; onClose/closeOnEscape hər renderdə
+  // dəyişə bilər (inline funksiyalar), ona görə ref-də saxlanılır — əks halda
+  // valideynin hər renderi (məs. imtahan taymeri) fokusu yenidən qoyurdu.
+  const latest = useRef({ onClose, closeOnEscape });
+  useEffect(() => { latest.current = { onClose, closeOnEscape }; });
+
   useEffect(() => {
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
     openModals += 1;
     document.body.style.overflow = 'hidden';
 
-    // İlk fokus: autofocus varsa ona, yoxsa ilk fokuslana bilən elementə, yoxsa panelə.
+    // İlk fokus: React `autoFocus` commit zamanı fokusu artıq qoyubsa, o saxlanılır;
+    // yoxsa bağlama düyməsindən sonrakı ilk fokuslana bilən element, o da yoxdursa panel.
     const panel = panelRef.current;
-    const auto = panel?.querySelector<HTMLElement>('[autofocus]');
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
-    (auto ?? first ?? panel)?.focus();
+    if (panel && !panel.contains(document.activeElement)) {
+      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+      const first = nodes.find(n => !n.closest('.modal__head')) ?? nodes[0];
+      (first ?? panel).focus();
+    }
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && closeOnEscape) { e.stopPropagation(); onClose(); return; }
+      if (e.key === 'Escape') {
+        if (latest.current.closeOnEscape) { e.stopPropagation(); latest.current.onClose(); }
+        return;
+      }
       if (e.key !== 'Tab' || !panel) return;
       const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(n => n.offsetParent !== null || n === document.activeElement);
       if (nodes.length === 0) { e.preventDefault(); panel.focus(); return; }
@@ -61,10 +74,11 @@ export default function Modal({
     return () => {
       document.removeEventListener('keydown', onKey);
       openModals = Math.max(0, openModals - 1);
-      if (openModals === 0) document.body.style.overflow = '';
+      // Digər kilidlər (mobil menyu, yan panel çəkməsi) pozulmasın deyə əvvəlki dəyər bərpa olunur.
+      if (openModals === 0) document.body.style.overflow = previousOverflow === 'hidden' ? previousOverflow : '';
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose, closeOnEscape]);
+  }, [open]);
 
   if (!open) return null;
 

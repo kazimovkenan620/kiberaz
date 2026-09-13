@@ -61,7 +61,7 @@ export interface ApiResponse<T> {
 // 401/429/500 cavabları boş və ya HTML gövdə ilə gələ bilər, bu isə exception atır və
 // istifadəçi səbəbi yox, ümumi "əlaqə xətası" görür.
 async function readWriteResponse<T>(response: Response): Promise<ApiResponse<T>> {
-  let body: ApiResponse<T> | null = null;
+  let body: ApiResponse<T> | null;
   try { body = await response.json(); } catch { body = null; }
 
   if (body && typeof body.success === 'boolean') return body;

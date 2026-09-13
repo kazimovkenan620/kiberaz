@@ -85,7 +85,7 @@ export async function resendConfirmationEmail(email: string): Promise<{ success:
     // 429 (rate limit) boş gövdə ilə gəlir, 500 isə HTML qaytara bilər —
     // əvvəl response.json() belə hallarda exception atırdı və istifadəçi
     // "Serverlə əlaqə yaradıla bilmədi" görürdü, halbuki server cavab vermişdi.
-    let body: { success?: boolean; message?: string; errors?: string[] } | null = null;
+    let body: { success?: boolean; message?: string; errors?: string[] } | null;
     try {
       body = await response.json();
     } catch {

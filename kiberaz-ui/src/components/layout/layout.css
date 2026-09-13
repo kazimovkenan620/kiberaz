@@ -155,5 +155,3 @@
   color: var(--illu-text);
 }
 .illu__brand span { color: var(--brand); }
-.illu--compact { aspect-ratio: 4 / 3; }
-.illu--compact .illu__caption { font-size: 0.6875rem; left: var(--sp-4); bottom: var(--sp-4); }

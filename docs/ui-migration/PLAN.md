@@ -55,7 +55,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 7 | Admin (overview, courses, users, exams) | done |
 | 8 | Auth special pages | done |
 | 9 | Responsive + accessibility pass | done |
-| 10 | Legacy cleanup | todo |
+| 10 | Legacy cleanup | done |
 | 11 | Regression + quality gate + final report | todo |
 
 ## 4. Files created / heavily modified / deleted
@@ -79,6 +79,17 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 10
+- Repo scan: no cyan/gold/purple neon values, no legacy token names (`--bg-base`, `--brand-primary`, `--glow-*`,
+  `--space-*`, …), no hardcoded hex in component CSS (only `index.css` tokens), no "tactical/neon" references left.
+- CSS audit (script: every class selector vs. all TSX/HTML): removed `.kicker--muted`, `.anim-rise`, `.code-block`,
+  `.illu--compact` (unreferenced). Every remaining selector is referenced.
+- `data/mockData.ts`: dead mock arrays (`sliderData`, `examSessions`, `leaderboardData`) and their unused types
+  removed; the shared types (`KnowledgeCategory`, `Question`, …) and `navLinks` stay (services import them).
+- Deleted unused assets `src/assets/{hero.png,react.svg,vite.svg}` (never imported).
+- Verification: `tsc` ✅, `npm run build` ✅, `git diff --check` ✅, `npm run lint` → only the 2 pre-existing
+  service-file errors remain.
 
 ### Phase 9
 - Checked at 1440 / 1280 / 1024 / 768 / 430 / 390 with Playwright (home, quiz active, cabinet overview, students,

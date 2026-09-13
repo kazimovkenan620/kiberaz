@@ -326,7 +326,6 @@ p  { overflow-wrap: anywhere; }
   text-transform: uppercase;
   color: var(--brand);
 }
-.kicker--muted { color: var(--text-3); }
 
 .text-2 { color: var(--text-2); }
 .text-3 { color: var(--text-3); }
@@ -771,19 +770,7 @@ p  { overflow-wrap: anywhere; }
 .avatar--xl { --avatar-size: 80px; }
 .avatar--brand { background: var(--brand-subtle); color: var(--brand-on-subtle); border-color: var(--brand-subtle-2); }
 
-/* ─── 16. Kod bloku ──────────────────────────────────────────── */
-.code-block {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--bg-inset);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-md);
-  color: var(--text-1);
-  overflow-x: auto;
-  white-space: pre;
-}
+/* ─── 16. Kod (sətiriçi) ───────────────────────────────────── */
 .code-inline {
   font-family: var(--font-mono);
   font-size: 0.85em;
@@ -805,7 +792,6 @@ p  { overflow-wrap: anywhere; }
 @keyframes shimmer { to { transform: translateX(100%); } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-.anim-rise { animation: rise-in var(--dur-normal) var(--ease) both; }
 
 /* ─── 19. Modal ──────────────────────────────────────────────── */
 .modal-backdrop {

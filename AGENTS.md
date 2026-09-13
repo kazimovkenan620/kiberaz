@@ -37,7 +37,7 @@ The old `.claude/commands/mentor.md` mode is intentionally disabled in its sourc
 
 1. Inspect the relevant request path, callers, contracts, tests, and current diff before changing code.
 2. Identify the root cause or smallest complete design. Avoid unrelated refactors and speculative abstractions.
-3. Implement focused changes that preserve public contracts, layer boundaries, security invariants, and existing visual behavior.
+3. Implement focused changes that preserve public contracts, layer boundaries, and security invariants while following the current task's UI/UX direction.
 4. Add or update a meaningful test when behavior or a regression boundary changes.
 5. Run the narrowest relevant check first, followed by the appropriate project quality gate.
 6. Review the final diff for scope, secrets, generated artifacts, debug code, and accidental changes.
@@ -66,11 +66,10 @@ Do not stop at a plan when the user asked for implementation. Ask a question onl
 - New endpoints deliberately select authorization and rate-limit behavior and document real response types.
 - Use async end to end, inject `TimeProvider`, preserve deliberate DI lifetimes, and let `ExceptionMiddleware` handle unexpected exceptions.
 
-## Frontend and design contract
+## Frontend contract
 
-- Existing visual output is protected unless the user explicitly requests a design change.
-- Design tokens in `kiberaz-ui/src/index.css` are read-only unless the user explicitly requests a design-system change.
-- New visual components use existing `var(--...)` tokens, their own colocated CSS file, semantic HTML, keyboard support, visible focus, responsive behavior, and reduced-motion handling where relevant.
+- Treat the user's current UI/UX prompt as the source of truth for visual direction, layout, styling, tokens, and component presentation.
+- Keep interfaces responsive and accessible, including semantic HTML, keyboard support, visible focus, and reduced-motion handling where relevant.
 - Components render UI; services own API calls; shared stateful behavior belongs in hooks; shared models belong in types; utilities remain pure.
 - Do not use `any`, unjustified `@ts-ignore`, unsanitized server HTML, or persistent browser storage for access/refresh tokens.
 - Frontend authorization is presentation only; the server remains authoritative.

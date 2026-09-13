@@ -10,7 +10,7 @@ namespace Kiberaz.Application.Interfaces;
 public interface ICourseService
 {
     /// <summary>
-    /// Yeni kurs yaradır. Default status: Approved.
+    /// Yeni kurs yaradır. Status: Pending — admin təsdiqinə qədər saytda görünmür.
     /// </summary>
     Task<ApiResponse<CourseResponse>> CreateCourseAsync(CreateCourseRequest request, string? userId);
 

@@ -6,6 +6,7 @@ namespace Kiberaz.Application.DTOs.Quiz;
 /// </summary>
 public class QuizQuestionResponse
 {
+    public bool IsExamOnly { get; set; }
     public int Id { get; set; }
     public int CategoryId { get; set; }
     public string Difficulty { get; set; } = string.Empty;

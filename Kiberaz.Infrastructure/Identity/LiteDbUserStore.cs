@@ -59,16 +59,53 @@ public class LiteDbUserStore :
     }
 
     public Task<IdentityResult> UpdateAsync(AppUser user, CancellationToken ct)
-    {
-        user.ConcurrencyStamp = Guid.NewGuid().ToString();
-        _db.Users.Update(user);
-        return Task.FromResult(IdentityResult.Success);
-    }
+        => PersistAsync(user, ct, delete: false);
 
     public Task<IdentityResult> DeleteAsync(AppUser user, CancellationToken ct)
+        => PersistAsync(user, ct, delete: true);
+
+    private Task<IdentityResult> PersistAsync(AppUser user, CancellationToken ct, bool delete)
     {
-        _db.Users.Delete(user.Id);
-        return Task.FromResult(IdentityResult.Success);
+        ct.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(user);
+
+        lock (_db.UsersSyncRoot)
+        {
+            // A stale profile/login request must never restore a removed role, an old
+            // security stamp or a revoked refresh token by overwriting the user document.
+            if (!_db.Database.BeginTrans())
+                throw new InvalidOperationException("Identity əməliyyatı ayrıca tranzaksiya tələb edir.");
+
+            try
+            {
+                var current = _db.Users.FindById(user.Id);
+                if (current is null || !string.Equals(current.ConcurrencyStamp, user.ConcurrencyStamp, StringComparison.Ordinal))
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(IdentityResult.Failed(new IdentityErrorDescriber().ConcurrencyFailure()));
+                }
+
+                // Keep the caller's stamp unchanged until the write commits successfully.
+                var replacement = _db.Database.Mapper.ToObject<AppUser>(_db.Database.Mapper.ToDocument(user));
+                replacement.ConcurrencyStamp = Guid.NewGuid().ToString();
+                var changed = delete ? _db.Users.Delete(user.Id) : _db.Users.Update(replacement);
+                if (!changed)
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(IdentityResult.Failed(new IdentityErrorDescriber().ConcurrencyFailure()));
+                }
+
+                _db.Database.Commit();
+                if (!delete)
+                    user.ConcurrencyStamp = replacement.ConcurrencyStamp;
+                return Task.FromResult(IdentityResult.Success);
+            }
+            catch
+            {
+                _db.Database.Rollback();
+                throw;
+            }
+        }
     }
 
     public Task<AppUser?> FindByIdAsync(string userId, CancellationToken ct)

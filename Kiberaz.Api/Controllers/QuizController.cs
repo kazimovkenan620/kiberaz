@@ -15,6 +15,10 @@ namespace Kiberaz.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+// Sinif səviyyəsində limit: bu controller-ə SONRADAN əlavə ediləcək endpoint
+// avtomatik "general" altına düşür. Metod səviyyəsindəki siyasət bunu əvəz edir
+// (məs. submit → "submit"), yəni default limitli, istisna daha dardır.
+[EnableRateLimiting("general")]
 public class QuizController : ControllerBase
 {
     // IQuizService interfeysi vasitəsilə işləyirik — konkret QuizService sinifini deyil, onun müqaviləsini tanıyırıq.
@@ -67,22 +71,52 @@ public class QuizController : ControllerBase
     }
 
     /// <summary>
-    /// İstifadəçinin cavabını server tərəfdə yoxlayır və düzgün açarı qaytarır.
-    /// Anonim istifadəçilər də cavab göndərə bilər (nəticə saxlanmır).
-    /// Autentifikasiya olunmuş istifadəçilərin nəticəsi statistika üçün saxlanır.
+    /// Liderlik lövhəsi — canlı QuizResults məlumatından hesablanır.
+    /// İctimaidir: girişsiz də görünür, ona görə cavabda YALNIZ ləqəb var, ad/soyad/e-poçt yoxdur.
     /// </summary>
-    [HttpPost("submit")]
+    /// <param name="period">weekly | monthly | all (default: all)</param>
+    /// <param name="categoryId">Kateqoriya filtri; boş = bütün kateqoriyalar</param>
+    /// <param name="limit">Sətir sayı (default 10, max 100)</param>
+    [HttpGet("leaderboard")]
     [AllowAnonymous]
     [EnableRateLimiting("general")]
+    [ProducesResponseType(typeof(ApiResponse<List<LeaderboardEntryResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetLeaderboard(
+        [FromQuery] string? period = null,
+        [FromQuery] int? categoryId = null,
+        [FromQuery] int limit = 10)
+    {
+        // Kənardan gələn limit sərbəst buraxılsa böyük cavabla serveri yormaq mümkündür.
+        limit = Math.Clamp(limit, 1, 100);
+
+        var entries = await _quizService.GetLeaderboardAsync(period, categoryId, limit);
+        return Ok(ApiResponse<List<LeaderboardEntryResponse>>.Ok(entries));
+    }
+
+    /// <summary>
+    /// İstifadəçinin cavabını server tərəfdə yoxlayır və düzgün açarı qaytarır.
+    ///
+    /// GİRİŞ TƏLƏB OLUNUR. Əvvəl [AllowAnonymous] idi və bu, sual bankı üçün açıq
+    /// oxu kanalı yaradırdı: endpoint hər çağırışda CorrectKey-i və bütün variantların
+    /// izahını qaytarır, cavab isə yoxlanılmır — yəni questionId-ləri ardıcıl gəzərək
+    /// bütün cavab açarlarını kimliyi bilinməyən bir skript çıxara bilərdi.
+    /// İndi cavab yalnız hesabla göndərilir: limit hesaba bağlanır və sui-istifadə izlənə bilir.
+    /// </summary>
+    [HttpPost("submit")]
+    [Authorize]
+    [EnableRateLimiting("submit")]
     [ProducesResponseType(typeof(ApiResponse<SubmitAnswerResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> SubmitAnswer([FromBody] SubmitAnswerRequest request)
     {
         try
         {
-            // [AllowAnonymous] olduğu üçün token olmadan da bu endpoint-ə müraciət mümkündür.
-            // Əgər istifadəçi daxil olubsa userId null olmayacaq, əks halda null qaytarılır — servis bu fərqi idarə edir.
+            // [Authorize] sayəsində buraya yalnız etibarlı token ilə gəlinir.
+            // Yenə də claim-in yoxluğunu yoxlayırıq: token varsa, amma NameIdentifier
+            // yoxdursa, servisə null userId ötürmək nəticəni səssizcə itirərdi.
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
 
             SubmitAnswerResponse result = await _quizService.SubmitAnswerAsync(request, userId);
             return Ok(ApiResponse<SubmitAnswerResponse>.Ok(result));

@@ -41,7 +41,7 @@ public interface IAuthService
 
     Task<ApiResponse<bool>> ResendConfirmationEmailAsync(ResendConfirmationEmailRequest request);
 
-    Task<ApiResponse<string>> CreateGoogleLoginCodeAsync(string email, string firstName, string lastName);
+    Task<ApiResponse<string>> CreateGoogleLoginCodeAsync(string providerId, string email, bool authoritativeEmail, string firstName, string lastName);
 
     Task<ApiResponse<AuthResponse>> ExchangeGoogleLoginCodeAsync(string code);
 

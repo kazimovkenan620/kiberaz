@@ -16,17 +16,26 @@ public class UserService : IUserService
     private static readonly TimeSpan EmailChangeCooldown  = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan PasswordResetCooldown = TimeSpan.FromSeconds(60);
 
-    private readonly UserManager<AppUser> _userManager;
-    private readonly LiteDbContext        _db;
-    private readonly IEmailService        _emailService;
+    /// <summary>Bir sinifdə saxlanıla bilən maksimum tələbə sayı — cavab ölçüsü və hesablama yükü üçün sərhəd.</summary>
+    private const int MaxStudentsPerClass = 200;
+
+    private readonly UserManager<AppUser>   _userManager;
+    private readonly LiteDbContext          _db;
+    private readonly IEmailService          _emailService;
+    private readonly ProtectedAccountPolicy _protected;
 
     // UserManager Identity sistemini, LiteDbContext isə sinif və quiz məlumatlarını idarə edir.
     // Bu iki fərqli yaddaş qatının (SQL + embedded LiteDB) birgə istifadəsi burada koordinasiya edilir.
-    public UserService(UserManager<AppUser> userManager, LiteDbContext db, IEmailService emailService)
+    public UserService(
+        UserManager<AppUser> userManager,
+        LiteDbContext db,
+        IEmailService emailService,
+        ProtectedAccountPolicy protectedAccounts)
     {
         _userManager  = userManager;
         _db           = db;
         _emailService = emailService;
+        _protected    = protectedAccounts;
     }
 
     /// <inheritdoc />
@@ -81,6 +90,12 @@ public class UserService : IUserService
             return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
 
         var newEmail = request.NewEmail.Trim();
+        if (_protected.IsOwner(user))
+            return ApiResponse<bool>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage);
+
+        if (_protected.IsOwnerEmail(newEmail))
+            return ApiResponse<bool>.Fail("Bu e-poçt sistem administratoruna aiddir.");
+
         if (string.IsNullOrWhiteSpace(newEmail) || !newEmail.Contains('@') || newEmail.Length > 100)
             return ApiResponse<bool>.Fail("Düzgün e-poçt daxil edin.");
 
@@ -118,6 +133,28 @@ public class UserService : IUserService
             return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
 
         var email = newEmail.Trim();
+        if (_protected.IsOwner(user))
+            return ApiResponse<bool>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage);
+
+        if (_protected.IsOwnerEmail(email))
+            return ApiResponse<bool>.Fail("Bu e-poçt sistem administratoruna aiddir.");
+
+        // İDEMPOTENTLİK — eyni link iki dəfə açıldıqda.
+        //
+        // Bu endpoint bir dəfədən çox çağırıla bilər və bu, NORMAL haldır:
+        //   • Gmail/Outlook və korporativ poçt filtrləri məktubdakı linkləri istifadəçi
+        //     kliklədən ƏVVƏL yoxlamaq üçün açır (link prefetch);
+        //   • istifadəçi səhifəni yeniləyir və ya iki dəfə klikləyir.
+        // Belə hallarda dəyişiklik ARTIQ tətbiq olunub: PendingNewEmail təmizlənib,
+        // Email isə hədəf ünvandır. Əvvəl bu vəziyyət "link etibarsızdır" kimi
+        // göstərilirdi — yəni əməliyyat uğurlu olduğu halda istifadəçi xəta görürdü.
+        var alreadyApplied =
+            string.IsNullOrWhiteSpace(user.PendingNewEmail) &&
+            string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase);
+
+        if (alreadyApplied)
+            return ApiResponse<bool>.Ok(true, "E-poçt artıq dəyişdirilib. Yeni ünvana göndərilən linklə hesabı təsdiqləyin.");
+
         if (!string.Equals(user.PendingNewEmail, email, StringComparison.OrdinalIgnoreCase))
             return ApiResponse<bool>.Fail("E-poçt dəyişikliyi linki etibarsızdır.");
 
@@ -125,16 +162,42 @@ public class UserService : IUserService
         if (existing is not null && existing.Id != user.Id)
             return ApiResponse<bool>.Fail("Bu e-poçt artıq istifadə olunur.");
 
-        var result = await _userManager.ChangeEmailAsync(user, email, token);
-        if (!result.Succeeded)
-            return ApiResponse<bool>.Fail(result.Errors.Select(e => e.Description).ToList());
-
+        // ChangeEmailAsync commits EmailConfirmed=true. Verify the same Identity
+        // token, then persist the entire unconfirmed state in ONE concurrency-checked write.
+        if (!await _userManager.VerifyUserTokenAsync(user, _userManager.Options.Tokens.ChangeEmailTokenProvider,
+                "ChangeEmail:" + email, token))
+            return ApiResponse<bool>.Fail("E-poçt dəyişikliyi linki etibarsızdır.");
+        user.Email = email;
+        user.SecurityStamp = Guid.NewGuid().ToString();
         user.UserName  = user.Nickname;
         user.PendingNewEmail = null;
         user.EmailConfirmed  = false;
         user.RefreshToken    = null;
         user.RefreshTokenExpiryTime = null;
-        await _userManager.UpdateAsync(user);
+        user.GoogleLoginCodeHash = null;
+        user.GoogleLoginCodeExpiryTime = null;
+        user.GoogleLoginCodeSecurityStamp = null;
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            // YARIŞI UDUZMA HALI.
+            // İki eyni sorğu paralel gəldikdə hər ikisi eyni ConcurrencyStamp ilə oxuyur,
+            // token yoxlamasından keçir, sonra biri yazır və stamp-i yeniləyir — ikincinin
+            // yazısı isə köhnə stamp səbəbindən rədd olunur.
+            //
+            // Bu sorğu token yoxlamasını YUXARIDA keçib, yəni səlahiyyətli idi; sadəcə
+            // yarışı uduzdu. Nəticə eyni olduğu üçün onu xəta kimi göstərmək yanlışdır —
+            // istifadəçi "Hesab dəyişib" mesajı görürdü, halbuki e-poçt uğurla dəyişmişdi.
+            var latest = await _userManager.FindByIdAsync(userId);
+            if (latest is not null &&
+                string.Equals(latest.Email, email, StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiResponse<bool>.Ok(true,
+                    "E-poçt dəyişdirildi. Yeni ünvana göndərilən linklə hesabı yenidən təsdiqləyin.");
+            }
+
+            return ApiResponse<bool>.Fail("Hesab dəyişib. E-poçt dəyişikliyini yenidən başladın.");
+        }
 
         var confirmationToken = await _userManager.GenerateEmailConfirmationTokenAsync(user);
         var confirmResult = await _emailService.SendConfirmationEmailAsync(email, user.Id, confirmationToken);
@@ -169,6 +232,18 @@ public class UserService : IUserService
         return ApiResponse<bool>.Ok(true, "Şifrə yeniləmə linki e-poçtunuza göndərildi.");
     }
 
+    /// <inheritdoc />
+    public async Task<ApiResponse<StudentOverviewResponse>> GetMyOverviewAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null)
+            return ApiResponse<StudentOverviewResponse>.Fail("İstifadəçi tapılmadı.");
+
+        // Hesablama müəllim görünüşü ilə eynidir — təkrar məntiq yazılmır.
+        // ID token-dən gəlir, sorğudan yox: istifadəçi başqasının statistikasını çəkə bilməz.
+        return ApiResponse<StudentOverviewResponse>.Ok(MapToStudentOverview(user));
+    }
+
     public async Task<ApiResponse<StudentOverviewResponse>> GetStudentOverviewAsync(string teacherId, string studentId)
     {
         var teacher = await _userManager.FindByIdAsync(teacherId);
@@ -182,7 +257,10 @@ public class UserService : IUserService
         if (student is null)
             return ApiResponse<StudentOverviewResponse>.Fail("Tələbə tapılmadı.");
 
-        if (await _userManager.IsInRoleAsync(student, AppRoles.Teacher))
+        // Sistem administratoru tələbə kimi axtarıla bilməz və mövcudluğu sızmır —
+        // cavab adi "tapılmadı" mesajı ilə eynidir.
+        if (await _userManager.IsInRoleAsync(student, AppRoles.Teacher) ||
+            ProtectedAccountPolicy.IsHiddenAccount(student))
             return ApiResponse<StudentOverviewResponse>.Fail("Daxil edilən ID tələbə hesabına aid deyil.");
 
         // LiteDB embedded collection-da Any() query-ni dəstəkləmir, memory-də yoxlayırıq.
@@ -232,19 +310,39 @@ public class UserService : IUserService
         if (name.Length > 80)
             return ApiResponse<TeacherClassResponse>.Fail("Sinif adı maksimum 80 simvol ola bilər.");
 
-        var exists = _db.TeacherClasses
-            .Exists(c => c.TeacherId == teacherId && c.Name == name);
-        if (exists)
-            return ApiResponse<TeacherClassResponse>.Fail("Bu adda sinif artıq mövcuddur.");
+        TeacherClass teacherClass;
 
-        var teacherClass = new TeacherClass
+        // YARIŞ ŞƏRAİTİ (race condition) qorunması.
+        //
+        // Yuxarıdakı EnsureTeacherAsync yoxlaması ilə aşağıdakı Insert arasında istifadəçi
+        // paralel sorğu ilə rolunu "tələbə"yə keçirə bilər. ChangeRoleAsync o an sinif
+        // görmədiyi üçün keçidə icazə verər, bu Insert isə ondan sonra işləyər —
+        // nəticədə MÜƏLLİM OLMAYAN hesaba məxsus "yetim" sinif qalar: sahibi onu
+        // GetTeacherClasses ilə görə bilməz (rol yoxdur), silə də bilməz.
+        //
+        // Həll: mövcudluq yoxlaması və Insert rol yoxlaması ilə birlikdə eyni kilid
+        // altında aparılır — ChangeRoleAsync da məhz bu kilidi tutur, ona görə iki
+        // əməliyyat bir-birini gözləyir və aralarında pəncərə qalmır.
+        lock (_db.UsersSyncRoot)
         {
-            Name      = name,
-            TeacherId = teacherId,
-            CreatedAt = DateTime.UtcNow
-        };
+            var owner = _db.Users.FindById(teacherId);
+            if (owner is null || !owner.Roles.Contains(AppRoles.Teacher))
+                return ApiResponse<TeacherClassResponse>.Fail("Bu bölmə yalnız müəllimlər üçündür.");
 
-        _db.TeacherClasses.Insert(teacherClass);
+            var exists = _db.TeacherClasses
+                .Exists(c => c.TeacherId == teacherId && c.Name == name);
+            if (exists)
+                return ApiResponse<TeacherClassResponse>.Fail("Bu adda sinif artıq mövcuddur.");
+
+            teacherClass = new TeacherClass
+            {
+                Name      = name,
+                TeacherId = teacherId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.TeacherClasses.Insert(teacherClass);
+        }
 
         var response = await MapToTeacherClassResponseAsync(teacherClass);
         return ApiResponse<TeacherClassResponse>.Ok(response, "Sinif yaradıldı.");
@@ -257,77 +355,143 @@ public class UserService : IUserService
         if (!teacherCheck.Success)
             return ApiResponse<TeacherClassResponse>.Fail(teacherCheck.Error);
 
-        var teacherClass = _db.TeacherClasses
-            .FindOne(c => c.Id == classId && c.TeacherId == teacherId);
-
-        if (teacherClass is null)
-            return ApiResponse<TeacherClassResponse>.Fail("Sinif tapılmadı.");
-
         var studentId = request.StudentId.Trim();
         if (string.IsNullOrWhiteSpace(studentId))
             return ApiResponse<TeacherClassResponse>.Fail("Tələbə ID-si daxil edin.");
 
+        // Bütün asinxron yoxlamalar kiliddən ƏVVƏL bitir: LiteDB kilidini tutarkən `await`
+        // etmək olmaz (tranzaksiya thread-ə bağlıdır).
         var student = await _userManager.FindByIdAsync(studentId);
         if (student is null)
             return ApiResponse<TeacherClassResponse>.Fail("Tələbə tapılmadı.");
 
-        if (await _userManager.IsInRoleAsync(student, AppRoles.Teacher))
-            return ApiResponse<TeacherClassResponse>.Fail("Müəllim hesabı sinfə tələbə kimi əlavə edilə bilməz.");
+        if (await _userManager.IsInRoleAsync(student, AppRoles.Teacher) ||
+            ProtectedAccountPolicy.IsHiddenAccount(student))
+            return ApiResponse<TeacherClassResponse>.Fail("Daxil edilən ID tələbə hesabına aid deyil.");
 
-        // LiteDB embedded collection-da unique constraint yoxdur, manual yoxlayırıq.
-        // Dublikat qeydlərin qarşısını almaq üçün əlavə etməzdən əvvəl mövcudluğu yoxlayırıq.
-        var alreadyAdded = teacherClass.Students.Any(s => s.StudentId == student.Id);
-        if (alreadyAdded)
-            return ApiResponse<TeacherClassResponse>.Fail("Bu tələbə artıq sinifdədir.");
+        TeacherClass teacherClass;
 
-        teacherClass.Students.Add(new ClassStudent
+        // İTİRİLƏN YAZI (lost update) qorunması.
+        //
+        // LiteDB `Update` bütün sənədi əvəz edir. Sinif kiliddən kənarda oxunub dəyişdirilirdisə,
+        // eyni sinfə paralel iki əlavə bir-birini üzürdü: ikinci yazı birincinin əlavə etdiyi
+        // tələbəni siyahıdan silirdi və heç bir xəta görünmürdü.
+        // İndi oxu → yoxla → yaz ardıcıllığı bütövlükdə eyni kilid altındadır.
+        lock (_db.UsersSyncRoot)
         {
-            StudentId = student.Id,
-            AddedAt   = DateTime.UtcNow
-        });
+            var existing = _db.TeacherClasses
+                .FindOne(c => c.Id == classId && c.TeacherId == teacherId);
 
-        _db.TeacherClasses.Update(teacherClass);
+            if (existing is null)
+                return ApiResponse<TeacherClassResponse>.Fail("Sinif tapılmadı.");
+
+            // LiteDB embedded collection-da unique constraint yoxdur, manual yoxlayırıq.
+            if (existing.Students.Any(s => s.StudentId == student.Id))
+                return ApiResponse<TeacherClassResponse>.Fail("Bu tələbə artıq sinifdədir.");
+
+            // Sinif ölçüsü limitsiz idi: hər tələbə üçün ayrıca statistika hesablandığı üçün
+            // böyük sinif həm cavabı, həm server yükünü şişirdirdi (imtahan sessiyasında
+            // artıq 500 iştirakçı limiti var — eyni məntiq buraya da tətbiq olunur).
+            if (existing.Students.Count >= MaxStudentsPerClass)
+                return ApiResponse<TeacherClassResponse>.Fail(
+                    $"Sinifdə maksimum {MaxStudentsPerClass} tələbə ola bilər.");
+
+            existing.Students.Add(new ClassStudent
+            {
+                StudentId = student.Id,
+                AddedAt   = DateTime.UtcNow
+            });
+
+            _db.TeacherClasses.Update(existing);
+            teacherClass = existing;
+        }
 
         var response = await MapToTeacherClassResponseAsync(teacherClass);
         return ApiResponse<TeacherClassResponse>.Ok(response, "Tələbə sinfə əlavə edildi.");
     }
 
     /// <summary>
+    /// Müəllimin öz sinfini silir.
+    ///
+    /// Təhlükəsizlik: sinif TeacherId şərti ilə axtarılır — başqa müəllimin sinif ID-si
+    /// göndərilsə nəticə "tapılmadı" olur, yəni IDOR bağlıdır və başqasının sinfinin
+    /// mövcudluğu da sızmır.
+    ///
+    /// Sinif silindikdə içindəki tələbə qeydləri (embed edilmiş ClassStudent siyahısı) da gedir;
+    /// tələbə HESABLARINA və onların nəticələrinə toxunulmur — yalnız sinfə bağlılıq silinir.
+    /// </summary>
+    public async Task<ApiResponse<bool>> DeleteTeacherClassAsync(string teacherId, int classId)
+    {
+        var teacherCheck = await EnsureTeacherAsync(teacherId);
+        if (!teacherCheck.Success)
+            return ApiResponse<bool>.Fail(teacherCheck.Error);
+
+        var teacherClass = _db.TeacherClasses
+            .FindOne(c => c.Id == classId && c.TeacherId == teacherId);
+
+        if (teacherClass is null)
+            return ApiResponse<bool>.Fail("Sinif tapılmadı.");
+
+        // Delete() bool qaytarır — nəticəni yoxlamasaq, silinməyən sinif üçün də
+        // interfeys "silindi" deyərdi (səssiz uğursuzluq).
+        if (!_db.TeacherClasses.Delete(teacherClass.Id))
+            return ApiResponse<bool>.Fail("Sinif silinmədi.");
+
+        return ApiResponse<bool>.Ok(true, "Sinif silindi.");
+    }
+
+    /// <summary>
     /// Cari istifadəçinin "tələbə" (User) və "müəllim" (Teacher) rolu arasında keçidini idarə edir.
     /// </summary>
-    public async Task<ApiResponse<bool>> ChangeRoleAsync(string userId, ChangeRoleRequest request)
+    public Task<ApiResponse<bool>> ChangeRoleAsync(string userId, ChangeRoleRequest request)
     {
-        var user = await _userManager.FindByIdAsync(userId);
-        if (user is null)
-            return ApiResponse<bool>.Fail("İstifadəçi tapılmadı.");
+        if (request.NewRole != AppRoles.User && request.NewRole != AppRoles.Teacher)
+            return Task.FromResult(ApiResponse<bool>.Fail("Yalnız istifadəçi və ya müəllim rolu seçilə bilər."));
 
-        var currentRoles = await _userManager.GetRolesAsync(user);
-
-        // Hazırda User/Teacher-dən hansı roldadırsa tap (Admin/Moderator/VIP kimi əlavə rollara toxunmuruq).
-        var isCurrentlyTeacher = currentRoles.Contains(AppRoles.Teacher);
-        var currentRole = isCurrentlyTeacher ? AppRoles.Teacher : AppRoles.User;
-
-        if (currentRole == request.NewRole)
-            return ApiResponse<bool>.Ok(true, "Artıq bu roldasan.");
-
-        // Teacher -> User keçidi: aktiv sinifləri varsa blokla.
-        if (currentRole == AppRoles.Teacher && request.NewRole == AppRoles.User)
+        lock (_db.UsersSyncRoot)
         {
-            var hasClasses = _db.TeacherClasses.Exists(c => c.TeacherId == userId);
-            if (hasClasses)
-                return ApiResponse<bool>.Fail("Tələbə roluna keçmək üçün əvvəlcə bütün sinifləri silməlisiniz.");
+            _db.Database.BeginTrans();
+            try
+            {
+                var user = _db.Users.FindById(userId);
+                if (user is null || !user.EmailConfirmed || user.LockoutEnd > DateTimeOffset.UtcNow ||
+                    user.Roles.Contains(AppRoles.Admin))
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(ApiResponse<bool>.Fail("Bu hesab üçün rol keçidi mümkün deyil."));
+                }
+
+                // Sahib hesabı bu yoldan da dəyişdirilə bilməz. Yuxarıdakı Admin yoxlaması
+                // onu artıq tutur, lakin bootstrap hələ işləməyibsə sahib hesab müvəqqəti
+                // Admin rolsuz ola bilər — bu yoxlama həmin pəncərəni bağlayır.
+                if (_protected.IsOwner(user))
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(ApiResponse<bool>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage));
+                }
+                if (user.Roles.Contains(AppRoles.Teacher) && request.NewRole == AppRoles.User &&
+                    _db.TeacherClasses.Exists(c => c.TeacherId == userId))
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(ApiResponse<bool>.Fail("Tələbə roluna keçmək üçün əvvəlcə bütün sinifləri silməlisiniz."));
+                }
+                if (!user.Roles.Contains(request.NewRole))
+                {
+                    user.Roles.RemoveAll(role => role == AppRoles.User || role == AppRoles.Teacher);
+                    user.Roles.Add(request.NewRole);
+                    user.SecurityStamp = Guid.NewGuid().ToString();
+                    user.ConcurrencyStamp = Guid.NewGuid().ToString();
+                    user.RefreshToken = null;
+                    user.RefreshTokenExpiryTime = null;
+                    user.GoogleLoginCodeHash = null;
+                    user.GoogleLoginCodeExpiryTime = null;
+                    if (!_db.Users.Update(user)) throw new InvalidOperationException("Hesab yenilənmədi.");
+                }
+                _db.Database.Commit();
+                return Task.FromResult(ApiResponse<bool>.Ok(true, "Rol dəyişdirildi. Yenidən daxil olun."));
+            }
+            catch { _db.Database.Rollback(); throw; }
         }
-
-        await _userManager.RemoveFromRoleAsync(user, currentRole);
-        await _userManager.AddToRoleAsync(user, request.NewRole);
-
-        // Rollar JWT-nin içində claim kimi daşınır — baza dəyişsə də əlindəki token hələ KÖHNƏ rolu deyir.
-        // Damğanı yeniləyəndə həmin token dərhal 401 alır, apiClient avtomatik refresh edir və
-        // yeni token artıq yeni rolla gəlir. Bu olmadan müəllim roluna keçən istifadəçi
-        // 15 dəqiqəyə qədər [Authorize(Roles = Teacher)] endpoint-lərindən 403 alırdı.
-        await _userManager.UpdateSecurityStampAsync(user);
-
-        return ApiResponse<bool>.Ok(true, $"Rolunuz {request.NewRole} olaraq dəyişdirildi.");
     }
 
     private async Task<(bool Success, string Error)> EnsureTeacherAsync(string teacherId)
@@ -358,6 +522,9 @@ public class UserService : IUserService
             if (!students.TryGetValue(classStudent.StudentId, out var student))
                 continue;
 
+            if (ProtectedAccountPolicy.IsHiddenAccount(student))
+                continue;
+
             var overview = MapToStudentOverview(student);
             studentResponses.Add(new TeacherClassStudentResponse
             {
@@ -375,7 +542,7 @@ public class UserService : IUserService
             Id           = teacherClass.Id,
             Name         = teacherClass.Name,
             CreatedAt    = teacherClass.CreatedAt,
-            StudentCount = teacherClass.Students.Count,
+            StudentCount = studentResponses.Count,
             Students     = studentResponses
         });
     }
@@ -396,8 +563,8 @@ public class UserService : IUserService
 
     private StudentOverviewResponse MapToStudentOverview(AppUser student)
     {
-        var results = _db.QuizResults
-            .Find(r => r.UserId == student.Id)
+        var results = QuizSecurity.ScoredResults(_db.QuizResults
+            .Find(r => r.UserId == student.Id))
             .ToList();
 
         var overview = new StudentOverviewResponse
@@ -426,10 +593,11 @@ public class UserService : IUserService
                 int correct = g.Count(r => r.IsCorrect);
                 return new StudentProgressAreaDto
                 {
-                    Area       = categoryTitles.TryGetValue(g.Key, out var title) ? title : $"Kateqoriya {g.Key}",
-                    Solved     = correct,
-                    Total      = total,
-                    Percentage = total > 0 ? (int)Math.Round(correct * 100m / total) : 0
+                    Area         = categoryTitles.TryGetValue(g.Key, out var title) ? title : $"Kateqoriya {g.Key}",
+                    Solved       = correct,
+                    Total        = total,
+                    Percentage   = total > 0 ? (int)Math.Round(correct * 100m / total) : 0,
+                    LastActivity = g.Max(r => r.AnsweredAt)
                 };
             })
             .ToList();
@@ -459,7 +627,7 @@ public class UserService : IUserService
                 Score      = s.Correct,
                 MaxScore   = s.Total,
                 Percentage = s.Percentage,
-                Status     = "Tamamlandi"
+                Status     = "Tamamlandı"
             })
             .ToList();
 

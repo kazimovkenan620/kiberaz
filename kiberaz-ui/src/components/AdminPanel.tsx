@@ -1,129 +1,144 @@
 // ============================================================
-// AdminPanel.tsx — Kiberaz.az Admin İdarəetmə Paneli
+// AdminPanel.tsx — Admin idarəetmə bölmələri
+//
+// Bu fayl ayrıca səhifə deyil: tab komponentləri export edilir və
+// UserDashboard (Kabinetim) içində Admin rolu olan istifadəçiyə göstərilir.
+//
+// TƏHLÜKƏSİZLİK: bu komponentlərin görünməsi heç bir səlahiyyət vermir.
+// Bütün api/admin endpoint-ləri serverdə [Authorize(Roles = "Admin")] ilə qorunur.
 // ============================================================
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  LayoutDashboard, BookOpen, Users, ClipboardList,
-  ArrowLeft, CheckCircle, XCircle, Trash2, Shield,
-  Plus, Search, RefreshCw, AlertTriangle, Eye,
+  BookOpen, Users, ClipboardList, CheckCircle, XCircle, Trash2, Plus, RefreshCw, AlertTriangle,
+  ExternalLink, Lock, Unlock, UserPlus, Clock, Layers, ShieldAlert,
 } from 'lucide-react';
 import {
-  getAdminStats, getAdminCourses, getAdminUsers, getAdminExams,
+  getAdminCourses, getAdminUsers, getAdminExams,
   approveCourse, rejectCourse, deleteCourse, createAdminCourse,
   changeUserRole, toggleUserBlock, deleteExam,
   type AdminStats, type AdminCourse, type AdminUser, type AdminExam,
 } from '../services/adminService';
+import { useAsyncData } from '../hooks/useAsyncData';
+import { Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, FormField, SearchField, SkeletonList, StatCard, Tabs } from './ui';
 import './AdminPanel.css';
 
-// ── Tab tipi ─────────────────────────────────────────────────
-type AdminTab = 'dashboard' | 'courses' | 'users' | 'exams';
-
-// ── Toast ────────────────────────────────────────────────────
-function Toast({ message, type, onDone }: { message: string; type: 'success' | 'error'; onDone: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onDone, 3000);
-    return () => clearTimeout(t);
-  }, [onDone]);
-  return (
-    <div className={`admin-toast ${type === 'error' ? 'error' : ''}`}>
-      {type === 'success' ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
-      {message}
-    </div>
-  );
-}
+type ToastFn = (msg: string, type: 'success' | 'error') => void;
 
 // ── Dashboard Tab ─────────────────────────────────────────────
-function DashboardTab({ stats, onRefresh }: { stats: AdminStats | null; onRefresh: () => void }) {
-  if (!stats) return <div className="admin-empty"><div className="admin-empty-icon">⏳</div>Yüklənir...</div>;
-
+export function DashboardTab({ stats, onRefresh }: { stats: AdminStats | null; onRefresh: () => void }) {
   return (
-    <div>
-      <div className="admin-page-header">
-        <h2 className="admin-page-title">İcmal</h2>
-        <p className="admin-page-subtitle">Platformanın ümumi vəziyyəti</p>
+    <div className="adm">
+      <div className="page-header page-header__row">
+        <div>
+          <span className="kicker">İdarəetmə paneli</span>
+          <h1 className="page-header__title">İcmal</h1>
+          <p className="page-header__lead">Platformanın ümumi vəziyyəti — canlı serverdən gələn real rəqəmlər.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={onRefresh}><RefreshCw size={14} /> Yenilə</Button>
       </div>
 
-      <div className="admin-stats-grid">
-        <div className="admin-stat-card">
-          <div className="stat-icon"><Users size={18} color="var(--brand-primary)" /></div>
-          <div className="stat-value">{stats.totalUsers}</div>
-          <div className="stat-label">Ümumi İstifadəçi</div>
+      {!stats ? (
+        <SkeletonList rows={3} />
+      ) : (
+        <div className="stat-grid adm-stats">
+          <StatCard icon={<Users size={18} />} tone="info" value={stats.totalUsers.toLocaleString('az-AZ')} label="Ümumi istifadəçi" />
+          <StatCard icon={<UserPlus size={18} />} tone="success" value={stats.newUsersThisWeek.toLocaleString('az-AZ')} label="Bu həftə qeydiyyat" />
+          <StatCard icon={<BookOpen size={18} />} tone="brand" value={stats.totalCourses.toLocaleString('az-AZ')} label="Ümumi təlim" />
+          <StatCard icon={<Clock size={18} />} tone="warning" value={stats.pendingCourses.toLocaleString('az-AZ')} label="Gözləyən təlim" />
+          <StatCard icon={<ClipboardList size={18} />} tone="info" value={stats.activeExams.toLocaleString('az-AZ')} label="Aktiv imtahan" />
+          <StatCard icon={<Layers size={18} />} tone="neutral" value={stats.totalExams.toLocaleString('az-AZ')} label="Ümumi imtahan" />
         </div>
-        <div className="admin-stat-card success-accent">
-          <div className="stat-icon success"><Users size={18} color="var(--brand-success)" /></div>
-          <div className="stat-value">{stats.newUsersThisWeek}</div>
-          <div className="stat-label">Bu Həftə Qeydiyyat</div>
-        </div>
-        <div className="admin-stat-card gold-accent">
-          <div className="stat-icon gold"><BookOpen size={18} color="var(--brand-gold)" /></div>
-          <div className="stat-value">{stats.totalCourses}</div>
-          <div className="stat-label">Ümumi Təlim</div>
-        </div>
-        <div className="admin-stat-card danger-accent">
-          <div className="stat-icon danger"><AlertTriangle size={18} color="#ef4444" /></div>
-          <div className="stat-value">{stats.pendingCourses}</div>
-          <div className="stat-label">Gözləyən Təlim</div>
-        </div>
-        <div className="admin-stat-card">
-          <div className="stat-icon"><ClipboardList size={18} color="var(--brand-primary)" /></div>
-          <div className="stat-value">{stats.activeExams}</div>
-          <div className="stat-label">Aktiv İmtahan</div>
-        </div>
-        <div className="admin-stat-card gold-accent">
-          <div className="stat-icon gold"><ClipboardList size={18} color="var(--brand-gold)" /></div>
-          <div className="stat-value">{stats.totalExams}</div>
-          <div className="stat-label">Ümumi İmtahan</div>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="admin-btn admin-btn-ghost" onClick={onRefresh} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <RefreshCw size={14} /> Yenilə
-        </button>
-      </div>
+      )}
     </div>
   );
 }
 
 // ── Courses Tab ───────────────────────────────────────────────
-function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
-  const [courses, setCourses] = useState<AdminCourse[]>([]);
-  const [loading, setLoading] = useState(true);
+type CourseStatusFilter = 'all' | 'Pending' | 'Approved' | 'Rejected';
+
+// Yalnız http(s) linkləri klikləmək üçün göstərilir.
+// Səbəb: <a href="javascript:..."> admin panelində kliklənəndə kod CARİ ORİGİN-də,
+// yəni admin sessiyasında icra olunur — target="_blank" və rel="noreferrer" bunu dayandırmır.
+// Server tərəfdə də https tələbi var; bu, ikinci qatdır (köhnə qeydlər üçün).
+function isSafeExternalLink(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
+const STATUS_FILTERS: { value: CourseStatusFilter; label: string }[] = [
+  { value: 'all', label: 'Hamısı' },
+  { value: 'Pending', label: 'Gözləyən' },
+  { value: 'Approved', label: 'Təsdiqli' },
+  { value: 'Rejected', label: 'Rədd edilmiş' },
+];
+
+const COURSE_STATUS: Record<AdminCourse['status'], { label: string; tone: 'success' | 'warning' | 'danger' }> = {
+  Approved: { label: 'Aktiv', tone: 'success' },
+  Pending: { label: 'Gözlənilir', tone: 'warning' },
+  Rejected: { label: 'Rədd', tone: 'danger' },
+};
+
+export function CoursesTab({ onToast }: { onToast: ToastFn }) {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<CourseStatusFilter>('all');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', instructor: '', category: '', link: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminCourse | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // Uğursuz cavab sükutla udulmur: 403/500 halında "Nəticə tapılmadı" deyil, əsl səbəb görünür.
+  const loader = useCallback(async () => {
     const res = await getAdminCourses();
-    if (res.success && res.data) setCourses(res.data);
-    setLoading(false);
+    if (!res.success || !res.data) throw new Error(res.message || 'Məlumat yüklənə bilmədi.');
+    return res.data;
   }, []);
+  const { state, reload } = useAsyncData(loader);
+  const courses = state.status === 'ready' ? state.data : [];
 
-  useEffect(() => { load(); }, [load]);
-
-  const filtered = courses.filter(c =>
-    c.title.toLowerCase().includes(search.toLowerCase()) ||
-    c.instructor.toLowerCase().includes(search.toLowerCase()) ||
-    c.category.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const handleApprove = async (id: number) => {
-    const res = await approveCourse(id);
-    if (res.success) { onToast(res.message, 'success'); load(); }
+  // Status sayğacları həmişə TAM siyahıdan hesablanır — axtarış mətni onları dəyişməməlidir,
+  // əks halda "Gözləyən (0)" görünüb admin moderasiya növbəsinin boş olduğunu zənn edə bilər.
+  const counts = {
+    all: courses.length,
+    Pending: courses.filter(c => c.status === 'Pending').length,
+    Approved: courses.filter(c => c.status === 'Approved').length,
+    Rejected: courses.filter(c => c.status === 'Rejected').length,
   };
 
-  const handleReject = async (id: number) => {
-    const res = await rejectCourse(id);
-    if (res.success) { onToast(res.message, 'success'); load(); }
+  const filtered = courses.filter(c => {
+    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+    const q = search.toLowerCase();
+    return (
+      c.title.toLowerCase().includes(q) ||
+      c.instructor.toLowerCase().includes(q) ||
+      c.category.toLowerCase().includes(q)
+    );
+  });
+
+  const runAction = async (id: number, action: () => Promise<{ success: boolean; message: string; errors?: string[] }>) => {
+    if (busyId !== null) return;
+    setBusyId(id);
+    try {
+      const res = await action();
+      if (res.success) { onToast(res.message, 'success'); reload(); }
+      else onToast(res.errors?.[0] || res.message || 'Xəta baş verdi.', 'error');
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Bu təlimi silmək istədiyinizə əminsiniz?')) return;
-    const res = await deleteCourse(id);
-    if (res.success) { onToast(res.message, 'success'); load(); }
+  const handleApprove = (id: number) => runAction(id, () => approveCourse(id));
+  const handleReject = (id: number) => runAction(id, () => rejectCourse(id));
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    await runAction(pendingDelete.id, () => deleteCourse(pendingDelete.id));
+    setPendingDelete(null);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -138,54 +153,38 @@ function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
       onToast(res.message, 'success');
       setForm({ title: '', instructor: '', category: '', link: '' });
       setShowForm(false);
-      load();
+      reload();
     } else {
       onToast(res.errors?.[0] || 'Xəta baş verdi.', 'error');
     }
     setSubmitting(false);
   };
 
-  const statusMap: Record<string, string> = {
-    Approved: 'approved', Pending: 'pending', Rejected: 'rejected',
-  };
-  const statusLabel: Record<string, string> = {
-    Approved: '✓ Aktiv', Pending: '⏳ Gözlənilir', Rejected: '✕ Rədd',
-  };
-
   return (
-    <div>
-      <div className="admin-page-header">
-        <h2 className="admin-page-title">Təlim İdarəetməsi</h2>
-        <p className="admin-page-subtitle">Təlimləri idarə edin, təsdiqləyin və ya silin</p>
+    <div className="adm">
+      <div className="page-header page-header__row">
+        <div>
+          <span className="kicker">İdarəetmə paneli</span>
+          <h1 className="page-header__title">Təlimlərin idarə edilməsi</h1>
+          <p className="page-header__lead">Təlim təkliflərinə baxın, təsdiqləyin, rədd edin və ya silin.</p>
+        </div>
+        <Button variant="primary" onClick={() => setShowForm(p => !p)} aria-expanded={showForm}><Plus size={15} /> Yeni təlim əlavə et</Button>
       </div>
 
       {/* Yeni təlim forması */}
       {showForm && (
-        <div className="admin-form-card">
-          <div className="admin-form-title"><Plus size={16} /> Yeni Təlim Əlavə Et</div>
-          <form onSubmit={handleCreate}>
-            <div className="admin-form-grid">
-              <div className="admin-form-field">
-                <label>Təlim Adı *</label>
-                <input
-                  type="text"
-                  placeholder="Məs: Network Security Pro"
-                  value={form.title}
-                  onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                />
-              </div>
-              <div className="admin-form-field">
-                <label>Təlimçi *</label>
-                <input
-                  type="text"
-                  placeholder="Məs: Əli Həsənov"
-                  value={form.instructor}
-                  onChange={e => setForm(p => ({ ...p, instructor: e.target.value }))}
-                />
-              </div>
-              <div className="admin-form-field">
-                <label>Kateqoriya *</label>
-                <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
+        <Card className="adm-form">
+          <h3 className="card__title"><Plus size={15} /> Yeni təlim</h3>
+          <form onSubmit={handleCreate} className="adm-form__body">
+            <div className="form-grid form-grid--2">
+              <FormField id="adm-course-title" label="Təlim adı" required>
+                <input id="adm-course-title" className="input" type="text" placeholder="Məs: Network Security Pro" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+              </FormField>
+              <FormField id="adm-course-instructor" label="Təlimçi" required>
+                <input id="adm-course-instructor" className="input" type="text" placeholder="Məs: Əli Həsənov" value={form.instructor} onChange={e => setForm(p => ({ ...p, instructor: e.target.value }))} />
+              </FormField>
+              <FormField id="adm-course-category" label="Kateqoriya" required>
+                <select id="adm-course-category" className="select" value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
                   <option value="">Seçin...</option>
                   <option>Ümumi</option>
                   <option>Network Security</option>
@@ -194,270 +193,285 @@ function CoursesTab({ onToast }: { onToast: (msg: string, type: 'success' | 'err
                   <option>SOC</option>
                   <option>Code Review</option>
                 </select>
-              </div>
-              <div className="admin-form-field">
-                <label>Keçid Linki</label>
-                <input
-                  type="url"
-                  placeholder="https://..."
-                  value={form.link}
-                  onChange={e => setForm(p => ({ ...p, link: e.target.value }))}
-                />
-              </div>
+              </FormField>
+              <FormField id="adm-course-link" label="Keçid linki">
+                <input id="adm-course-link" className="input" type="url" placeholder="https://..." value={form.link} onChange={e => setForm(p => ({ ...p, link: e.target.value }))} />
+              </FormField>
             </div>
-            <div className="admin-form-actions">
-              <button type="submit" className="admin-btn admin-btn-primary" disabled={submitting}>
-                <Plus size={14} /> {submitting ? 'Əlavə edilir...' : 'Əlavə Et'}
-              </button>
-              <button type="button" className="admin-btn admin-btn-ghost" onClick={() => setShowForm(false)}>
-                Ləğv et
-              </button>
+            <div className="adm-form__actions">
+              <Button type="submit" variant="primary" loading={submitting}><Plus size={14} /> Əlavə et</Button>
+              <Button variant="ghost" onClick={() => setShowForm(false)}>Ləğv et</Button>
             </div>
           </form>
-        </div>
+        </Card>
       )}
 
-      <div className="admin-table-card">
-        <div className="admin-table-header">
-          <h3 className="admin-table-title"><BookOpen size={16} /> Təlimlər ({filtered.length})</h3>
-          <div className="admin-table-actions">
-            <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                className="admin-search-input"
-                style={{ paddingLeft: 32 }}
-                type="text"
-                placeholder="Təlim axtar..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-            <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => setShowForm(p => !p)}>
-              <Plus size={13} /> Yeni Təlim
-            </button>
+      <Card padded={false} className="adm-table-card">
+        <div className="adm-toolbar">
+          <Tabs
+            idPrefix="adm-course-filter"
+            ariaLabel="Status filtri"
+            items={STATUS_FILTERS.map(f => ({ id: f.value, label: f.label, count: counts[f.value] }))}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+          <div className="adm-toolbar__right">
+            <SearchField value={search} onChange={setSearch} label="Təlim axtar" placeholder="Təlim, təlimçi və ya kateqoriya axtar..." size="sm" className="adm-search" />
+            <Button variant="ghost" size="sm" onClick={reload} aria-label="Siyahını yenilə"><RefreshCw size={14} /></Button>
           </div>
         </div>
 
-        {loading ? (
-          <div className="admin-empty">⏳ Yüklənir...</div>
-        ) : filtered.length === 0 ? (
-          <div className="admin-empty"><div className="admin-empty-icon">📭</div>Nəticə tapılmadı</div>
-        ) : (
-          <div className="admin-table-wrap">
-            <table className="admin-table">
+        {state.status === 'loading' && <div className="card--pad"><SkeletonList rows={4} /></div>}
+        {state.status === 'error' && <ErrorState title="Təlimlər yüklənmədi" text={state.message} onRetry={reload} />}
+        {state.status === 'ready' && filtered.length === 0 && (
+          <EmptyState icon={<BookOpen size={20} />} title="Nəticə tapılmadı" text={search || statusFilter !== 'all' ? 'Filtri və ya axtarışı dəyişin.' : 'Hələ təlim təklifi yoxdur.'} />
+        )}
+        {state.status === 'ready' && filtered.length > 0 && (
+          <div className="table-wrap">
+            <table className="table adm-table">
               <thead>
                 <tr>
                   <th>#</th>
-                  <th>Təlim Adı</th>
+                  <th>Təlim</th>
                   <th>Təlimçi</th>
                   <th>Kateqoriya</th>
                   <th>Status</th>
                   <th>Tarix</th>
-                  <th>Əməliyyat</th>
+                  <th className="cell-actions">Əməliyyatlar</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(course => (
-                  <tr key={course.id}>
-                    <td style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{course.id}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{course.title}</td>
-                    <td>{course.instructor}</td>
-                    <td style={{ color: 'var(--brand-primary)', fontSize: '0.8rem' }}>{course.category}</td>
-                    <td>
-                      <span className={`admin-badge ${statusMap[course.status]}`}>
-                        {statusLabel[course.status]}
-                      </span>
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{course.createdAt}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {course.status === 'Pending' && (
-                          <>
-                            <button className="admin-btn admin-btn-success admin-btn-sm" onClick={() => handleApprove(course.id)}>
-                              <CheckCircle size={12} /> Təsdiqlə
-                            </button>
-                            <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleReject(course.id)}>
-                              <XCircle size={12} /> Rədd et
-                            </button>
-                          </>
-                        )}
-                        {course.link && (
-                          <a href={course.link} target="_blank" rel="noreferrer" className="admin-btn admin-btn-ghost admin-btn-sm">
-                            <Eye size={12} /> Bax
-                          </a>
-                        )}
-                        <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(course.id)}>
-                          <Trash2 size={12} /> Sil
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map(course => {
+                  const st = COURSE_STATUS[course.status] ?? { label: course.status, tone: 'warning' as const };
+                  const busy = busyId === course.id;
+                  return (
+                    <tr key={course.id}>
+                      <td className="cell-mono">{course.id}</td>
+                      <td className="cell-main">{course.title}</td>
+                      <td>{course.instructor}</td>
+                      <td><Badge>{course.category}</Badge></td>
+                      <td><Badge tone={st.tone} dot>{st.label}</Badge></td>
+                      <td className="cell-mono">{course.createdAt}</td>
+                      <td>
+                        <div className="cell-actions">
+                          {/* Moderasiya geri qaytarıla bilir: səhvən rədd edilən təlim
+                              yenidən təsdiqlənə, səhvən təsdiqlənən isə geri götürülə bilər. */}
+                          {course.status !== 'Approved' && (
+                            <Button variant="success" size="sm" onClick={() => handleApprove(course.id)} disabled={busyId !== null} loading={busy}><CheckCircle size={13} /> Təsdiqlə</Button>
+                          )}
+                          {course.status !== 'Rejected' && (
+                            <Button variant="outline" size="sm" onClick={() => handleReject(course.id)} disabled={busyId !== null}><XCircle size={13} /> Rədd et</Button>
+                          )}
+                          {isSafeExternalLink(course.link) && (
+                            <a href={course.link} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={13} /> Bax</a>
+                          )}
+                          <Button variant="danger" size="sm" onClick={() => setPendingDelete(course)} disabled={busyId !== null} aria-label={`${course.title} təlimini sil`}><Trash2 size={13} /> Sil</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Card>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Təlimi silmək istədiyinizə əminsiniz?"
+        confirmLabel="Bəli, sil"
+        icon={<Trash2 size={14} />}
+        busy={busyId !== null}
+        onCancel={() => { if (busyId === null) setPendingDelete(null); }}
+        onConfirm={() => void handleDelete()}
+      >
+        {pendingDelete && <><strong>«{pendingDelete.title}»</strong> ({pendingDelete.instructor}) təlimi silinəcək. Bu əməliyyat panel üzərindən geri qaytarıla bilməz.</>}
+      </ConfirmDialog>
     </div>
   );
 }
 
 // ── Users Tab ─────────────────────────────────────────────────
-const ALL_ROLES = ['Admin', 'Moderator', 'Teacher', 'VIP', 'User'];
+const MANAGEABLE_ROLES = ['Moderator', 'Teacher', 'VIP', 'User'];
 
-function UsersTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
+// Sistem administratoru bu siyahıya serverdən heç vaxt gəlmir.
+// Burada yalnız idarə edilə bilən adi istifadəçi rolları göstərilir.
+function primaryRole(roles: string[]): string {
+  return MANAGEABLE_ROLES.find(r => roles.includes(r)) ?? 'User';
+}
+
+export function UsersTab({ onToast }: { onToast: ToastFn }) {
   const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingBlock, setPendingBlock] = useState<AdminUser | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await getAdminUsers();
-    if (res.success && res.data) setUsers(res.data);
-    setLoading(false);
-  }, []);
+  // Yazarkən hər hərfdə sorğu getməsin deyə 350 ms gecikmə.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search), 350);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  useEffect(() => { load(); }, [load]);
-
-  const filtered = users.filter(u =>
-    u.nickname.toLowerCase().includes(search.toLowerCase()) ||
-    u.firstName.toLowerCase().includes(search.toLowerCase()) ||
-    u.lastName.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase())
-  );
+  // Axtarış SERVER tərəfdə aparılır: siyahı məhdudlaşdırıldığı üçün müştəri tərəfdə
+  // filtrləmək yüklənməmiş istifadəçiləri gizlədərdi.
+  const loader = useCallback(async () => {
+    const res = await getAdminUsers(query);
+    if (!res.success || !res.data) throw new Error(res.message || 'Məlumat yüklənə bilmədi.');
+    // Hədd dolduqda server bunu mesajda bildirir — admin siyahını tam sanmasın.
+    return { users: res.data, notice: res.data.length > 0 ? (res.message ?? '') : '' };
+  }, [query]);
+  const { state, reload } = useAsyncData(loader);
+  const users = state.status === 'ready' ? state.data.users : [];
+  const notice = state.status === 'ready' ? state.data.notice : '';
 
   const handleRoleChange = async (userId: string, role: string) => {
-    const res = await changeUserRole(userId, role);
-    if (res.success) { onToast(res.message, 'success'); load(); }
-    else onToast(res.errors?.[0] || 'Xəta', 'error');
+    if (busyId !== null) return;
+    setBusyId(userId);
+    try {
+      const res = await changeUserRole(userId, role);
+      if (res.success) { onToast(res.message, 'success'); reload(); }
+      else onToast(res.errors?.[0] || 'Xəta', 'error');
+    } finally { setBusyId(null); }
   };
 
-  const handleBlock = async (userId: string) => {
-    const res = await toggleUserBlock(userId);
-    if (res.success) { onToast(res.message, 'success'); load(); }
-    else onToast(res.errors?.[0] || 'Xəta', 'error');
+  const handleBlock = async (user: AdminUser) => {
+    if (busyId !== null) return;
+    setBusyId(user.id);
+    try {
+      const res = await toggleUserBlock(user.id);
+      if (res.success) { onToast(res.message, 'success'); reload(); }
+      else onToast(res.errors?.[0] || 'Xəta', 'error');
+    } finally { setBusyId(null); setPendingBlock(null); }
   };
 
   return (
-    <div>
-      <div className="admin-page-header">
-        <h2 className="admin-page-title">İstifadəçi İdarəetməsi</h2>
-        <p className="admin-page-subtitle">İstifadəçilərin rollarını dəyişin, hesabları idarə edin</p>
+    <div className="adm">
+      <div className="page-header page-header__row">
+        <div>
+          <span className="kicker">İdarəetmə paneli</span>
+          <h1 className="page-header__title">İstifadəçilərin idarə edilməsi</h1>
+          <p className="page-header__lead">Platformadakı istifadəçilərə baxın, rollarını dəyişin və hesabları bloklayın.</p>
+        </div>
       </div>
 
-      <div className="admin-table-card">
-        <div className="admin-table-header">
-          <h3 className="admin-table-title"><Users size={16} /> İstifadəçilər ({filtered.length})</h3>
-          <div className="admin-table-actions">
-            <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                className="admin-search-input"
-                style={{ paddingLeft: 32 }}
-                type="text"
-                placeholder="İstifadəçi axtar..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
+      <Card padded={false} className="adm-table-card">
+        <div className="adm-toolbar">
+          <h3 className="card__title adm-toolbar__title"><Users size={15} /> İstifadəçilər {state.status === 'ready' && <span className="tab__count">({users.length})</span>}</h3>
+          <div className="adm-toolbar__right">
+            <SearchField value={search} onChange={setSearch} label="İstifadəçi axtar" placeholder="Ad, e-poçt və ya ləqəb üzrə axtar..." size="sm" className="adm-search" />
+            <Button variant="ghost" size="sm" onClick={reload} aria-label="Siyahını yenilə"><RefreshCw size={14} /></Button>
           </div>
         </div>
+        {notice && state.status === 'ready' && <div className="adm-notice"><AlertTriangle size={14} /> {notice}</div>}
 
-        {loading ? (
-          <div className="admin-empty">⏳ Yüklənir...</div>
-        ) : filtered.length === 0 ? (
-          <div className="admin-empty"><div className="admin-empty-icon">👤</div>Nəticə tapılmadı</div>
-        ) : (
-          <div className="admin-table-wrap">
-            <table className="admin-table">
+        {state.status === 'loading' && <div className="card--pad"><SkeletonList rows={5} /></div>}
+        {state.status === 'error' && <ErrorState title="İstifadəçilər yüklənmədi" text={state.message} onRetry={reload} />}
+        {state.status === 'ready' && users.length === 0 && (
+          <EmptyState icon={<Users size={20} />} title="Nəticə tapılmadı" text={query ? 'Axtarış sorğusunu dəyişin.' : 'Hələ istifadəçi yoxdur.'} />
+        )}
+        {state.status === 'ready' && users.length > 0 && (
+          <div className="table-wrap">
+            <table className="table adm-table">
               <thead>
                 <tr>
                   <th>İstifadəçi</th>
                   <th>E-poçt</th>
                   <th>Rol</th>
-                  <th>E-poçt Təsdiq</th>
-                  <th>Qeydiyyat</th>
+                  <th>E-poçt təsdiqi</th>
                   <th>Status</th>
-                  <th>Əməliyyat</th>
+                  <th>Qeydiyyat</th>
+                  <th className="cell-actions">Əməliyyat</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(user => (
-                  <tr key={user.id}>
-                    <td>
-                      <div>
-                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{user.firstName} {user.lastName}</div>
-                        <div style={{ fontSize: '0.78rem', color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>@{user.nickname}</div>
-                      </div>
-                    </td>
-                    <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{user.email}</td>
-                    <td>
-                      <select
-                        value={user.roles[0] || 'User'}
-                        onChange={e => handleRoleChange(user.id, e.target.value)}
-                        style={{
-                          background: 'rgba(255,255,255,0.04)',
-                          border: '1px solid rgba(255,255,255,0.1)',
-                          borderRadius: 6,
-                          padding: '3px 8px',
-                          color: 'var(--text-primary)',
-                          fontFamily: 'var(--font-body)',
-                          fontSize: '0.8rem',
-                          cursor: 'pointer',
-                          outline: 'none',
-                        }}
-                      >
-                        {ALL_ROLES.map(r => (
-                          <option key={r} value={r} style={{ background: '#0d1526' }}>{r}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <span className={`admin-badge ${user.isEmailConfirmed ? 'approved' : 'pending'}`}>
-                        {user.isEmailConfirmed ? '✓ Təsdiqlənib' : '⏳ Gözlənilir'}
-                      </span>
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      {user.joinDate}
-                    </td>
-                    <td>
-                      <span className={`admin-badge ${user.isBlocked ? 'blocked' : 'active'}`}>
-                        {user.isBlocked ? '🔒 Blok' : '✓ Aktiv'}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        className={`admin-btn admin-btn-sm ${user.isBlocked ? 'admin-btn-success' : 'admin-btn-danger'}`}
-                        onClick={() => handleBlock(user.id)}
-                      >
-                        {user.isBlocked ? '🔓 Bloku Aç' : '🔒 Blokla'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map(user => {
+                  const busy = busyId === user.id;
+                  return (
+                    <tr key={user.id}>
+                      <td>
+                        <div className="adm-user">
+                          <span className="avatar avatar--sm" aria-hidden="true">{(user.firstName?.[0] ?? '') + (user.lastName?.[0] ?? '')}</span>
+                          <div className="adm-user__text">
+                            <span className="cell-main">{user.firstName} {user.lastName}</span>
+                            <span className="cell-sub">@{user.nickname}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="cell-muted adm-email">{user.email}</td>
+                      <td>
+                        <label className="visually-hidden" htmlFor={`adm-role-${user.id}`}>{user.nickname} üçün rol</label>
+                        <select
+                          id={`adm-role-${user.id}`}
+                          className="select input--sm adm-role"
+                          value={primaryRole(user.roles)}
+                          onChange={e => handleRoleChange(user.id, e.target.value)}
+                          disabled={busyId !== null}
+                        >
+                          {MANAGEABLE_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </td>
+                      <td>
+                        {user.isEmailConfirmed
+                          ? <Badge tone="success"><CheckCircle size={12} /> Təsdiqlənib</Badge>
+                          : <Badge tone="warning"><Clock size={12} /> Gözləyir</Badge>}
+                      </td>
+                      <td>
+                        {user.isBlocked
+                          ? <Badge tone="danger"><Lock size={12} /> Bloklanıb</Badge>
+                          : <Badge tone="success" dot>Aktiv</Badge>}
+                      </td>
+                      <td className="cell-mono">{user.joinDate}</td>
+                      <td>
+                        <div className="cell-actions">
+                          {user.isBlocked ? (
+                            <Button variant="success" size="sm" onClick={() => void handleBlock(user)} disabled={busyId !== null} loading={busy}><Unlock size={13} /> Bloku aç</Button>
+                          ) : (
+                            <Button variant="danger" size="sm" onClick={() => setPendingBlock(user)} disabled={busyId !== null} loading={busy}><Lock size={13} /> Blokla</Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Card>
+
+      <ConfirmDialog
+        open={pendingBlock !== null}
+        title="İstifadəçini bloklamaq istəyirsiniz?"
+        confirmLabel="Bəli, blokla"
+        icon={<Lock size={14} />}
+        busy={busyId !== null}
+        onCancel={() => { if (busyId === null) setPendingBlock(null); }}
+        onConfirm={() => { if (pendingBlock) void handleBlock(pendingBlock); }}
+      >
+        {pendingBlock && <><strong>@{pendingBlock.nickname}</strong> ({pendingBlock.firstName} {pendingBlock.lastName}) bloklanacaq və aktiv sessiyaları bağlanacaq. Bloku sonra buradan aça bilərsiniz.</>}
+      </ConfirmDialog>
     </div>
   );
 }
 
 // ── Exams Tab ─────────────────────────────────────────────────
-function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error') => void }) {
-  const [exams, setExams] = useState<AdminExam[]>([]);
-  const [loading, setLoading] = useState(true);
+// Backend-də hər sətir bir quiz kateqoriyasıdır (studentCount = cavab verən unikal
+// istifadəçi, duration = sual sayı). Etiketlər real API davranışına uyğundur.
+const EXAM_STATUS: Record<string, 'success' | 'warning' | 'neutral'> = { 'Aktiv': 'success', 'Gözlənilir': 'warning', 'Tamamlandı': 'neutral' };
+
+export function ExamsTab({ onToast }: { onToast: ToastFn }) {
   const [search, setSearch] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminExam | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const loader = useCallback(async () => {
     const res = await getAdminExams();
-    if (res.success && res.data) setExams(res.data);
-    setLoading(false);
+    if (!res.success || !res.data) throw new Error(res.message || 'Məlumat yüklənə bilmədi.');
+    return res.data;
   }, []);
-
-  useEffect(() => { load(); }, [load]);
+  const { state, reload } = useAsyncData(loader);
+  const exams = state.status === 'ready' ? state.data : [];
 
   const filtered = exams.filter(e =>
     e.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -465,79 +479,72 @@ function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error
     e.category.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Bu imtahan sessiyasını silmək istədiyinizə əminsiniz?')) return;
-    const res = await deleteExam(id);
-    if (res.success) { onToast(res.message, 'success'); load(); }
-    else onToast(res.errors?.[0] || 'Xəta', 'error');
-  };
-
-  const statusMap: Record<string, string> = {
-    'Aktiv': 'active', 'Gözlənilir': 'pending', 'Tamamlandı': 'completed',
+  // Bu əməliyyat KASKADLIDIR: kateqoriya ilə birlikdə içindəki bütün suallar da silinir.
+  const handleDelete = async () => {
+    if (!pendingDelete || busyId !== null) return;
+    setBusyId(pendingDelete.id);
+    try {
+      const res = await deleteExam(pendingDelete.id);
+      if (res.success) { onToast(res.message, 'success'); reload(); }
+      else onToast(res.errors?.[0] || 'Xəta', 'error');
+    } finally { setBusyId(null); setPendingDelete(null); }
   };
 
   return (
-    <div>
-      <div className="admin-page-header">
-        <h2 className="admin-page-title">İmtahan Sessiyaları</h2>
-        <p className="admin-page-subtitle">Aktiv və gözlənilən imtahan sessiyalarını idarə edin</p>
+    <div className="adm">
+      <div className="page-header page-header__row">
+        <div>
+          <span className="kicker">İdarəetmə paneli</span>
+          <h1 className="page-header__title">İmtahan kateqoriyaları</h1>
+          <p className="page-header__lead">Sual bankının kateqoriyaları və onlarda cavab vermiş istifadəçi sayı. Silmə kateqoriyanı bütün sualları ilə birlikdə gizlədir.</p>
+        </div>
       </div>
 
-      <div className="admin-table-card">
-        <div className="admin-table-header">
-          <h3 className="admin-table-title"><ClipboardList size={16} /> Sessiyalar ({filtered.length})</h3>
-          <div className="admin-table-actions">
-            <div style={{ position: 'relative' }}>
-              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-              <input
-                className="admin-search-input"
-                style={{ paddingLeft: 32 }}
-                type="text"
-                placeholder="Sessiya axtar..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
+      <Card padded={false} className="adm-table-card">
+        <div className="adm-toolbar">
+          <h3 className="card__title adm-toolbar__title"><ClipboardList size={15} /> Kateqoriyalar {state.status === 'ready' && <span className="tab__count">({filtered.length})</span>}</h3>
+          <div className="adm-toolbar__right">
+            <SearchField value={search} onChange={setSearch} label="Kateqoriya axtar" placeholder="Başlıq və ya kateqoriya axtar..." size="sm" className="adm-search" />
+            <Button variant="ghost" size="sm" onClick={reload} aria-label="Siyahını yenilə"><RefreshCw size={14} /></Button>
           </div>
         </div>
 
-        {loading ? (
-          <div className="admin-empty">⏳ Yüklənir...</div>
-        ) : filtered.length === 0 ? (
-          <div className="admin-empty"><div className="admin-empty-icon">📋</div>Nəticə tapılmadı</div>
-        ) : (
-          <div className="admin-table-wrap">
-            <table className="admin-table">
+        {state.status === 'loading' && <div className="card--pad"><SkeletonList rows={5} /></div>}
+        {state.status === 'error' && <ErrorState title="Siyahı yüklənmədi" text={state.message} onRetry={reload} />}
+        {state.status === 'ready' && filtered.length === 0 && (
+          <EmptyState icon={<ClipboardList size={20} />} title="Nəticə tapılmadı" text={search ? 'Axtarış sorğusunu dəyişin.' : 'Hələ kateqoriya yoxdur.'} />
+        )}
+        {state.status === 'ready' && filtered.length > 0 && (
+          <div className="table-wrap">
+            <table className="table adm-table">
               <thead>
                 <tr>
-                  <th>Sessiya Kodu</th>
+                  <th>Kod</th>
                   <th>Başlıq</th>
                   <th>Təlimçi</th>
                   <th>Kateqoriya</th>
-                  <th>Tələbə</th>
-                  <th>Müddət</th>
+                  <th className="is-num">İştirakçı</th>
+                  <th>Sual sayı</th>
                   <th>Status</th>
                   <th>Tarix</th>
-                  <th>Əməliyyat</th>
+                  <th className="cell-actions">Əməliyyat</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(exam => (
                   <tr key={exam.id}>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--brand-primary)' }}>{exam.id}</td>
-                    <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{exam.title}</td>
+                    <td className="cell-mono">{exam.id}</td>
+                    <td className="cell-main">{exam.title}</td>
                     <td>{exam.instructor}</td>
-                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{exam.category}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700 }}>{exam.studentCount}</td>
-                    <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{exam.duration}</td>
+                    <td><Badge>{exam.category}</Badge></td>
+                    <td className="is-num"><strong>{exam.studentCount}</strong></td>
+                    <td className="cell-muted">{exam.duration}</td>
+                    <td><Badge tone={EXAM_STATUS[exam.status] ?? 'neutral'} dot>{exam.status}</Badge></td>
+                    <td className="cell-mono">{exam.createdAt}</td>
                     <td>
-                      <span className={`admin-badge ${statusMap[exam.status]}`}>{exam.status}</span>
-                    </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>{exam.createdAt}</td>
-                    <td>
-                      <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(exam.id)}>
-                        <Trash2 size={12} /> Sil
-                      </button>
+                      <div className="cell-actions">
+                        <Button variant="danger" size="sm" onClick={() => setPendingDelete(exam)} disabled={busyId !== null} loading={busyId === exam.id} aria-label={`${exam.title} kateqoriyasını sil`}><Trash2 size={13} /> Sil</Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -545,91 +552,24 @@ function ExamsTab({ onToast }: { onToast: (msg: string, type: 'success' | 'error
             </table>
           </div>
         )}
-      </div>
-    </div>
-  );
-}
+      </Card>
 
-// ── Admin Panel (Ana komponent) ───────────────────────────────
-export default function AdminPanel({ onGoHome }: { onGoHome: () => void }) {
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
-
-  const loadStats = useCallback(async () => {
-    const res = await getAdminStats();
-    if (res.success && res.data) setStats(res.data);
-  }, []);
-
-  useEffect(() => { loadStats(); }, [loadStats]);
-
-  const showToast = useCallback((msg: string, type: 'success' | 'error') => {
-    setToast({ msg, type });
-  }, []);
-
-  const navItems: { tab: AdminTab; label: string; icon: React.ReactNode }[] = [
-    { tab: 'dashboard', label: 'İcmal', icon: <LayoutDashboard size={16} /> },
-    { tab: 'courses',   label: 'Təlimlər', icon: <BookOpen size={16} /> },
-    { tab: 'users',     label: 'İstifadəçilər', icon: <Users size={16} /> },
-    { tab: 'exams',     label: 'İmtahanlar', icon: <ClipboardList size={16} /> },
-  ];
-
-  return (
-    <div className="admin-wrapper">
-      {/* Top Bar */}
-      <header className="admin-topbar">
-        <div className="admin-topbar-logo">
-          <div className="logo-icon-admin">
-            <Shield size={18} color="var(--brand-primary)" strokeWidth={2} />
-          </div>
-          <span className="admin-topbar-title">Kiber<span>az.az</span></span>
-          <span className="admin-topbar-badge">Admin</span>
-        </div>
-        <div className="admin-topbar-actions">
-          <button className="admin-back-btn" onClick={onGoHome}>
-            <ArrowLeft size={15} /> Ana Səhifəyə Qayıt
-          </button>
-        </div>
-      </header>
-
-      {/* Body */}
-      <div className="admin-body">
-        {/* Sidebar */}
-        <aside className="admin-sidebar" aria-label="Admin naviqasiya">
-          {navItems.map(item => (
-            <button
-              key={item.tab}
-              className={`admin-nav-item ${activeTab === item.tab ? 'active' : ''}`}
-              onClick={() => setActiveTab(item.tab)}
-              aria-current={activeTab === item.tab ? 'page' : undefined}
-            >
-              {item.icon}
-              {item.label}
-            </button>
-          ))}
-          <div className="admin-sidebar-divider" />
-          <button className="admin-nav-item" onClick={onGoHome}>
-            <ArrowLeft size={16} /> Ana Səhifə
-          </button>
-        </aside>
-
-        {/* Main Content */}
-        <main className="admin-content">
-          {activeTab === 'dashboard' && <DashboardTab stats={stats} onRefresh={loadStats} />}
-          {activeTab === 'courses'   && <CoursesTab onToast={showToast} />}
-          {activeTab === 'users'     && <UsersTab onToast={showToast} />}
-          {activeTab === 'exams'     && <ExamsTab onToast={showToast} />}
-        </main>
-      </div>
-
-      {/* Toast bildirişi */}
-      {toast && (
-        <Toast
-          message={toast.msg}
-          type={toast.type}
-          onDone={() => setToast(null)}
-        />
-      )}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Diqqət — bu əməliyyat kaskadlıdır"
+        confirmLabel="Bəli, kateqoriyanı və sualları sil"
+        icon={<ShieldAlert size={14} />}
+        busy={busyId !== null}
+        onCancel={() => { if (busyId === null) setPendingDelete(null); }}
+        onConfirm={() => void handleDelete()}
+      >
+        {pendingDelete && (
+          <>
+            <strong>«{pendingDelete.title}»</strong> kateqoriyası ({pendingDelete.duration}) silinəcək.
+            Bu kateqoriyaya aid <strong>bütün suallar</strong> da birlikdə silinəcək və panel üzərindən geri qaytarıla bilməz.
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

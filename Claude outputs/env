@@ -1,0 +1,19 @@
+VITE_API_URL=http://localhost:5251/api
+
+# ── Cloudflare Turnstile SITE KEY ────────────────────────────────
+# Site key PUBLIC-dir: brauzerde gorunur, gizli deyil. Gizli olan yalniz
+# secret key-dir ve o, yalniz serverde (appsettings.Local.json) saxlanilir.
+#
+# AKTIV: REAL ACAR.
+# ⚠ Bu acar YALNIZ Cloudflare panelinde widget-in hostname siyahisinda
+#   "localhost" varsa lokal muhitde isleyir. Yoxdursa widget xeta verir ve
+#   qeydiyyat/giris duymesi aktivlesmir — bu halda asagidaki test acarina qayit.
+VITE_TURNSTILE_SITE_KEY=0x4AAAAAADgQ4cetpZfAxN2U
+
+# ── Geri donus (rollback) ────────────────────────────────────────
+# Cloudflare-in test acari: istenilen hostda isleyir, panelde domen
+# elave etmek lazim deyil, HER token avtomatik qebul edilir.
+# Widget uzerinde "yalniz test ucun" yazisi gorunur.
+# Lokalda CAPTCHA-ni tamamile kenara qoymaq ucun yuxaridaki setri serhe al,
+# asagidakini isə ac:
+# VITE_TURNSTILE_SITE_KEY=1x00000000000000000000AA

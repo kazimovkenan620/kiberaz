@@ -1,212 +1,110 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Hosting;
 using Kiberaz.Application.Interfaces;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 
 namespace Kiberaz.Infrastructure.Services;
 
-/// <summary>
-/// Təhlükəsiz fayl yükləmə (File Upload) servisinin implementasiyası.
-/// Faylları fiziki olaraq serverin diskində (wwwroot/uploads) saxlayır və təhlükəsizlik qaydalarına riayət edir.
-/// </summary>
-public class UploadService : IUploadService
+public class UploadService(IWebHostEnvironment environment, IConfiguration configuration, PdfProcessSanitizer sanitizer) : IUploadService
 {
-    private readonly IWebHostEnvironment _webHostEnvironment;
+    private string Root => Path.Combine(environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot"), "uploads");
 
-    public UploadService(IWebHostEnvironment webHostEnvironment)
+    public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string folderName,
+        string[] allowedExtensions, long maxSizeBytes)
     {
-        _webHostEnvironment = webHostEnvironment;
-    }
-
-    public async Task<string> UploadFileAsync(Stream fileStream, string fileName, string folderName, string[] allowedExtensions, long maxSizeBytes)
-    {
-        // 1. Faylın boş olub-olmadığını yoxlayırıq
-        if (fileStream == null || fileStream.Length == 0)
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(extension) || folderName is not ("photos" or "syllabus"))
+            throw new ArgumentException("Fayl formatı düzgün deyil.");
+        if (maxSizeBytes is <= 0 or > 10 * 1024 * 1024)
+            throw new ArgumentException("Fayl ölçüsü düzgün deyil.");
+        Directory.CreateDirectory(Root);
+        // Cross-process lock held from quota check to final write; no waiting upload queue.
+        using var gate = AcquireGate();
+        var maxBytes = configuration.GetValue<long?>("Uploads:MaxTotalBytes") ?? 1024L * 1024 * 1024;
+        var maxFiles = configuration.GetValue<int?>("Uploads:MaxFiles") ?? 2000;
+        var reserve = configuration.GetValue<long?>("Uploads:MinFreeBytes") ?? 2L * 1024 * 1024 * 1024;
+        if (maxBytes <= 0 || maxFiles <= 0 || reserve < 0)
+            throw new InvalidOperationException("Upload limits must be positive.");
+        long usedBytes = 0;
+        var fileCount = 0;
+        foreach (var file in new DirectoryInfo(Root).EnumerateFiles("*", SearchOption.AllDirectories))
         {
-            throw new ArgumentException("Yüklənən fayl boş ola bilməz!");
+            if (file.FullName == Path.Combine(Root, ".upload-write.lock")) continue;
+            usedBytes = checked(usedBytes + file.Length);
+            if (++fileCount >= maxFiles || usedBytes > maxBytes - maxSizeBytes) throw new UploadCapacityException();
         }
+        if (usedBytes > maxBytes - maxSizeBytes ||
+            new DriveInfo(Path.GetPathRoot(Path.GetFullPath(Root))!).AvailableFreeSpace < reserve + maxSizeBytes)
+            throw new UploadCapacityException();
 
-        // 2. Ölçü limitini yoxlayırıq
-        if (fileStream.Length > maxSizeBytes)
+        // Bound actual bytes, including nonseekable and misleading-length streams.
+        using var input = new MemoryStream();
+        var buffer = new byte[81920];
+        int read;
+        while ((read = await fileStream.ReadAsync(buffer)) != 0)
         {
-            double maxMb = (double)maxSizeBytes / (1024 * 1024);
-            throw new ArgumentException($"Fayl çox böyükdür! Maksimum icazə verilən ölçü: {maxMb:F1} MB");
+            if (input.Length + read > maxSizeBytes) throw new ArgumentException("Fayl çox böyükdür.");
+            input.Write(buffer, 0, read);
         }
+        var bytes = input.ToArray();
+        if (bytes.Length == 0) throw new ArgumentException("Fayl boş ola bilməz.");
+        ValidateSignature(bytes, extension);
+        if (extension == ".pdf") bytes = await sanitizer.RewriteAsync(bytes, maxSizeBytes);
 
-        // 3. Uzantını (Extension) yoxlayırıq və təhlükəsizlik üçün kiçik hərflərə çeviririk
-        var fileExtension = Path.GetExtension(fileName).ToLowerInvariant();
-        if (!allowedExtensions.Contains(fileExtension))
-        {
-            var allowedList = string.Join(", ", allowedExtensions);
-            throw new ArgumentException($"Yalnız bu formatlarda fayl yükləyə bilərsiniz: {allowedList}");
-        }
-
-        // 3b. Məzmun Yoxlanışı (Magic Number/Signature Validation)
-        // Disguised (polyglot) faylları və şəkil daxilində gizlədilmiş scriptləri (EXIF/Metadata XSS) önləmək üçün imza yoxlanışı edirik
-        ValidateFileSignature(fileStream, fileExtension);
-
-        // 3c. PDF-lər üçün əlavə qat: imza düzgün olsa belə fayl daxilində aktiv məzmun ola bilər.
-        // %PDF başlığı yalnız "bu PDF-dir" deyir — açılanda kod icra edən PDF də tamamilə düzgün imzalıdır.
-        if (fileExtension == ".pdf")
-        {
-            ValidatePdfHasNoActiveContent(fileStream);
-        }
-
-        // 4. wwwroot qovluğunu təyin edirik
-        var webRootPath = _webHostEnvironment.WebRootPath;
-        if (string.IsNullOrEmpty(webRootPath))
-        {
-            // WebRootPath hələ yaradılmayıbsa, ContentRootPath daxilində wwwroot yaradırıq
-            webRootPath = Path.Combine(_webHostEnvironment.ContentRootPath, "wwwroot");
-        }
-
-        // 5. Yükləmə qovluğunu yaradırıq (məs: wwwroot/uploads/photos)
-        var uploadsFolder = Path.Combine(webRootPath, "uploads", folderName);
-        if (!Directory.Exists(uploadsFolder))
-        {
-            Directory.CreateDirectory(uploadsFolder);
-        }
-
-        // 6. Təhlükəsiz ad yaradırıq (GUID + uzantı)
-        // Orijinal adı atırıq ki, Path Traversal və fayl adı toqquşması olmasın
-        var secureFileName = $"{Guid.NewGuid()}{fileExtension}";
-        var physicalPath = Path.Combine(uploadsFolder, secureFileName);
-
-        // 7. Faylı fiziki olaraq diskə yazırıq
-        using (var outputStream = new FileStream(physicalPath, FileMode.Create))
-        {
-            await fileStream.CopyToAsync(outputStream);
-        }
-
-        // 8. Brauzerdən əlçatan nisbi URL-i qaytarırıq (məs: /uploads/photos/guid.png)
-        return $"/uploads/{folderName}/{secureFileName}";
-    }
-
-    /// <summary>
-    /// PDF daxilində kod icrasına səbəb ola biləcək açar sözləri axtarır.
-    /// Sillabus sənədi statik mətndir — onda JavaScript, avtomatik açılan əməliyyat və ya
-    /// yerləşdirilmiş fayl olmasının heç bir legitim səbəbi yoxdur.
-    /// </summary>
-    private void ValidatePdfHasNoActiveContent(Stream fileStream)
-    {
-        if (!fileStream.CanSeek)
-        {
-            return;
-        }
-
-        var currentPosition = fileStream.Position;
-        fileStream.Position = 0;
-
+        var folder = Path.Combine(Root, folderName);
+        Directory.CreateDirectory(folder);
+        var name = Guid.NewGuid().ToString("N") + extension;
+        var path = Path.Combine(folder, name);
         try
         {
-            // PDF strukturu ASCII açar sözlərdən ibarətdir, ona görə baytlar üzərində birbaşa axtarış kifayətdir.
-            // Fayl 10 MB ilə məhdudlaşdığı üçün tam oxumaq təhlükəsizdir.
-            using var buffer = new MemoryStream();
-            fileStream.CopyTo(buffer);
-            var bytes = buffer.ToArray();
-
-            foreach (var marker in DangerousPdfMarkers)
-            {
-                if (ContainsAscii(bytes, marker))
-                {
-                    throw new ArgumentException(
-                        "Təhlükəsizlik Xətası! PDF faylında aktiv məzmun (script və ya avtomatik əməliyyat) aşkarlandı. " +
-                        "Zəhmət olmasa sadə mətn/şəkil formatında sillabus yükləyin.");
-                }
-            }
+            using var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            await output.WriteAsync(bytes);
         }
-        finally
+        catch
         {
-            fileStream.Position = currentPosition;
+            if (File.Exists(path)) File.Delete(path); // Only this operation's new file.
+            throw;
         }
+        return $"/uploads/{folderName}/{name}";
     }
 
-    // /JavaScript, /JS  → PDF içindəki skript
-    // /OpenAction, /AA  → sənəd açılanda avtomatik işə düşən əməliyyat
-    // /Launch           → xarici proqram çağırışı
-    // /EmbeddedFile     → PDF-in içinə gizlədilmiş başqa fayl
-    private static readonly string[] DangerousPdfMarkers =
-    [
-        "/JavaScript", "/JS", "/OpenAction", "/AA", "/Launch", "/EmbeddedFile"
-    ];
-
-    // Bayt massivində ASCII alt-sətir axtarır — Encoding.GetString ilə 10 MB-lıq string yaratmamaq üçün.
-    private static bool ContainsAscii(byte[] haystack, string needle)
+    private FileStream AcquireGate()
     {
-        if (needle.Length == 0 || haystack.Length < needle.Length)
-            return false;
-
-        for (int i = 0; i <= haystack.Length - needle.Length; i++)
-        {
-            int j = 0;
-            while (j < needle.Length && haystack[i + j] == (byte)needle[j])
-                j++;
-
-            if (j == needle.Length)
-                return true;
-        }
-
-        return false;
+        var lockPath = Path.Combine(Root, ".upload-write.lock");
+        try { return new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+        catch (IOException) { throw new UploadCapacityException(); }
     }
 
-    /// <summary>
-    /// Faylın daxili strukturunu (Magic Numbers) yoxlayır.
-    /// Yalançı uzantı dəyişdirilməsi ilə zərərli kod yüklənməsinin (Polyglot / Web Shell) qarşısını alır.
-    /// </summary>
-    private void ValidateFileSignature(Stream fileStream, string extension)
+    public async Task<byte[]> ReadSafePdfAsync(string fileName)
     {
-        if (!fileStream.CanSeek)
-        {
-            // Ehtiyat tədbiri: Əgər stream axtarışı dəstəkləmirsə, imzanı yoxlaya bilmirik
-            return;
-        }
-
-        var currentPosition = fileStream.Position;
-        fileStream.Position = 0;
-
-        try
-        {
-            byte[] header = new byte[8];
-            int bytesRead = fileStream.Read(header, 0, 8);
-            if (bytesRead < 3) // JPEG üçün min 3 bayt, digərləri üçün min 4 bayt lazımdır
-            {
-                throw new ArgumentException("Yüklənən fayl etibarsız və ya zədəlidir.");
-            }
-
-            bool isValid = false;
-
-            if (extension == ".png")
-            {
-                // PNG imza: 89 50 4E 47 0D 0A 1A 0A
-                byte[] expected = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
-                isValid = header.SequenceEqual(expected);
-            }
-            else if (extension == ".jpg" || extension == ".jpeg")
-            {
-                // JPEG imza: FF D8 FF
-                isValid = header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF;
-            }
-            else if (extension == ".webp")
-            {
-                // WEBP imza: RIFF (ilk 4 bayt: 52 49 46 46)
-                isValid = header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46;
-            }
-            else if (extension == ".pdf")
-            {
-                // PDF imza: %PDF (ilk 4 bayt: 25 50 44 46)
-                isValid = header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46;
-            }
-
-            if (!isValid)
-            {
-                throw new ArgumentException($"Təhlükəsizlik Xətası! Fayl imzası uzantı ilə uyğun gəlmir. Fayl '{extension}' adlandırılsa da, daxili strukturu fərqlidir. Bu fayl zərərli kod ehtiva edə bilər!");
-            }
-        }
-        finally
-        {
-            fileStream.Position = currentPosition;
-        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(fileName,
+                @"\A(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12})\.pdf\z"))
+            throw new FileNotFoundException();
+        var path = Path.Combine(Root, "syllabus", fileName);
+        using var gate = AcquireGate();
+        using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        const long limit = 10 * 1024 * 1024;
+        if (input.Length > limit) throw new ArgumentException("Fayl çox böyükdür.");
+        using var buffer = new MemoryStream();
+        await input.CopyToAsync(buffer);
+        // Existing files cannot bypass the parser through static hosting.
+        return await sanitizer.RewriteAsync(buffer.ToArray(), limit);
     }
+
+    private static void ValidateSignature(byte[] bytes, string extension)
+    {
+        var valid = extension switch
+        {
+            ".pdf" => bytes.AsSpan().StartsWith("%PDF-"u8),
+            ".png" => bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
+            ".jpg" or ".jpeg" => bytes.AsSpan().StartsWith(new byte[] { 255, 216, 255 }),
+            ".webp" => bytes.Length >= 12 && bytes.AsSpan(0, 4).SequenceEqual("RIFF"u8) && bytes.AsSpan(8, 4).SequenceEqual("WEBP"u8),
+            _ => false
+        };
+        if (!valid) throw new ArgumentException("Fayl məzmunu formatla uyğun gəlmir.");
+    }
+}
+
+public sealed class UploadCapacityException : Exception
+{
+    public UploadCapacityException() : base("Yükləmə xidməti hazırda doludur. Bir az sonra yenidən yoxlayın.") { }
 }

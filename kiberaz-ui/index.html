@@ -28,14 +28,30 @@
   <meta name="twitter:title" content="Kiberaz.az — Kibertəhlükəsizlik Platforması" />
   <meta name="twitter:description" content="Azərbaycanda aparıcı kibertəhlükəsizlik təhsil platforması." />
 
-  <!-- Theme Color -->
-  <meta name="theme-color" content="#2563eb" />
+  <!-- Brauzer xrom rəngi — aktiv mövzuya görə (useTheme yeniləyir) -->
+  <meta name="theme-color" content="#FAFBFC" />
 
-  <!-- Preconnect for Google Fonts -->
+  <!-- Mövzu ilk boyamadan ƏVVƏL tətbiq olunur ki, səhv mövzu "işartısı" olmasın.
+       Yalnız mövzu seçimi localStorage-da saxlanılır; heç bir token/sessiya məlumatı burada yoxdur. -->
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem('kiberaz-theme');
+        var theme = stored === 'light' || stored === 'dark'
+          ? stored
+          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+
+  <!-- Şriftlər: Inter (əsas) + JetBrains Mono (texniki məzmun). Hər ikisi Azərbaycan hərflərini tam dəstəkləyir. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
     rel="stylesheet" />
 </head>
 

@@ -30,6 +30,8 @@ public class TokenService
     // SecretKey ilə imzalanmış token içinə istifadəçinin id, email, adı və rolları yerləşdirilir — 15 dəqiqə etibarlıdır.
     public string GenerateAccessToken(AppUser user, IList<string> roles)
     {
+        if (string.IsNullOrWhiteSpace(user.SecurityStamp))
+            throw new InvalidOperationException("Sessiya üçün təhlükəsizlik damğası tələb olunur.");
         var jwtSettings = _config.GetSection("JwtSettings");
         var secretKey   = jwtSettings["SecretKey"]
                           ?? throw new InvalidOperationException("JWT SecretKey tapılmadı.");
@@ -93,11 +95,14 @@ public class TokenService
             ValidIssuer = jwtSettings["Issuer"],
             ValidAudience = jwtSettings["Audience"],
             ValidateIssuerSigningKey = true,
+            RequireSignedTokens = true,
+            RequireExpirationTime = true,
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
             ValidateLifetime = false // Refresh üçün vaxtı bitmiş token qəbul edilir
         };
 
-        var tokenHandler = new JwtSecurityTokenHandler();
+        var tokenHandler = new JwtSecurityTokenHandler { MaximumTokenSizeInBytes = 16384 };
         var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
 
         // Tokenin HMAC-SHA256 ilə imzalandığını yoxlayırıq — başqa alqoritmlə saxtalaşdırma cəhdinə qarşı.

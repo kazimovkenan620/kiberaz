@@ -1,34 +1,62 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Shield, User, Mail, ChevronRight, LogOut,
-  Globe, Zap, Target, TrendingUp,
-  ClipboardList, CheckCircle, Clock, Star, Edit3, Home, Loader, BookOpen, Save, Users, Plus, UserPlus, School, Eye, Lock,
-  Copy, Check,
+  Shield, User, Mail, ChevronRight, LogOut, Target, TrendingUp, ClipboardList, CheckCircle, Clock, Star,
+  Edit3, Home, BookOpen, Save, Users, Plus, UserPlus, School, Eye, Lock, Copy, Check, Trash2, ArrowLeftRight,
+  AlertTriangle, Trophy, Activity, Calendar, KeyRound, X, Layers, BarChart2,
 } from 'lucide-react';
-import { addStudentToClass, createTeacherClass, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
-import type { ProfileResponse, StudentOverviewResponse, TeacherClassResponse } from '../services/userService';
+import { addStudentToClass, changeRole, createTeacherClass, deleteTeacherClass, getMyOverview, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
+import type { ProfileResponse, StudentOverviewResponse, SwitchableRole, TeacherClassResponse } from '../services/userService';
+import { isAdmin } from '../services/authService';
+import { getAdminStats, type AdminStats } from '../services/adminService';
+import { CoursesTab, DashboardTab, ExamsTab, UsersTab } from './AdminPanel';
+import DashboardShell from './layout/DashboardShell';
+import Sidebar, { SidebarPromo } from './layout/Sidebar';
+import { Badge, Button, Card, CardHead, ConfirmDialog, EmptyState, ErrorState, FormField, IconButton, LoadingState, ProgressBar, StatCard, Toast } from './ui';
 import './UserDashboard.css';
 
 const genderLabel = (gender?: number) => gender === 2 ? 'female' : 'male';
 const genderValue = (gender: string) => gender === 'female' ? 2 : 1;
 
-// ── Sahə irəliləyişi ────────────────────────────────────────────
-const categoryProgress = [
-  { id: 'crypto', label: 'Kriptoqrafiya', icon: <BookOpen size={16} />, color: '#a855f7', solved: 34, total: 95, lastActive: '2 gün əvvəl' },
-  { id: 'network', label: 'Şəbəkə Təhlükəsizliyi', icon: <Globe size={16} />, color: '#3b82f6', solved: 67, total: 130, lastActive: 'Bu gün' },
-  { id: 'web', label: 'Veb Təhlükəsizliyi', icon: <Zap size={16} />, color: '#ef4444', solved: 42, total: 175, lastActive: 'Dünən' },
-  { id: 'general', label: 'Ümumi Hazırlıq', icon: <Shield size={16} />, color: '#00e5a0', solved: 55, total: 140, lastActive: '3 gün əvvəl' },
-];
+// "Son fəallıq" mətnini ISO tarixdən qurur.
+function relativeTime(iso: string | null): string {
+  if (!iso) return 'Fəallıq yoxdur';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'Fəallıq yoxdur';
 
-// ── Son imtahan sessiyaları ──────────────────────────────────────
-const recentSessions = [
-  { id: 'S1', title: 'Network Security Final', date: '10 May 2025', score: 85, total: 20, duration: '45 dəq', status: 'Tamamlandı' },
-  { id: 'S2', title: 'Web Security Quiz', date: '07 May 2025', score: 72, total: 15, duration: '30 dəq', status: 'Tamamlandı' },
-  { id: 'S3', title: 'Kriptoqrafiya Test', date: '03 May 2025', score: 60, total: 10, duration: '20 dəq', status: 'Tamamlandı' },
-];
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days <= 0) return 'Bu gün';
+  if (days === 1) return 'Dünən';
+  if (days < 30) return `${days} gün əvvəl`;
+  const months = Math.floor(days / 30);
+  return months === 1 ? '1 ay əvvəl' : `${months} ay əvvəl`;
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('az-AZ', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Nəticə faizinə görə ton — rəng tək başına məna daşımır, faiz həmişə yanında yazılır.
+const scoreTone = (pct: number): 'success' | 'warning' | 'danger' => pct >= 70 ? 'success' : pct >= 50 ? 'warning' : 'danger';
+
+// Rol nişanları — yalnız göstərmə üçün, səlahiyyət serverdədir.
+const ROLE_BADGES: Record<string, { label: string; tone: 'brand' | 'info' | 'success' | 'warning' | 'neutral' }> = {
+  Admin: { label: 'Admin', tone: 'brand' },
+  Moderator: { label: 'Moderator', tone: 'info' },
+  VIP: { label: 'VIP', tone: 'warning' },
+  Teacher: { label: 'Müəllim', tone: 'success' },
+  User: { label: 'İstifadəçi', tone: 'neutral' },
+};
 
 // ── Tab tipləri ──────────────────────────────────────────────────
-type Tab = 'overview' | 'progress' | 'sessions' | 'students' | 'profile';
+type Tab =
+  | 'overview' | 'progress' | 'sessions' | 'students' | 'profile'
+  // Admin bölmələri — yalnız Admin rolunda göstərilir.
+  | 'adm-overview' | 'adm-courses' | 'adm-users' | 'adm-exams';
+
+// Admin tablarının siyahısı bir yerdədir: yeni bölmə əlavə edəndə şərti
+// hər yerdə təkrar yazmaq lazım gəlmir, bu massivə bir sətir yazılır.
+const ADMIN_TABS: Tab[] = ['adm-overview', 'adm-courses', 'adm-users', 'adm-exams'];
 
 interface Props {
   onLogout: () => void;
@@ -37,16 +65,50 @@ interface Props {
 
 // ════════════════════════════════════════════════════════════════
 export default function UserDashboard({ onLogout, onGoHome }: Props) {
-  const storedUser = localStorage.getItem('user');
-  const cachedUser = storedUser ? JSON.parse(storedUser) : {};
+  // Admin vəziyyəti bir dəfə oxunur və TƏK QAPI kimi işlədilir —
+  // hər bölmədə ayrı-ayrı isAdmin() çağırmaq unudulma riski yaradır.
+  const [isAdminUser] = useState<boolean>(() => isAdmin());
+  const [tab, setTab] = useState<Tab>(() => isAdmin() ? 'adm-overview' : 'overview');
+  const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+  const [adminToast, setAdminToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  const [tab, setTab] = useState<Tab>('overview');
+  const showAdminToast = useCallback(
+    (msg: string, type: 'success' | 'error') => setAdminToast({ msg, type }),
+    [],
+  );
+
+  const loadAdminStats = useCallback(async () => {
+    if (!isAdmin()) return;
+    const res = await getAdminStats();
+    setAdminStats(res.success && res.data ? res.data : null);
+  }, []);
+
+  // Statistika yalnız admin bölməsi açılanda çəkilir — adi istifadəçi
+  // kabinetə girəndə lazımsız (və onsuz da 403 alacaq) sorğu getmir.
+  useEffect(() => {
+    if (!isAdminUser || !ADMIN_TABS.includes(tab)) return;
+
+    let cancelled = false;
+    void getAdminStats().then((res) => {
+      if (!cancelled) {
+        setAdminStats(res.success && res.data ? res.data : null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, isAdminUser]);
   const [editMode, setEditMode] = useState(false);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
   const [studentId, setStudentId] = useState('');
   const [studentOverview, setStudentOverview] = useState<StudentOverviewResponse | null>(null);
+
+  // Kabinetin BÜTÜN göstəriciləri buradan gəlir.
+  const [myOverview, setMyOverview] = useState<StudentOverviewResponse | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [studentLoading, setStudentLoading] = useState(false);
   const [studentError, setStudentError] = useState('');
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassResponse[]>([]);
@@ -56,10 +118,10 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   const [classError, setClassError] = useState('');
   const [classMsg, setClassMsg] = useState('');
   const [form, setForm] = useState({
-    firstName: cachedUser.firstName ?? '',
-    lastName: cachedUser.lastName ?? '',
-    nickname: cachedUser.nickname ?? '',
-    gender: genderLabel(cachedUser.gender),
+    firstName: '',
+    lastName: '',
+    nickname: '',
+    gender: '',
   });
 
   // ── API-dən canlı profil çək ──────────────────────────────────
@@ -75,7 +137,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             nickname: res.data.nickname,
             gender: genderLabel(res.data.gender),
           });
-          if (res.data.roles.includes('Teacher')) {
+          if (!isAdminUser && res.data.roles.includes('Teacher')) {
             setClassLoading(true);
             const classesRes = await getTeacherClasses();
             if (classesRes.success && classesRes.data) {
@@ -88,7 +150,9 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             setClassLoading(false);
           }
         } else {
-          setApiError('Profil yüklənə bilmədi.');
+          // Serverin əsl mesajı göstərilir. Ümumi "yüklənə bilmədi" mətni səbəbi gizlədir:
+          // 401 (sessiya köhnəlib), 403 (səlahiyyət) və 500 eyni görünürdü.
+          setApiError(res.errors?.[0] || res.message || 'Profil yüklənə bilmədi.');
         }
       } catch {
         setApiError('Serverə qoşulmaq mümkün olmadı.');
@@ -97,14 +161,27 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
       }
     };
     fetchProfile();
-  }, []);
+  }, [isAdminUser]);
 
-  const realNickname = profile?.nickname ?? cachedUser.nickname ?? 'İstifadəçi';
+  const realNickname = profile?.nickname ?? 'İstifadəçi';
   const realJoinDate = profile?.joinDate
     ? new Date(profile.joinDate).toLocaleDateString('az-AZ')
     : '-';
-  const realRoles: string[] = profile?.roles ?? cachedUser.roles ?? ['User'];
-  const isTeacher = realRoles.includes('Teacher');
+  const realRoles: string[] = profile?.roles ?? ['User'];
+  const isTeacher = !isAdminUser && realRoles.includes('Teacher');
+
+  // ── Rol keçidi üçün törəmə dəyərlər ──────────────────────────
+  // Yalnız İstifadəçi ⇄ Müəllim keçidi var. Admin bu kartı ümumiyyətlə görmür:
+  // server admin hesabının rol keçidini rədd edir, ona görə düymə də göstərilmir.
+  const currentRole: SwitchableRole = realRoles.includes('Teacher') ? 'Teacher' : 'User';
+  const targetRole: SwitchableRole = currentRole === 'Teacher' ? 'User' : 'Teacher';
+  const ROLE_LABELS: Record<SwitchableRole, string> = { User: 'İstifadəçi', Teacher: 'Müəllim' };
+
+  // Müəllim → tələbə keçidini server sinif varsa bloklayır (BOŞ sinif də sayılır).
+  // Şərti burada eyni məntiqlə təkrarlayırıq ki, istifadəçi düyməni basmadan
+  // nəyin lazım olduğunu görsün — yekun qərar yenə serverindir.
+  const blockingClasses: TeacherClassResponse[] = currentRole === 'Teacher' ? teacherClasses : [];
+  const roleSwitchBlocked = blockingClasses.length > 0;
 
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
 
@@ -116,6 +193,18 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   const [securityMsg, setSecurityMsg] = useState('');
   const [securityError, setSecurityError] = useState('');
   const [userIdCopied, setUserIdCopied] = useState(false);
+
+  // ── Rol keçidi (tələbə ⇄ müəllim) ────────────────────────────
+  // roleConfirm: təsdiq addımı. Rol keçidi sessiyanı bağlayır, ona görə
+  // tək kliklə icra olunmur — istifadəçi nəticəni bilərək təsdiqləyir.
+  const [roleConfirm, setRoleConfirm] = useState(false);
+  const [roleSwitching, setRoleSwitching] = useState(false);
+  const [roleMsg, setRoleMsg] = useState('');
+  const [roleError, setRoleError] = useState('');
+  const [deletingClassId, setDeletingClassId] = useState<number | null>(null);
+  // Silmə birbaşa icra olunmur: əvvəlcə hansı sinfin silinəcəyi adı və tələbə sayı ilə
+  // təsdiqlədilir. Sinif silinməsi geri qaytarıla bilməyən əməliyyatdır.
+  const [classPendingDelete, setClassPendingDelete] = useState<TeacherClassResponse | null>(null);
 
   const handleSave = async () => {
     setSaving(true); setSaveMsg(''); setSaveError('');
@@ -130,7 +219,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
           nickname: res.data.nickname,
           gender: genderLabel(res.data.gender),
         });
-        setSaveMsg('✅ Profil uğurla yeniləndi!');
+        setSaveMsg('Profil uğurla yeniləndi.');
         setEditMode(false);
       } else {
         setSaveError(res.errors?.[0] || res.message || 'Xəta baş verdi.');
@@ -173,9 +262,108 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
     }
   };
 
-  const totalSolved = categoryProgress.reduce((s, c) => s + c.solved, 0);
-  const totalQ = categoryProgress.reduce((s, c) => s + c.total, 0);
-  const overallPct = Math.round((totalSolved / totalQ) * 100);
+  // Sinifi silir. Müəllim → tələbə keçidi üçün server bütün siniflərin
+  // silinməsini tələb edir, ona görə silmə düyməsi burada, keçid kartının içindədir.
+  const handleDeleteClass = async (classId: number) => {
+    setRoleError('');
+    setRoleMsg('');
+    setDeletingClassId(classId);
+    try {
+      const res = await deleteTeacherClass(classId);
+      if (res.success) {
+        // Yeni siyahı əvvəlcə hesablanır: setState updater-inin içindən başqa
+        // setState çağırmaq StrictMode-da ikiqat icra olunan anti-pattern-dir.
+        const next = teacherClasses.filter(item => item.id !== classId);
+        setTeacherClasses(next);
+        // Silinən sinif seçili idisə, seçimi boşda qoymuruq.
+        setSelectedClassId(current => (current === classId ? next[0]?.id ?? null : current));
+        setRoleMsg('Sinif silindi.');
+        setClassPendingDelete(null);
+      } else {
+        setRoleError(res.errors?.[0] || res.message || 'Sinif silinmədi.');
+        setClassPendingDelete(null);
+      }
+    } catch {
+      setRoleError('Serverlə əlaqə yaradıla bilmədi.');
+      setClassPendingDelete(null);
+    } finally {
+      setDeletingClassId(null);
+    }
+  };
+
+  // Rol keçidi. Server uğur halında SecurityStamp-i yeniləyir və refresh token-i silir —
+  // yəni cari access token növbəti sorğuda etibarsızdır. Ona görə burada mütləq
+  // logout edilir: əks halda istifadəçi köhnə rolla "yarı-işləyən" kabinetdə qalar.
+  const handleChangeRole = async () => {
+    setRoleSwitching(true);
+    setRoleError('');
+    setRoleMsg('');
+    try {
+      const res = await changeRole(targetRole);
+      if (res.success) {
+        setRoleConfirm(false);
+        setRoleMsg(res.message || 'Rol dəyişdirildi. Yenidən daxil olun.');
+        // Mesaj oxunsun deyə qısa fasilə, sonra sessiya bağlanır.
+        setTimeout(() => onLogout(), 2200);
+      } else {
+        setRoleError(res.errors?.[0] || res.message || 'Rol dəyişdirilmədi.');
+      }
+    } catch {
+      setRoleError('Serverlə əlaqə yaradıla bilmədi.');
+    } finally {
+      setRoleSwitching(false);
+    }
+  };
+
+  // Öz göstəricilərini çək — ID serverdə token-dən götürülür.
+  useEffect(() => {
+    let cancelled = false;
+    getMyOverview()
+      .then(res => { if (!cancelled) setMyOverview(res.success && res.data ? res.data : null); })
+      .finally(() => { if (!cancelled) setOverviewLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Sahə irəliləyişi — real dataya bağlıdır.
+  const categoryProgress = useMemo(
+    () => (myOverview?.progressAreas ?? []).map((area, i) => ({
+      id: `area-${i}`,
+      label: area.area,
+      solved: area.solved,
+      total: area.total,
+      pct: area.total > 0 ? Math.round((area.solved / area.total) * 100) : 0,
+      lastActive: relativeTime(area.lastActivity),
+      lastActivityIso: area.lastActivity,
+    })),
+    [myOverview],
+  );
+
+  const recentSessions = useMemo(
+    () => (myOverview?.examSessions ?? []).map(s => ({
+      id: s.id,
+      title: s.title,
+      date: formatDate(s.date),
+      score: s.score,
+      total: s.maxScore,
+      percentage: s.percentage,
+      // Backend imtahan müddətini saxlamır (sessiya anlayışı yoxdur) — onun yerinə
+      // həmin sahədə cavablanan sual sayı göstərilir.
+      questionCount: s.maxScore,
+      status: s.status,
+    })),
+    [myOverview],
+  );
+
+  // Son fəaliyyət: sahələr son fəallıq tarixinə görə (yalnız real tarixlər).
+  const recentActivity = useMemo(
+    () => categoryProgress
+      .filter(a => a.lastActivityIso)
+      .sort((a, b) => new Date(b.lastActivityIso!).getTime() - new Date(a.lastActivityIso!).getTime())
+      .slice(0, 5),
+    [categoryProgress],
+  );
+
+  const overallPct = myOverview?.summary.overallProgress ?? 0;
   const selectedClass = teacherClasses.find(item => item.id === selectedClassId) ?? teacherClasses[0] ?? null;
 
   const handleCreateClass = async (e: React.FormEvent) => {
@@ -259,541 +447,440 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
     }
   };
 
+  // ── Yan panel ────────────────────────────────────────────────
+  const navItems = isAdminUser
+    ? [
+        { id: 'adm-overview' as Tab, label: 'Admin · İcmal', icon: <Shield size={16} /> },
+        { id: 'adm-courses' as Tab, label: 'Admin · Təlimlər', icon: <BookOpen size={16} /> },
+        { id: 'adm-users' as Tab, label: 'Admin · İstifadəçilər', icon: <Users size={16} /> },
+        { id: 'adm-exams' as Tab, label: 'Admin · İmtahanlar', icon: <ClipboardList size={16} /> },
+      ]
+    : [
+        { id: 'overview' as Tab, label: 'Ümumi Baxış', icon: <Home size={16} /> },
+        { id: 'progress' as Tab, label: 'İrəliləyiş', icon: <TrendingUp size={16} /> },
+        { id: 'sessions' as Tab, label: 'İmtahanlarım', icon: <ClipboardList size={16} /> },
+        ...(isTeacher ? [{ id: 'students' as Tab, label: 'Tələbələr', icon: <Users size={16} /> }] : []),
+        { id: 'profile' as Tab, label: 'Profil', icon: <User size={16} /> },
+      ];
+
+  const roleBadge = (role: string) => ROLE_BADGES[role] ?? { label: role, tone: 'neutral' as const };
+  const primaryRole = isAdminUser ? 'Admin' : currentRole;
+
+  const sidebar = (
+    <Sidebar
+      title={isAdminUser ? 'İdarəetmə paneli' : 'Kabinet'}
+      ariaLabel="Kabinet bölmələri"
+      items={navItems}
+      value={tab}
+      onSelect={setTab}
+      idPrefix="ud-nav"
+      header={
+        <div className="sidebar__user">
+          <span className="avatar avatar--brand" aria-hidden="true">{realNickname.slice(0, 2)}</span>
+          <span className="sidebar__user-text">
+            <span className="sidebar__user-name">{realNickname}</span>
+            <span className="sidebar__user-role">{roleBadge(primaryRole).label}</span>
+          </span>
+        </div>
+      }
+      footer={
+        <>
+          <div className="sidebar__footer">
+            <button type="button" className="sidebar__item" onClick={onGoHome}><span className="sidebar__icon"><Home size={16} /></span><span className="sidebar__text"><span className="sidebar__label">Ana səhifə</span></span></button>
+            <button type="button" className="sidebar__item" onClick={onLogout}><span className="sidebar__icon"><LogOut size={16} /></span><span className="sidebar__text"><span className="sidebar__label">Çıxış</span></span></button>
+          </div>
+          <SidebarPromo onClick={onGoHome} />
+        </>
+      }
+    />
+  );
+
   // API cavab verməyənə qədər loading göstər
   if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px', background: 'var(--bg-primary)' }}>
-      <Loader size={40} color="var(--brand-primary)" style={{ animation: 'spin 1s linear infinite' }} />
-      <p style={{ color: 'var(--text-muted)' }}>Profil yüklənir...</p>
-    </div>
+    <div className="ud-fullstate"><LoadingState text="Profil yüklənir..." /></div>
   );
 
   if (apiError) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: '16px', background: 'var(--bg-primary)' }}>
-      <p style={{ color: '#ef4444', fontSize: '1.1rem' }}>⚠️ {apiError}</p>
-      <button className="ud-btn-primary" onClick={onGoHome}>Ana Səhifəyə Qayıt</button>
+    <div className="ud-fullstate">
+      <ErrorState title="Kabinet açılmadı" text={apiError} />
+      <Button variant="primary" onClick={onGoHome}><Home size={15} /> Ana səhifəyə qayıt</Button>
     </div>
   );
 
-  return (
-    <div className="ud-wrapper">
-      {/* ── Sidebar ── */}
-      <aside className="ud-sidebar">
-        <div className="ud-sidebar-top">
-          <div className="ud-avatar">{realNickname.slice(0, 2).toUpperCase()}</div>
-          <div className="ud-sidebar-name" style={{ color: 'var(--brand-primary)' }}>{realNickname}</div>
-          <div className="ud-sidebar-email">İstifadəçi Kabinetim</div>
+  // Statistika blokları (real sahələr: examsTaken, averageScore, bestScore, totalPoints)
+  const summaryStats = (summary: StudentOverviewResponse['summary']) => (
+    <div className="stat-grid">
+      <StatCard icon={<Trophy size={18} />} tone="brand" value={summary.totalPoints.toLocaleString('az-AZ')} label="Toplam xal" />
+      <StatCard icon={<ClipboardList size={18} />} tone="info" value={summary.examsTaken} label="İmtahan sayı" />
+      <StatCard icon={<BarChart2 size={18} />} tone="success" value={`${summary.averageScore}%`} label="Orta nəticə" />
+      <StatCard icon={<Star size={18} />} tone="warning" value={`${summary.bestScore}%`} label="Ən yaxşı nəticə" />
+    </div>
+  );
+
+  const progressRows = (areas: { area: string; solved: number; total: number; percentage: number }[]) => (
+    <div className="ud-progress-list">
+      {areas.map(area => (
+        <div key={area.area} className="ud-prog-row">
+          <span className="ud-prog-icon" aria-hidden="true"><Layers size={15} /></span>
+          <div className="ud-prog-info">
+            <div className="ud-prog-top"><span className="ud-prog-label">{area.area}</span><span className="ud-prog-count">{area.solved}/{area.total}</span></div>
+            <ProgressBar value={area.percentage} label={`${area.area}: ${area.percentage}%`} size="sm" showValue />
+          </div>
         </div>
+      ))}
+    </div>
+  );
 
-        <nav className="ud-nav">
-          {([
-            ['overview', 'Ümumi Baxış', <TrendingUp size={16} />],
-            ['progress', 'İrəliləyiş', <Target size={16} />],
-            ['sessions', 'İmtahanlarım', <ClipboardList size={16} />],
-            ...(isTeacher ? [['students', 'Tələbələr', <Users size={16} />] as [Tab, string, React.ReactNode]] : []),
-            ['profile', 'Profil', <User size={16} />],
-          ] as [Tab, string, React.ReactNode][]).map(([t, label, icon]) => (
-            <button
-              key={t}
-              className={`ud-nav-btn ${tab === t ? 'active' : ''}`}
-              onClick={() => setTab(t)}
-            >
-              {icon} {label}
-              {tab === t && <ChevronRight size={14} className="ud-nav-arrow" />}
-            </button>
+  const sessionsTable = (rows: { id: string; title: string; date: string; questionCount?: number; score: number; total: number; percentage: number; status: string }[], showCount: boolean) => (
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Sessiya</th>
+            <th>Tarix</th>
+            {showCount && <th className="is-num">Sual sayı</th>}
+            <th className="is-num">Xal</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(s => (
+            <tr key={s.id}>
+              <td className="cell-main">{s.title}</td>
+              <td className="cell-muted">{s.date}</td>
+              {showCount && <td className="is-num cell-muted">{s.questionCount}</td>}
+              <td className="is-num"><strong>{s.score}/{s.total}</strong> <Badge tone={scoreTone(s.percentage)}>{s.percentage}%</Badge></td>
+              <td><Badge tone="success"><CheckCircle size={12} /> {s.status}</Badge></td>
+            </tr>
           ))}
-        </nav>
+        </tbody>
+      </table>
+    </div>
+  );
 
-        <button className="ud-logout-btn" onClick={onGoHome} style={{ marginBottom: '8px', background: 'rgba(255,255,255,0.05)' }}>
-          <Home size={15} /> Ana Səhifə
-        </button>
-        <button className="ud-logout-btn" onClick={onLogout}>
-          <LogOut size={15} /> Çıxış
-        </button>
-      </aside>
-
-      {/* ── Main Content ── */}
-      <main className="ud-main">
-
-        {/* ═══ OVERVIEW ═══ */}
-        {tab === 'overview' && (
-          <div className="ud-section ud-overview">
-            <div className="ud-section-header">
-              <h1 className="ud-page-title">
-                Xoş gəldiniz, <span>{realNickname}!</span>
-              </h1>
-              <p className="ud-page-sub">Bugünkü öyrənmə statistikanız</p>
-            </div>
-
-            {/* Stats */}
-            <div className="ud-stats-grid">
-              {[
-                { icon: <CheckCircle size={20} />, color: '#00e5a0', label: 'Həll edilən sual', value: totalSolved },
-                { icon: <Target size={20} />, color: '#3b82f6', label: 'Ümumi irəliləyiş', value: `${overallPct}%` },
-                { icon: <ClipboardList size={20} />, color: '#f5a623', label: 'Keçirilən imtahan', value: recentSessions.length },
-                { icon: <Star size={20} />, color: '#a855f7', label: 'Ortalama xal', value: '72%' },
-              ].map((s, i) => (
-                <div key={i} className="ud-stat-card" style={{ '--s-clr': s.color } as React.CSSProperties}>
-                  <div className="ud-stat-icon">{s.icon}</div>
-                  <div className="ud-stat-val">{s.value}</div>
-                  <div className="ud-stat-label">{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Qısa kateqoriya baxışı */}
-            <div className="ud-card">
-              <div className="ud-card-title">📊 Sahə üzrə irəliləyiş</div>
-              <div className="ud-progress-list">
-                {categoryProgress.map(cat => {
-                  const pct = Math.round((cat.solved / cat.total) * 100);
-                  return (
-                    <div key={cat.id} className="ud-prog-row" style={{ '--c-clr': cat.color } as React.CSSProperties}>
-                      <span className="ud-prog-icon">{cat.icon}</span>
-                      <div className="ud-prog-info">
-                        <div className="ud-prog-label">{cat.label}</div>
-                        <div className="ud-prog-bar-wrap">
-                          <div className="ud-prog-bar">
-                            <div className="ud-prog-fill" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="ud-prog-pct">{pct}%</span>
-                        </div>
-                      </div>
-                      <span className="ud-prog-count">{cat.solved}/{cat.total}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Son imtahan */}
-            <div className="ud-card">
-              <div className="ud-card-title">📝 Son imtahan sessiyaları</div>
-              {recentSessions.slice(0, 2).map(s => (
-                <div key={s.id} className="ud-session-row">
-                  <div className="ud-session-info">
-                    <div className="ud-session-title">{s.title}</div>
-                    <div className="ud-session-meta"><Clock size={11} /> {s.duration} · {s.date}</div>
-                  </div>
-                  <div className="ud-session-score" style={{ color: s.score >= 70 ? '#00e5a0' : s.score >= 50 ? '#f5a623' : '#ef4444' }}>
-                    {s.score}/{s.total}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+  // ── Ümumi baxış üçün sağ sütun ──────────────────────────────
+  const overviewRail = (
+    <>
+      <Card padded="sm">
+        <CardHead icon={<Activity size={15} />} title="Son fəaliyyət" />
+        {overviewLoading ? <LoadingState compact text="Yüklənir..." /> : recentActivity.length === 0 ? (
+          <p className="note">Hələ fəaliyyət qeydə alınmayıb.</p>
+        ) : (
+          <ul className="ud-activity">
+            {recentActivity.map(a => (
+              <li key={a.id}>
+                <span className="ud-activity__dot" aria-hidden="true" />
+                <span className="ud-activity__body">
+                  <span className="ud-activity__title">{a.label}</span>
+                  <span className="ud-activity__meta">{a.solved}/{a.total} sual · {a.lastActive}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
+      </Card>
+      <Card padded="sm">
+        <CardHead icon={<User size={15} />} title="Hesab" />
+        <dl className="ud-kv">
+          <div><dt>Rol</dt><dd>{realRoles.map(r => <Badge key={r} tone={roleBadge(r).tone}>{roleBadge(r).label}</Badge>)}</dd></div>
+          <div><dt>Qeydiyyat</dt><dd>{realJoinDate}</dd></div>
+          {profile?.email && <div><dt>E-poçt</dt><dd className="ud-kv__email">{profile.email}</dd></div>}
+        </dl>
+        <Button variant="outline" size="sm" block onClick={() => setTab('profile')}>Profilə keç <ChevronRight size={14} /></Button>
+      </Card>
+    </>
+  );
 
-        {/* ═══ PROGRESS ═══ */}
-        {tab === 'progress' && (
-          <div className="ud-section">
-            <div className="ud-section-header">
-              <h2 className="ud-page-title">Sahə üzrə <span>İrəliləyiş</span></h2>
-              <p className="ud-page-sub">Hər kateqoriyada nə qədər irəlilədiniz</p>
-            </div>
+  return (
+    <DashboardShell sidebar={sidebar} sidebarLabel="Kabinet" rail={!isAdminUser && tab === 'overview' ? overviewRail : undefined}>
 
-            <div className="ud-progress-cards">
-              {categoryProgress.map(cat => {
-                const pct = Math.round((cat.solved / cat.total) * 100);
-                return (
-                  <div key={cat.id} className="ud-prog-card" style={{ '--c-clr': cat.color } as React.CSSProperties}>
-                    <div className="ud-prog-card-top">
-                      <div className="ud-prog-card-icon">{cat.icon}</div>
-                      <div>
-                        <div className="ud-prog-card-label">{cat.label}</div>
-                        <div className="ud-prog-card-meta">Son fəallıq: {cat.lastActive}</div>
-                      </div>
-                      <div className="ud-prog-card-pct">{pct}%</div>
-                    </div>
-                    <div className="ud-prog-bar-wrap" style={{ marginTop: 'var(--sp-4)' }}>
-                      <div className="ud-prog-bar ud-prog-bar--lg">
-                        <div className="ud-prog-fill" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                    <div className="ud-prog-card-footer">
-                      <span>{cat.solved} sual həll edildi</span>
-                      <span>{cat.total - cat.solved} sual qalıb</span>
-                    </div>
-                    <button className="ud-continue-btn" onClick={() => {/* TODO */ }}>
-                      Davam et <ChevronRight size={14} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+      {/* ═══ OVERVIEW ═══ */}
+      {!isAdminUser && tab === 'overview' && (
+        <div className="ud-section">
+          <div className="page-header">
+            <span className="kicker">Xoş gəlmisiniz,</span>
+            <h1 className="page-header__title">{realNickname}!</h1>
+            <p className="page-header__lead">Bugünkü öyrənmə səyahətinizə davam edin. Kiçik addımlar böyük nəticələr yaradır.</p>
           </div>
-        )}
 
-        {/* ═══ SESSIONS ═══ */}
-        {tab === 'sessions' && (
-          <div className="ud-section">
-            <div className="ud-section-header">
-              <h2 className="ud-page-title">İmtahan <span>Sessiyalarım</span></h2>
-              <p className="ud-page-sub">Keçirilən bütün sessiyaların nəticələri</p>
+          <Card className="ud-hero">
+            <span className="avatar avatar--lg avatar--brand" aria-hidden="true">{realNickname.slice(0, 2)}</span>
+            <div className="ud-hero__body">
+              <div className="ud-hero__top">
+                <span className="ud-hero__name">{profile?.firstName} {profile?.lastName}</span>
+                <span className="ud-hero__meta">@{realNickname} · {roleBadge(primaryRole).label}</span>
+              </div>
+              <div className="ud-hero__progress">
+                <span className="ud-hero__progress-label">Ümumi irəliləyiş</span>
+                <ProgressBar value={overallPct} label="Ümumi irəliləyiş" size="lg" showValue />
+              </div>
+              <p className="note">Davam edin! Sahə üzrə irəliləyişiniz sual bankının nə qədərini həll etdiyinizi göstərir.</p>
             </div>
+          </Card>
 
-            <div className="ud-sessions-table">
-              <div className="ud-table-head">
-                <span>Sessiya</span>
-                <span>Tarix</span>
-                <span>Müddət</span>
-                <span>Xal</span>
-                <span>Status</span>
-              </div>
-              {recentSessions.map(s => {
-                const pct = Math.round((s.score / s.total) * 100);
-                const clr = pct >= 70 ? '#00e5a0' : pct >= 50 ? '#f5a623' : '#ef4444';
-                return (
-                  <div key={s.id} className="ud-table-row">
-                    <span className="ud-table-title">{s.title}</span>
-                    <span className="ud-table-meta">{s.date}</span>
-                    <span className="ud-table-meta"><Clock size={11} /> {s.duration}</span>
-                    <span className="ud-table-score" style={{ color: clr }}>{s.score}/{s.total} ({pct}%)</span>
-                    <span className="ud-table-status" style={{ color: '#00e5a0' }}>
-                      <CheckCircle size={12} /> {s.status}
+          {overviewLoading ? <LoadingState compact text="Göstəricilər yüklənir..." /> : myOverview && summaryStats(myOverview.summary)}
+
+          <Card>
+            <CardHead icon={<TrendingUp size={15} />} title="Sahə üzrə irəliləyiş" action={<button type="button" className="card__link" onClick={() => setTab('progress')}>Hamısını gör <ChevronRight size={13} /></button>} />
+            {!overviewLoading && categoryProgress.length === 0
+              ? <EmptyState compact icon={<Target size={18} />} title="Hələ sual həll etməmisiniz" text="Biliklər bölməsindən ilk quiz-ə başlayın." action={<Button variant="outline" size="sm" onClick={onGoHome}>Biliklərə keç</Button>} />
+              : progressRows(categoryProgress.slice(0, 4).map(c => ({ area: c.label, solved: c.solved, total: c.total, percentage: c.pct })))}
+          </Card>
+
+          <Card>
+            <CardHead icon={<ClipboardList size={15} />} title="Son imtahan sessiyaları" action={<button type="button" className="card__link" onClick={() => setTab('sessions')}>Hamısını gör <ChevronRight size={13} /></button>} />
+            {!overviewLoading && recentSessions.length === 0 ? (
+              <EmptyState compact icon={<ClipboardList size={18} />} title="Hələ imtahan keçirməmisiniz" text="İlk testi həll edin — nəticələr burada görünəcək." />
+            ) : (
+              <div className="list">
+                {recentSessions.slice(0, 3).map(s => (
+                  <div key={s.id} className="list__row">
+                    <span className="list__main">
+                      <span className="list__title">{s.title}</span>
+                      <span className="list__meta"><Clock size={11} /> {s.questionCount} sual · {s.date}</span>
                     </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ═══ PROFILE ═══ */}
-        {tab === 'students' && isTeacher && (
-          <div className="ud-section">
-            <div className="ud-section-header">
-              <h2 className="ud-page-title">Sinif <span>Izleme</span></h2>
-              <p className="ud-page-sub">Sinif açın, tələbə ID-si ilə şagird əlavə edin və göstəricilərini izləyin</p>
-            </div>
-
-            <div className="ud-card ud-class-manager-card">
-              <div className="ud-card-title"><School size={15} /> Sinif idarəetməsi</div>
-              <div className="ud-class-manager-grid">
-                <form className="ud-student-search" onSubmit={handleCreateClass}>
-                  <div className="form-field">
-                    <label htmlFor="class-name"><School size={12} /> Yeni sinif adı</label>
-                    <input
-                      id="class-name"
-                      type="text"
-                      placeholder="Məsələn: Kiber təhlükəsizlik 101"
-                      value={className}
-                      onChange={e => setClassName(e.target.value)}
-                    />
-                  </div>
-                  <button className="ud-btn-primary" type="submit" disabled={classLoading}>
-                    {classLoading ? <Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Plus size={15} />}
-                    Sinif aç
-                  </button>
-                </form>
-
-                <form className="ud-student-search" onSubmit={handleAddStudentToClass}>
-                  <div className="form-field">
-                    <label htmlFor="student-id-search"><User size={12} /> Tələbə ID-si</label>
-                    <input
-                      id="student-id-search"
-                      type="text"
-                      placeholder="Məsələn: 7f3c..."
-                      value={studentId}
-                      onChange={e => setStudentId(e.target.value)}
-                      disabled={!selectedClass}
-                    />
-                  </div>
-                  <button className="ud-btn-primary" type="submit" disabled={studentLoading || !selectedClass}>
-                    {studentLoading ? <Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <UserPlus size={15} />}
-                    Əlavə et
-                  </button>
-                </form>
-              </div>
-
-              <div className="ud-class-list">
-                {classLoading && teacherClasses.length === 0 && <p className="ud-helper-text">Siniflər yüklənir...</p>}
-                {!classLoading && teacherClasses.length === 0 && <p className="ud-helper-text">Hələ sinif yoxdur. İlk sinfi açaraq tələbələri ora əlavə edin.</p>}
-                {teacherClasses.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`ud-class-item ${selectedClass?.id === item.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setSelectedClassId(item.id);
-                      setStudentOverview(null);
-                      setStudentError('');
-                    }}
-                  >
-                    <span>{item.name}</span>
-                    <small>{item.studentCount} tələbə</small>
-                  </button>
-                ))}
-              </div>
-
-                <p className="ud-helper-text">
-                  {selectedClass
-                    ? `"${selectedClass.name}" sinfinə əlavə edilən tələbələr aşağıda izlənəcək.`
-                    : 'Tələbə əlavə etmək üçün əvvəl sinif seçin.'}
-                </p>
-                {classMsg && <p className="ud-inline-success">{classMsg}</p>}
-                {classError && <p className="ud-inline-error">{classError}</p>}
-                {studentError && <p className="ud-inline-error">{studentError}</p>}
-              </div>
-
-            {selectedClass && (
-              <div className="ud-sessions-table ud-class-students-table">
-                <div className="ud-table-head">
-                  <span>Tələbə</span>
-                  <span>Ortalama</span>
-                  <span>İmtahan</span>
-                  <span>İrəliləyiş</span>
-                  <span>Baxış</span>
-                </div>
-                {selectedClass.students.length === 0 ? (
-                  <div className="ud-empty-row">Bu sinifdə hələ tələbə yoxdur.</div>
-                ) : selectedClass.students.map(student => (
-                  <div key={student.id} className="ud-table-row">
-                    <span className="ud-table-title">
-                      {student.firstName} {student.lastName}
-                      <small>@{student.nickname}</small>
-                    </span>
-                    <span className="ud-table-score">{student.summary.averageScore}%</span>
-                    <span className="ud-table-meta">{student.summary.examsTaken}</span>
-                    <span className="ud-table-score" style={{ color: student.summary.overallProgress >= 70 ? '#00e5a0' : student.summary.overallProgress >= 50 ? '#f5a623' : '#ef4444' }}>
-                      {student.summary.overallProgress}%
-                    </span>
-                    <span>
-                      <button className="ud-icon-btn" type="button" onClick={() => handleViewStudent(student.id)} disabled={studentLoading}>
-                        <Eye size={15} />
-                      </button>
-                    </span>
+                    <span className="list__end"><strong className="text-1">{s.score}/{s.total}</strong><Badge tone={scoreTone(s.percentage)}>{s.percentage}%</Badge></span>
                   </div>
                 ))}
               </div>
             )}
+          </Card>
+        </div>
+      )}
 
-            {studentOverview && (
-              <div className="ud-student-panel">
-                <div className="ud-student-head">
-                  <div className="ud-avatar">{studentOverview.nickname.slice(0, 2).toUpperCase()}</div>
-                  <div>
-                    <h3>{studentOverview.firstName} {studentOverview.lastName}</h3>
-                    <p>@{studentOverview.nickname}</p>
-                    <code>{studentOverview.id}</code>
-                  </div>
-                </div>
-
-                <div className="ud-stats-grid">
-                  {[
-                    { icon: <ClipboardList size={20} />, color: '#f5a623', label: 'İmtahan sayı', value: studentOverview.summary.examsTaken },
-                    { icon: <Target size={20} />, color: '#3b82f6', label: 'Ortalama xal', value: `${studentOverview.summary.averageScore}%` },
-                    { icon: <Star size={20} />, color: '#a855f7', label: 'Ən yaxşı nəticə', value: `${studentOverview.summary.bestScore}%` },
-                    { icon: <CheckCircle size={20} />, color: '#00e5a0', label: 'Ümumi irəliləyiş', value: `${studentOverview.summary.overallProgress}%` },
-                  ].map((s, i) => (
-                    <div key={i} className="ud-stat-card" style={{ '--s-clr': s.color } as React.CSSProperties}>
-                      <div className="ud-stat-icon">{s.icon}</div>
-                      <div className="ud-stat-val">{s.value}</div>
-                      <div className="ud-stat-label">{s.label}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="ud-card">
-                  <div className="ud-card-title">Sahə üzrə göstəricilər</div>
-                  <div className="ud-progress-list">
-                    {studentOverview.progressAreas.map(area => (
-                      <div key={area.area} className="ud-prog-row" style={{ '--c-clr': '#00d4ff' } as React.CSSProperties}>
-                        <span className="ud-prog-icon"><BookOpen size={16} /></span>
-                        <div className="ud-prog-info">
-                          <div className="ud-prog-label">{area.area}</div>
-                          <div className="ud-prog-bar-wrap">
-                            <div className="ud-prog-bar">
-                              <div className="ud-prog-fill" style={{ width: `${area.percentage}%` }} />
-                            </div>
-                            <span className="ud-prog-pct">{area.percentage}%</span>
-                          </div>
-                        </div>
-                        <span className="ud-prog-count">{area.solved}/{area.total}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="ud-sessions-table">
-                  <div className="ud-table-head">
-                    <span>Sessiya</span>
-                    <span>Tarix</span>
-                    <span>Xal</span>
-                    <span>Faiz</span>
-                    <span>Status</span>
-                  </div>
-                  {studentOverview.examSessions.map(session => (
-                    <div key={session.id} className="ud-table-row">
-                      <span className="ud-table-title">{session.title}</span>
-                      <span className="ud-table-meta">{new Date(session.date).toLocaleDateString('az-AZ')}</span>
-                      <span className="ud-table-score">{session.score}/{session.maxScore}</span>
-                      <span className="ud-table-score" style={{ color: session.percentage >= 70 ? '#00e5a0' : session.percentage >= 50 ? '#f5a623' : '#ef4444' }}>{session.percentage}%</span>
-                      <span className="ud-table-status" style={{ color: '#00e5a0' }}><CheckCircle size={12} /> {session.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+      {/* ═══ PROGRESS ═══ */}
+      {!isAdminUser && tab === 'progress' && (
+        <div className="ud-section">
+          <div className="page-header">
+            <span className="kicker">İrəliləyiş</span>
+            <h1 className="page-header__title">Sahə üzrə irəliləyiş</h1>
+            <p className="page-header__lead">Hər kateqoriyada nə qədər irəlilədiniz və son fəallığınız.</p>
           </div>
-        )}
 
+          {overviewLoading && <LoadingState compact text="Yüklənir..." />}
+          {!overviewLoading && categoryProgress.length === 0 && (
+            <Card><EmptyState icon={<Target size={20} />} title="Hələ heç bir sual həll etməmisiniz" text="Quiz bölməsindən başlayın — irəliləyiş burada görünəcək." action={<Button variant="primary" onClick={onGoHome}>Biliklərə keç</Button>} /></Card>
+          )}
 
-        {tab === 'profile' && (
-          <div className="ud-section">
-            <div className="ud-section-header">
-              <h2 className="ud-page-title">Mənim <span>Profilim</span></h2>
-              <p className="ud-page-sub">Şəxsi məlumatlarınızı idarə edin</p>
+          <div className="ud-progress-cards">
+            {categoryProgress.map(cat => (
+              <Card key={cat.id} className="ud-prog-card">
+                <div className="ud-prog-card__top">
+                  <span className="ud-prog-icon" aria-hidden="true"><Layers size={16} /></span>
+                  <div className="ud-prog-card__text">
+                    <span className="ud-prog-card__label">{cat.label}</span>
+                    <span className="ud-prog-card__meta"><Calendar size={11} /> Son fəallıq: {cat.lastActive}</span>
+                  </div>
+                  <span className="ud-prog-card__pct">{cat.pct}%</span>
+                </div>
+                <ProgressBar value={cat.pct} label={`${cat.label}: ${cat.pct}%`} />
+                <div className="ud-prog-card__footer">
+                  <span>{cat.solved} sual həll edildi</span>
+                  <span>{cat.total - cat.solved} sual qalıb</span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SESSIONS ═══ */}
+      {!isAdminUser && tab === 'sessions' && (
+        <div className="ud-section">
+          <div className="page-header">
+            <span className="kicker">İmtahanlarım</span>
+            <h1 className="page-header__title">İmtahan sessiyalarım</h1>
+            <p className="page-header__lead">Keçirilən bütün sessiyaların nəticələri.</p>
+          </div>
+          <Card padded={false}>
+            {overviewLoading && <LoadingState compact text="Yüklənir..." />}
+            {!overviewLoading && recentSessions.length === 0 && <EmptyState icon={<ClipboardList size={20} />} title="Nəticə yoxdur" text="İmtahan keçirdikdən sonra nəticələr burada görünəcək." />}
+            {!overviewLoading && recentSessions.length > 0 && sessionsTable(recentSessions, true)}
+          </Card>
+        </div>
+      )}
+
+      {/* ═══ STUDENTS (Teacher) ═══ */}
+      {!isAdminUser && tab === 'students' && isTeacher && (
+        <div className="ud-section">
+          <div className="page-header">
+            <span className="kicker">Tələbələr</span>
+            <h1 className="page-header__title">Sinif izləmə</h1>
+            <p className="page-header__lead">Sinif açın, tələbə ID-si ilə şagird əlavə edin və göstəricilərini izləyin.</p>
+          </div>
+
+          <Card>
+            <CardHead icon={<School size={15} />} title="Sinif idarəetməsi" />
+            <div className="ud-class-forms">
+              <form className="ud-inline-form" onSubmit={handleCreateClass}>
+                <FormField id="class-name" label="Yeni sinif adı" icon={<School size={13} />}>
+                  <input id="class-name" className="input" type="text" placeholder="Məsələn: Kiber təhlükəsizlik 101" value={className} onChange={e => setClassName(e.target.value)} />
+                </FormField>
+                <Button type="submit" variant="primary" loading={classLoading}><Plus size={15} /> Sinif aç</Button>
+              </form>
+              <form className="ud-inline-form" onSubmit={handleAddStudentToClass}>
+                <FormField id="student-id-search" label="Tələbə ID-si" icon={<User size={13} />}>
+                  <input id="student-id-search" className="input input--mono" type="text" placeholder="Məsələn: 7f3c..." value={studentId} onChange={e => setStudentId(e.target.value)} disabled={!selectedClass} />
+                </FormField>
+                <Button type="submit" variant="primary" loading={studentLoading} disabled={!selectedClass}><UserPlus size={15} /> Əlavə et</Button>
+              </form>
             </div>
 
-            <div className="ud-profile-card">
-              {/* Avatar */}
-              <div className="ud-profile-avatar-wrap">
-                <div className="ud-avatar" style={{ fontSize: '1.4rem', fontWeight: 700 }}>
-                  {realNickname.slice(0, 2).toUpperCase()}
+            <div className="ud-class-list" role="group" aria-label="Siniflər">
+              {classLoading && teacherClasses.length === 0 && <span className="field__hint">Siniflər yüklənir...</span>}
+              {!classLoading && teacherClasses.length === 0 && <span className="field__hint">Hələ sinif yoxdur. İlk sinfi açaraq tələbələri ora əlavə edin.</span>}
+              {teacherClasses.map(item => (
+                <button key={item.id} type="button" className="segmented__btn ud-class-chip" aria-pressed={selectedClass?.id === item.id}
+                  onClick={() => { setSelectedClassId(item.id); setStudentOverview(null); setStudentError(''); }}>
+                  <School size={13} /> {item.name} <span className="ud-class-chip__count">{item.studentCount}</span>
+                </button>
+              ))}
+            </div>
+
+            <p className="field__hint">
+              {selectedClass
+                ? `"${selectedClass.name}" sinfinə əlavə edilən tələbələr aşağıda izlənəcək.`
+                : 'Tələbə əlavə etmək üçün əvvəl sinif seçin.'}
+            </p>
+            {classMsg && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{classMsg}</span></div>}
+            {classError && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{classError}</span></div>}
+            {studentError && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{studentError}</span></div>}
+          </Card>
+
+          {selectedClass && (
+            <Card padded={false}>
+              <div className="es-table-head"><h3 className="card__title" style={{ marginBottom: 0 }}><Users size={15} /> {selectedClass.name} · tələbələr</h3><span className="text-3 text-xs">{selectedClass.studentCount} tələbə</span></div>
+              {selectedClass.students.length === 0 ? (
+                <EmptyState compact icon={<Users size={18} />} title="Bu sinifdə hələ tələbə yoxdur" text="Tələbə ID-si ilə ilk şagirdi əlavə edin." />
+              ) : (
+                <div className="table-wrap">
+                  <table className="table">
+                    <thead>
+                      <tr><th>Tələbə</th><th className="is-num">Ortalama</th><th className="is-num">İmtahan</th><th>İrəliləyiş</th><th className="cell-actions">Baxış</th></tr>
+                    </thead>
+                    <tbody>
+                      {selectedClass.students.map(student => (
+                        <tr key={student.id}>
+                          <td><span className="cell-main">{student.firstName} {student.lastName}</span><span className="cell-sub">@{student.nickname}</span></td>
+                          <td className="is-num"><Badge tone={scoreTone(student.summary.averageScore)}>{student.summary.averageScore}%</Badge></td>
+                          <td className="is-num">{student.summary.examsTaken}</td>
+                          <td><div className="es-progress-cell"><ProgressBar value={student.summary.overallProgress} label={`${student.nickname}: ${student.summary.overallProgress}%`} size="sm" /><span className="cell-mono">{student.summary.overallProgress}%</span></div></td>
+                          <td className="cell-actions"><Button variant="outline" size="sm" onClick={() => handleViewStudent(student.id)} disabled={studentLoading}><Eye size={14} /> Bax</Button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {studentOverview && (
+            <Card className="ud-student-panel">
+              <div className="ud-student-head">
+                <span className="avatar avatar--lg" aria-hidden="true">{studentOverview.nickname.slice(0, 2)}</span>
+                <div className="ud-student-head__text">
+                  <h3>{studentOverview.firstName} {studentOverview.lastName}</h3>
+                  <span className="text-2 text-sm">@{studentOverview.nickname} · qeydiyyat: {formatDate(studentOverview.joinDate)}</span>
+                  <code className="code-inline">{studentOverview.id}</code>
+                </div>
+                <IconButton label="Paneli bağla" onClick={() => setStudentOverview(null)}><X size={16} /></IconButton>
+              </div>
+              {summaryStats(studentOverview.summary)}
+              <div>
+                <h4 className="ud-subtitle">Sahə üzrə göstəricilər</h4>
+                {studentOverview.progressAreas.length === 0 ? <p className="note">Hələ fəaliyyət yoxdur.</p> : progressRows(studentOverview.progressAreas)}
+              </div>
+              <div>
+                <h4 className="ud-subtitle">İmtahan sessiyaları</h4>
+                {studentOverview.examSessions.length === 0
+                  ? <p className="note">Hələ imtahan nəticəsi yoxdur.</p>
+                  : sessionsTable(studentOverview.examSessions.map(s => ({ id: s.id, title: s.title, date: formatDate(s.date), score: s.score, total: s.maxScore, percentage: s.percentage, status: s.status })), false)}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ═══ ADMIN BÖLMƏLƏRİ ═══
+          Hər biri isAdminUser ilə qapalıdır. Bu yalnız görünüş qatıdır:
+          api/admin endpoint-ləri serverdə Admin rolu tələb edir. */}
+      {isAdminUser && tab === 'adm-overview' && (
+        <div className="ud-section"><DashboardTab stats={adminStats} onRefresh={loadAdminStats} /></div>
+      )}
+      {isAdminUser && tab === 'adm-courses' && (
+        <div className="ud-section"><CoursesTab onToast={showAdminToast} /></div>
+      )}
+      {isAdminUser && tab === 'adm-users' && (
+        <div className="ud-section"><UsersTab onToast={showAdminToast} /></div>
+      )}
+      {isAdminUser && tab === 'adm-exams' && (
+        <div className="ud-section"><ExamsTab onToast={showAdminToast} /></div>
+      )}
+
+      {/* ═══ PROFILE ═══ */}
+      {!isAdminUser && tab === 'profile' && (
+        <div className="ud-section">
+          <div className="page-header">
+            <span className="kicker">Profil</span>
+            <h1 className="page-header__title">Mənim profilim</h1>
+            <p className="page-header__lead">Şəxsi məlumatlarınızı, e-poçt və şifrə təhlükəsizliyini idarə edin.</p>
+          </div>
+
+          <div className="ud-profile-grid">
+            {/* Şəxsi məlumatlar */}
+            <Card className="ud-profile-card">
+              <div className="ud-profile-identity">
+                <span className="avatar avatar--xl avatar--brand" aria-hidden="true">{realNickname.slice(0, 2)}</span>
+                <div className="ud-profile-identity__text">
+                  <span className="ud-hero__name">{profile?.firstName} {profile?.lastName}</span>
+                  <span className="text-2 text-sm">@{realNickname}</span>
+                  <div className="ud-roles">{realRoles.map(role => <Badge key={role} tone={roleBadge(role).tone}>{roleBadge(role).label}</Badge>)}</div>
                 </div>
               </div>
 
-              {/* Rol badge-ləri */}
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', margin: '0 0 var(--sp-5)' }}>
-                {realRoles.map((role: string) => {
-                  type RoleKey = 'Admin' | 'Moderator' | 'VIP' | 'Teacher' | 'User';
-                  const roleConfig: Record<RoleKey, { label: string; color: string; bg: string; icon: string }> = {
-                    Admin: { label: 'Admin', color: '#ef4444', bg: 'rgba(239,68,68,0.15)', icon: '🛡️' },
-                    Moderator: { label: 'Moderator', color: '#a855f7', bg: 'rgba(168,85,247,0.15)', icon: '🔨' },
-                    VIP: { label: 'VIP', color: '#f5a623', bg: 'rgba(245,166,35,0.15)', icon: '👑' },
-                    Teacher: { label: 'Müəllim', color: '#10b981', bg: 'rgba(16,185,129,0.15)', icon: 'T' },
-                    User: { label: 'İstifadəçi', color: '#3b82f6', bg: 'rgba(59,130,246,0.15)', icon: '👤' },
-                  };
-                  const cfg = roleConfig[role as RoleKey] || roleConfig['User'];
-                  return (
-                    <span key={role} style={{
-                      padding: '5px 16px', borderRadius: '20px', fontSize: '0.82rem',
-                      fontWeight: 600, letterSpacing: '0.04em',
-                      color: cfg.color, background: cfg.bg,
-                      border: `1px solid ${cfg.color}55`,
-                      display: 'inline-flex', alignItems: 'center', gap: '6px'
-                    }}>
-                      {cfg.icon} {cfg.label}
-                    </span>
-                  );
-                })}
+              <div className="form-grid form-grid--2">
+                <FormField id="ud-first" label="Ad" icon={<User size={13} />}>
+                  <input id="ud-first" className="input" type="text" value={form.firstName} disabled={!editMode} onChange={e => set('firstName', e.target.value)} />
+                </FormField>
+                <FormField id="ud-last" label="Soyad" icon={<User size={13} />}>
+                  <input id="ud-last" className="input" type="text" value={form.lastName} disabled={!editMode} onChange={e => set('lastName', e.target.value)} />
+                </FormField>
               </div>
-
-              {/* Fields */}
-              <div className="ud-profile-fields">
-                <div className="ud-prof-row">
-                  <div className="form-field">
-                    <label><User size={12} /> Ad</label>
-                    <input id="ud-first" type="text" value={form.firstName}
-                      disabled={!editMode}
-                      onChange={e => set('firstName', e.target.value)} />
-                  </div>
-                  <div className="form-field">
-                    <label><User size={12} /> Soyad</label>
-                    <input id="ud-last" type="text" value={form.lastName}
-                      disabled={!editMode}
-                      onChange={e => set('lastName', e.target.value)} />
-                  </div>
-                </div>
-                {/* Email */}
-                {profile?.email && (
-                  <div className="form-field">
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Mail size={12} /> E-poçt
+              <FormField id="ud-nickname" label="Ləqəb (nickname)" icon={<User size={13} />} hint="Liderlik lövhəsində yalnız bu ad görünür.">
+                <input id="ud-nickname" className="input" type="text" value={form.nickname} disabled={!editMode} onChange={e => set('nickname', e.target.value)} />
+              </FormField>
+              <div className="field">
+                <span className="field__label" id="ud-gender-label"><User size={13} /> Cins</span>
+                <div className="ud-radios" role="radiogroup" aria-labelledby="ud-gender-label">
+                  {[['Kişi', 'male'], ['Qadın', 'female']].map(([label, val]) => (
+                    <label key={val} className="choice">
+                      <input type="radio" name="ud-gender" value={val} disabled={!editMode} checked={form.gender === val} onChange={() => set('gender', val)} />
+                      <span>{label}</span>
                     </label>
-                    <input id="ud-email" type="email" value={profile.email} disabled style={{ opacity: 0.75 }} />
-                  </div>
-                )}
-                <div className="form-field">
-                  <label><Mail size={12} /> Yeni e-poçt</label>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <input id="ud-new-email" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="yeni-email@gmail.com" style={{ flex: '1 1 220px' }} />
-                    <button className="ud-btn-outline" type="button" onClick={handleEmailChange} disabled={securityLoading || !newEmail.trim()}>
-                      Təsdiq linki göndər
-                    </button>
-                  </div>
-                  <span className="ud-helper-text">Email əvvəl cari ünvandan təsdiqlənir, sonra yeni ünvana gələn linklə aktivləşir.</span>
-                </div>
-                <div className="form-field">
-                  <label><Lock size={12} /> Şifrə</label>
-                  <button className="ud-btn-outline" type="button" onClick={handlePasswordChange} disabled={securityLoading}>
-                    Şifrə yeniləmə linki göndər
-                  </button>
-                  <span className="ud-helper-text">Link təsdiqli email ünvanına göndərilir və yeni şifrə link üzərindən yazılır.</span>
-                </div>
-                {securityMsg && <p style={{ color: '#00e5a0', textAlign: 'center', margin: '10px 0', fontWeight: 500 }}>{securityMsg}</p>}
-                {securityError && <p style={{ color: '#ef4444', textAlign: 'center', margin: '10px 0' }}>{securityError}</p>}
-                <div className="form-field">
-                  <label><User size={12} /> Ləqəb (Nickname)</label>
-                  <input id="ud-nickname" type="text" value={form.nickname}
-                    disabled={!editMode}
-                    onChange={e => set('nickname', e.target.value)} />
-                </div>
-                {profile?.id && (
-                  <div className="form-field">
-                    <label><User size={12} /> {isTeacher ? 'Müəllim ID-si' : 'İstifadəçi ID-si'}</label>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <input id="ud-user-id" type="text" value={profile.id} disabled style={{ opacity: 0.75, flex: '1 1 auto' }} />
-                      <button
-                        type="button"
-                        className="ud-copy-btn"
-                        onClick={handleCopyUserId}
-                        aria-label="ID-ni kopyala"
-                        title="ID-ni kopyala"
-                      >
-                        {userIdCopied ? <Check size={14} /> : <Copy size={14} />}
-                      </button>
-                    </div>
-                    <span className="ud-helper-text">
-                      {isTeacher
-                        ? 'Bu, sizin müəllim hesabınızın unikal identifikatorudur.'
-                        : 'Bu ID-ni müəlliminizlə paylaşaraq göstəricilərinizin izlənməsinə icazə verə bilərsiniz.'}
-                    </span>
-                  </div>
-                )}
-
-                {/* Cins — Radio Button */}
-                <div className="form-field">
-                  <label style={{ marginBottom: '10px', display: 'block' }}><User size={12} /> Cins</label>
-                  <div style={{ display: 'flex', gap: '24px' }}>
-                    {[['Kişi', 'male'], ['Qadın', 'female']].map(([label, val]) => (
-                      <label key={val} style={{
-                        display: 'flex', alignItems: 'center', gap: '8px',
-                        cursor: editMode ? 'pointer' : 'default',
-                        color: form.gender === val ? 'var(--brand-primary)' : 'var(--text-muted)',
-                        fontWeight: form.gender === val ? 600 : 400,
-                        fontSize: '0.9rem', transition: 'color 0.2s',
-                      }}>
-                        <input
-                          type="radio" name="ud-gender" value={val}
-                          disabled={!editMode}
-                          checked={form.gender === val}
-                          onChange={() => set('gender', val)}
-                          style={{ accentColor: 'var(--brand-primary)', width: '16px', height: '16px' }}
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               </div>
+              {profile?.id && (
+                <FormField id="ud-user-id" label={isTeacher ? 'Müəllim ID-si' : 'İstifadəçi ID-si'} icon={<KeyRound size={13} />}
+                  hint={isTeacher ? 'Bu, sizin müəllim hesabınızın unikal identifikatorudur.' : 'Bu ID-ni müəlliminizlə paylaşaraq göstəricilərinizin izlənməsinə icazə verə bilərsiniz.'}>
+                  <div className="input-wrap">
+                    <input id="ud-user-id" className="input input--mono" type="text" value={profile.id} disabled readOnly />
+                    <button type="button" className="input-wrap__action" onClick={handleCopyUserId} aria-label="ID-ni kopyala" title="ID-ni kopyala">
+                      {userIdCopied ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </FormField>
+              )}
 
-              {/* Uğur / Xəta mesajı */}
-              {saveMsg && <p style={{ color: '#00e5a0', textAlign: 'center', margin: '10px 0', fontWeight: 500 }}>{saveMsg}</p>}
-              {saveError && <p style={{ color: '#ef4444', textAlign: 'center', margin: '10px 0' }}>{saveError}</p>}
+              {saveMsg && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{saveMsg}</span></div>}
+              {saveError && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{saveError}</span></div>}
 
-              {/* Actions */}
               <div className="ud-profile-actions">
                 {editMode ? (
                   <>
-                    <button className="ud-btn-primary" onClick={handleSave} disabled={saving}
-                      style={{ display: 'flex', alignItems: 'center', gap: '7px', opacity: saving ? 0.7 : 1 }}>
-                      {saving
-                        ? <><Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> Saxlanılır...</>
-                        : <><Save size={15} /> Yadda Saxla</>
-                      }
-                    </button>
-                    <button className="ud-btn-outline" onClick={() => {
+                    <Button variant="primary" onClick={handleSave} loading={saving}><Save size={15} /> Yadda saxla</Button>
+                    <Button variant="outline" onClick={() => {
                       setForm({
                         firstName: profile?.firstName ?? '',
                         lastName: profile?.lastName ?? '',
@@ -802,28 +889,133 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
                       });
                       setEditMode(false);
                       setSaveError('');
-                    }}>
-                      Ləğv et
-                    </button>
+                    }}>Ləğv et</Button>
                   </>
                 ) : (
-                  <button className="ud-btn-primary" onClick={() => setEditMode(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                    <Edit3 size={15} /> Məlumatları Redaktə Et
-                  </button>
+                  <Button variant="primary" onClick={() => setEditMode(true)}><Edit3 size={15} /> Məlumatları redaktə et</Button>
                 )}
               </div>
+              <p className="text-3 text-xs"><Calendar size={11} /> Qeydiyyat tarixi: {realJoinDate} · Aktiv hesab</p>
+            </Card>
 
-              {/* Meta */}
-              <div className="ud-profile-meta">
-                <span>🗓 Qeydiyyat tarixi: {realJoinDate}</span>
-                <span>·</span>
-                <span style={{ color: '#00e5a0' }}>✓ Aktiv Hesab</span>
-              </div>
+            <div className="ud-profile-side">
+              {/* E-poçt və şifrə */}
+              <Card>
+                <CardHead icon={<Lock size={15} />} title="E-poçt və təhlükəsizlik" />
+                <div className="ud-security">
+                  {profile?.email && (
+                    <FormField id="ud-email" label="Cari e-poçt" icon={<Mail size={13} />}>
+                      <input id="ud-email" className="input" type="email" value={profile.email} disabled readOnly />
+                    </FormField>
+                  )}
+                  <FormField id="ud-new-email" label="Yeni e-poçt" icon={<Mail size={13} />} hint="Dəyişiklik əvvəl cari ünvandan təsdiqlənir, sonra yeni ünvana gələn linklə aktivləşir.">
+                    <div className="ud-inline-row">
+                      <input id="ud-new-email" className="input" type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="yeni-email@gmail.com" />
+                      <Button variant="outline" onClick={handleEmailChange} disabled={securityLoading || !newEmail.trim()}>Təsdiq linki göndər</Button>
+                    </div>
+                  </FormField>
+                  <div className="field">
+                    <span className="field__label"><Lock size={13} /> Şifrə</span>
+                    <Button variant="outline" onClick={handlePasswordChange} disabled={securityLoading}>Şifrə yeniləmə linki göndər</Button>
+                    <span className="field__hint">Link təsdiqli e-poçt ünvanına göndərilir və yeni şifrə link üzərindən yazılır.</span>
+                  </div>
+                  {securityMsg && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{securityMsg}</span></div>}
+                  {securityError && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{securityError}</span></div>}
+                </div>
+              </Card>
+
+              {/* ── Hesab tipi (rol keçidi) ─────────────────────────────
+                  Yalnız İstifadəçi ⇄ Müəllim. Server admin hesabını rədd etdiyi üçün
+                  bu kart admin kabinetində ümumiyyətlə render olunmur. */}
+              <Card>
+                <CardHead icon={<ArrowLeftRight size={15} />} title="Hesab tipi" action={<Badge tone={currentRole === 'Teacher' ? 'success' : 'neutral'}>{ROLE_LABELS[currentRole]}</Badge>} />
+                <div className="ud-role">
+                  <p className="note">
+                    {currentRole === 'User'
+                      ? 'Müəllim hesabına keçsəniz sinif yarada və tələbələrinizin göstəricilərini izləyə bilərsiniz.'
+                      : 'Tələbə hesabına qayıtsanız sinif idarəetməsi bağlanır, öz nəticələriniz isə olduğu kimi qalır.'}
+                  </p>
+
+                  {/* Siniflər yüklənməyibsə susmuruq: əks halda keçid mümkün görünür,
+                      server isə rədd edir və istifadəçi səbəbi anlamır. */}
+                  {currentRole === 'Teacher' && classError && (
+                    <div className="notice notice--warning" role="alert"><AlertTriangle size={16} /><span>Sinif siyahısı yüklənmədi ({classError}) — keçid serverdə yoxlanacaq.</span></div>
+                  )}
+
+                  {roleSwitchBlocked ? (
+                    <div className="ud-role-gate">
+                      <div className="notice notice--warning" role="status">
+                        <AlertTriangle size={16} />
+                        <span>Tələbə roluna keçmək üçün əvvəlcə bütün sinifləri silin ({blockingClasses.length}).</span>
+                      </div>
+                      <ul className="list ud-role-classes">
+                        {blockingClasses.map(item => (
+                          <li key={item.id} className="list__row">
+                            <span className="list__main">
+                              <span className="list__title"><School size={13} /> {item.name}</span>
+                              <span className="list__meta">{item.studentCount} tələbə</span>
+                            </span>
+                            <Button variant="danger" size="sm" onClick={() => setClassPendingDelete(item)} disabled={deletingClassId !== null} loading={deletingClassId === item.id}>
+                              <Trash2 size={14} /> Sil
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="field__hint">Sinif silindikdə yalnız sinfə bağlılıq itir — tələbə hesabları və onların nəticələri silinmir.</span>
+                    </div>
+                  ) : roleConfirm ? (
+                    <div className="ud-role-confirm">
+                      <div className="notice notice--warning" role="alert"><AlertTriangle size={16} /><span>Rol dəyişdikdən sonra sessiya bağlanır və yenidən daxil olmalısınız.</span></div>
+                      <div className="ud-profile-actions">
+                        <Button variant="primary" onClick={handleChangeRole} loading={roleSwitching}>Bəli, {ROLE_LABELS[targetRole]} et</Button>
+                        <Button variant="outline" onClick={() => { setRoleConfirm(false); setRoleError(''); }} disabled={roleSwitching}>Ləğv et</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="ud-profile-actions">
+                      <Button variant="secondary" onClick={() => { setRoleConfirm(true); setRoleError(''); setRoleMsg(''); }} disabled={roleSwitching}>
+                        <ArrowLeftRight size={15} /> {ROLE_LABELS[targetRole]} roluna keç
+                      </Button>
+                    </div>
+                  )}
+
+                  {roleMsg && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{roleMsg}</span></div>}
+                  {roleError && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{roleError}</span></div>}
+                </div>
+              </Card>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Sinif silmə təsdiqi — geri qaytarıla bilməyən əməliyyat üçün açıq razılıq. */}
+      <ConfirmDialog
+        open={classPendingDelete !== null}
+        title="Sinfi silmək istədiyinizə əminsiniz?"
+        confirmLabel="Bəli, sil"
+        icon={<Trash2 size={14} />}
+        busy={deletingClassId !== null}
+        onCancel={() => { if (deletingClassId === null) setClassPendingDelete(null); }}
+        onConfirm={() => { if (classPendingDelete) void handleDeleteClass(classPendingDelete.id); }}
+      >
+        {classPendingDelete && (
+          <>
+            <strong>«{classPendingDelete.name}»</strong> sinfi silinəcək
+            {classPendingDelete.studentCount > 0
+              ? <> və {classPendingDelete.studentCount} tələbənin bu sinfə bağlılığı itəcək.</>
+              : <>.</>}
+            {' '}Tələbə hesabları və onların nəticələri silinmir. Bu əməliyyat geri qaytarıla bilməz.
+          </>
         )}
-      </main>
-    </div>
+      </ConfirmDialog>
+
+      {adminToast && (
+        <Toast
+          message={adminToast.msg}
+          type={adminToast.type}
+          onDone={() => setAdminToast(null)}
+        />
+      )}
+    </DashboardShell>
   );
 }

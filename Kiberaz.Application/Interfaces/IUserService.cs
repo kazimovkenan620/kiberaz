@@ -26,6 +26,13 @@ public interface IUserService
     Task<ApiResponse<bool>> RequestPasswordChangeAsync(string userId);
 
     /// <summary>
+    /// Cari istifadəçinin öz göstəriciləri — kabinetdəki statistika, saha üzrə irəliləyiş
+    /// və imtahan tarixçəsi. Müəllim endpoint-i ilə eyni hesablamadan istifadə edir,
+    /// lakin başqasının ID-sini qəbul etmir: mənbə yalnız token-dəki istifadəçidir.
+    /// </summary>
+    Task<ApiResponse<StudentOverviewResponse>> GetMyOverviewAsync(string userId);
+
+    /// <summary>
     /// Müəllim dashboard-u üçün tələbə ID-si ilə tələbə göstəricilərini qaytarır.
     /// </summary>
     Task<ApiResponse<StudentOverviewResponse>> GetStudentOverviewAsync(string teacherId, string studentId);
@@ -35,6 +42,13 @@ public interface IUserService
     Task<ApiResponse<TeacherClassResponse>> CreateTeacherClassAsync(string teacherId, CreateTeacherClassRequest request);
 
     Task<ApiResponse<TeacherClassResponse>> AddStudentToClassAsync(string teacherId, int classId, AddStudentToClassRequest request);
+
+    /// <summary>
+    /// Müəllimin öz sinfini silir. Rol keçidi (müəllim → tələbə) üçün ön şərtdir:
+    /// ChangeRoleAsync sinifi olan hesabı bloklayır, ona görə silmə yolu olmasa
+    /// müəllim heç vaxt tələbə roluna qayıda bilməzdi.
+    /// </summary>
+    Task<ApiResponse<bool>> DeleteTeacherClassAsync(string teacherId, int classId);
 
     Task<ApiResponse<bool>> ChangeRoleAsync(string userId, ChangeRoleRequest request);
 }

@@ -32,8 +32,9 @@ public class ExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Gözlənilməyən xəta: {Message} | Path: {Path}",
-                ex.Message, context.Request.Path);
+            // Request path və exception mesajını ayrıca template parametrinə yazmırıq:
+            // path istifadəçi tərəfindən idarə oluna və saxta log sətrləri yarada bilər.
+            _logger.LogError(ex, "Gözlənilməyən xəta. TraceId: {TraceId}", context.TraceIdentifier);
             await HandleExceptionAsync(context, ex);
         }
     }

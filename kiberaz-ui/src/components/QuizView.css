@@ -7,8 +7,6 @@
 .qv-summary > div { display: flex; justify-content: space-between; gap: var(--sp-3); align-items: center; }
 .qv-summary dt { color: var(--text-3); font-size: var(--text-xs); }
 .qv-summary dd { font-weight: 600; text-align: right; min-width: 0; overflow-wrap: anywhere; }
-.qv-note { font-size: var(--text-sm); color: var(--text-2); line-height: 1.55; }
-.card--brand .qv-note { color: var(--text-1); }
 
 /* ── Hazırlıq ── */
 .qv-setup { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-6); }
@@ -109,30 +107,6 @@
 
 .qv-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; padding-top: var(--sp-4); border-top: 1px solid var(--border-2); }
 .qv-nav__right { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
-.qv-submitting { display: inline-flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--text-2); }
-
-/* ── Naviqator ── */
-.qv-legend { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); font-size: var(--text-xs); color: var(--text-2); margin-bottom: var(--sp-3); }
-.qv-legend li { display: inline-flex; align-items: center; gap: 6px; }
-.qv-legend__dot { width: 10px; height: 10px; border-radius: 3px; background: var(--bg-surface-2); border: 1px solid var(--border-3); }
-.qv-legend__dot--correct { background: var(--success); border-color: var(--success); }
-.qv-legend__dot--wrong { background: var(--danger); border-color: var(--danger); }
-.qv-legend__dot--current { background: var(--bg-surface); border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
-.qv-nav-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.qv-nav-btn {
-  height: 36px; border-radius: var(--r-md);
-  border: 1px solid var(--border-3);
-  background: var(--bg-surface); color: var(--text-2);
-  font-size: var(--text-sm); font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  transition: background-color var(--t-fast), border-color var(--t-fast), color var(--t-fast);
-}
-.qv-nav-btn:hover:not(:disabled) { border-color: var(--text-3); color: var(--text-1); }
-.qv-nav-btn--correct { background: var(--success); border-color: var(--success); color: var(--text-on-brand); }
-.qv-nav-btn--wrong { background: var(--danger); border-color: var(--danger); color: var(--text-on-brand); }
-.qv-nav-btn.is-current { box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--brand); border-color: var(--brand); }
-.qv-nav-btn--open.is-current { color: var(--brand-on-subtle); background: var(--brand-subtle); }
-.qv-nav-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ── Nəticə ── */
 .qv-result { padding: var(--sp-8) var(--sp-6); display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--sp-3); max-width: 640px; margin: 0 auto; width: 100%; }
@@ -157,13 +131,11 @@
   .qv-setup__head { flex-direction: column; }
   .qv-topbar__progress { flex: 1 1 100%; min-width: 0; }
   .qv-question__text { font-size: var(--text-md); }
-  .qv-nav-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
   .qv-result__row { grid-template-columns: 90px 1fr 36px; }
 }
 @media (max-width: 480px) {
   .qv-setup__actions .btn { width: 100%; }
   .qv-nav > .btn, .qv-nav__right, .qv-nav__right > .btn { width: 100%; }
-  .qv-nav-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .qv-result__num { font-size: 2.75rem; }
   .qv-result__actions .btn { flex: 1 1 100%; }
   .qv-explanation { padding-left: var(--sp-4); }

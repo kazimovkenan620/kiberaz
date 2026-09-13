@@ -316,7 +316,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
         </Card>
         <Card padded="sm" tone="brand">
           <CardHead icon={<Lock size={15} />} title="Qeyd" />
-          <p className="qv-note">Sualları qeydiyyatsız oxuya bilərsiniz. Cavabın yoxlanışı, izahlar və nəticənin kabinetdə toplanması üçün hesabla daxil olun.</p>
+          <p className="note">Sualları qeydiyyatsız oxuya bilərsiniz. Cavabın yoxlanışı, izahlar və nəticənin kabinetdə toplanması üçün hesabla daxil olun.</p>
         </Card>
       </>
     );
@@ -447,7 +447,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
           )}
 
           {answeredCount < score.total && (
-            <p className="qv-note text-2">{score.total - answeredCount} sual cavabsız qaldı — nəticə yalnız serverdə yoxlanılmış cavablara görə hesablanır.</p>
+            <p className="note">{score.total - answeredCount} sual cavabsız qaldı — nəticə yalnız serverdə yoxlanılmış cavablara görə hesablanır.</p>
           )}
 
           <div className="qv-result__actions">
@@ -470,13 +470,13 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
     <>
       <Card padded="sm">
         <CardHead icon={<Layers size={15} />} title="Sual naviqatoru" />
-        <ul className="qv-legend" aria-hidden="true">
-          <li><span className="qv-legend__dot qv-legend__dot--correct" /> Düzgün</li>
-          <li><span className="qv-legend__dot qv-legend__dot--wrong" /> Yanlış</li>
-          <li><span className="qv-legend__dot qv-legend__dot--current" /> Hazırkı</li>
-          <li><span className="qv-legend__dot" /> Cavablanmayıb</li>
+        <ul className="qnav-legend" aria-hidden="true">
+          <li><span className="qnav-legend__dot qnav-legend__dot--correct" /> Düzgün</li>
+          <li><span className="qnav-legend__dot qnav-legend__dot--wrong" /> Yanlış</li>
+          <li><span className="qnav-legend__dot qnav-legend__dot--current" /> Hazırkı</li>
+          <li><span className="qnav-legend__dot" /> Cavablanmayıb</li>
         </ul>
-        <div className="qv-nav-grid" role="group" aria-label="Suallar">
+        <div className="qnav-grid" role="group" aria-label="Suallar">
           {questions.map((q, i) => {
             const r = serverResults[q.id];
             const state = r ? (r.isCorrect ? 'correct' : 'wrong') : 'open';
@@ -485,7 +485,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
               <button
                 key={q.id}
                 type="button"
-                className={`qv-nav-btn qv-nav-btn--${state}${isCurrent ? ' is-current' : ''}`}
+                className={`qnav-btn qnav-btn--${state}${isCurrent ? ' is-current' : ''}`}
                 aria-current={isCurrent ? 'step' : undefined}
                 aria-label={`Sual ${i + 1}${r ? (r.isCorrect ? ', düzgün' : ', yanlış') : ', cavablanmayıb'}`}
                 onClick={() => { if (!isSubmitting) goTo(i); }}
@@ -627,7 +627,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
             <ArrowLeft size={15} /> Əvvəlki sual
           </Button>
           <div className="qv-nav__right">
-            {isSubmitting && <span className="qv-submitting" role="status"><span className="spinner spinner--sm" /> Yoxlanılır...</span>}
+            {isSubmitting && <span className="inline-status" role="status"><span className="spinner spinner--sm" /> Yoxlanılır...</span>}
             {selected !== null && !isSubmitting && (
               <Button id="qv-next-btn" variant="primary" onClick={handleNext} aria-label={currentIdx === total - 1 ? 'Nəticəni gör' : 'Növbəti sual'}>
                 {currentIdx === total - 1

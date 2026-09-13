@@ -50,7 +50,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 2 | Shared shells (header, layout, dashboard shell, modal, footer, states, scroll-top, cookie) | done |
 | 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | done |
 | 4 | Quiz (setup, active, auth gate, result) | done |
-| 5 | Exam (create, join, player, teacher dashboard) | todo |
+| 5 | Exam (create, join, player, teacher dashboard) | done |
 | 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | todo |
 | 7 | Admin (overview, courses, users, exams) | todo |
 | 8 | Auth special pages | todo |
@@ -79,6 +79,19 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 5
+- Rewritten: `ExamSession.tsx/.css` — section (action cards, join form, teacher "last session" card, session /
+  attempt history list, login notice with modal trigger), create-session modal (segmented duration, category
+  steppers with accessible labels, summary), exam player (server-driven timer with urgent state, question card,
+  selected-option state, navigator rail, "İmtahanı bitir" now behind a ConfirmDialog; auto-submit on expiry
+  unchanged), result card, teacher dashboard (stats, participants table with progress + status badge + result,
+  close session behind a ConfirmDialog). Logic (revision/save/refresh polling) unchanged.
+- Shared: question navigator (`.qnav-*`), `.note`, `.inline-status` moved into `index.css` (used by quiz + exam).
+- Fixed in passing (blocked the flow): join-code input filtered `[^A-F0-9-]`, which removed the "K" and "R" of the
+  mandatory `KBR-` prefix, so a typed/pasted code could never validate. Now `[^A-Z0-9-]` (server validates format).
+- Verification: `tsc` ✅, `eslint` ✅ on touched files, Playwright screenshots (section, create modal, teacher
+  dashboard, player) in both themes.
 
 ### Phase 4
 - Rewritten: `QuizView.tsx/.css` on `DashboardShell` (category sidebar with real counts; setup card with

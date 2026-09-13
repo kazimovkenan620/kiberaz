@@ -324,7 +324,7 @@ export default function QuizView({ categoryId, onGoHome, onSelectCategory }: Qui
         </Card>
         <Card padded="sm" tone="brand">
           <CardHead icon={<Lock size={15} />} title="Qeyd" />
-          <p className="note">Sualları qeydiyyatsız oxuya bilərsiniz. Cavabın yoxlanışı, izahlar və nəticənin kabinetdə toplanması üçün hesabla daxil olun.</p>
+          <p className="note">Nəzəri suallarla tanış ola bilərsiniz. Cavabların yoxlanılması, izahların açılması və nəticələrin kabinetdə saxlanması üçün hesabınıza daxil olun.</p>
         </Card>
       </>
     );

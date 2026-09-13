@@ -29,7 +29,7 @@
   <meta name="twitter:description" content="Azərbaycanda aparıcı kibertəhlükəsizlik təhsil platforması." />
 
   <!-- Brauzer xrom rəngi — aktiv mövzuya görə (useTheme yeniləyir) -->
-  <meta name="theme-color" content="#FAFBFC" />
+  <meta name="theme-color" content="#060C14" />
 
   <!-- Mövzu ilk boyamadan ƏVVƏL tətbiq olunur ki, səhv mövzu "işartısı" olmasın.
        Yalnız mövzu seçimi localStorage-da saxlanılır; heç bir token/sessiya məlumatı burada yoxdur. -->
@@ -37,12 +37,10 @@
     (function () {
       try {
         var stored = localStorage.getItem('kiberaz-theme');
-        var theme = stored === 'light' || stored === 'dark'
-          ? stored
-          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
         document.documentElement.setAttribute('data-theme', theme);
       } catch (e) {
-        document.documentElement.setAttribute('data-theme', 'light');
+        document.documentElement.setAttribute('data-theme', 'dark');
       }
     })();
   </script>

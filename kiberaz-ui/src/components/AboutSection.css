@@ -1,5 +1,5 @@
 /* ================================================================
-   AboutSection.css — ana səhifə (missiya, göstəricilər, modullar)
+   AboutSection.css — ana səhifə (missiya, göstəricilər, platforma haqqında)
    ================================================================ */
 .home { padding: var(--sp-8) 0 var(--sp-12); }
 
@@ -14,41 +14,25 @@
 .home__lead { font-size: var(--text-md); color: var(--text-2); max-width: 58ch; line-height: 1.65; }
 .home__lead strong { color: var(--text-1); }
 .home__cta { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); }
+.home__hero-visual {
+  width: 100%;
+  aspect-ratio: 2.15 / 1;
+  overflow: hidden;
+  border: 1px solid var(--border-3);
+  border-radius: var(--r-xl);
+  background: var(--illu-bg);
+  box-shadow: var(--shadow-md);
+}
+.home__hero-visual img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
 
 .home__stats { margin-top: var(--sp-8); }
 
-.home__modules { margin-top: var(--sp-10); }
-.home__module-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--sp-3);
-}
-.module-card {
-  display: flex; align-items: flex-start; gap: var(--sp-3);
-  padding: var(--sp-4);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-2);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-sm);
-  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
-  min-width: 0;
-}
-.module-card:hover { border-color: var(--border-3); box-shadow: var(--shadow-md); transform: translateY(-1px); }
-.module-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.module-card__icon {
-  width: 36px; height: 36px; flex-shrink: 0;
-  display: grid; place-items: center;
-  border-radius: var(--r-md);
-  background: var(--brand-subtle); color: var(--brand-on-subtle);
-}
-.module-card__body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
-.module-card__title { font-size: var(--text-sm); font-weight: 700; line-height: 1.3; }
-.module-card__desc { font-size: var(--text-xs); color: var(--text-2); line-height: 1.5; }
-.module-card__arrow { color: var(--text-3); flex-shrink: 0; margin-top: 4px; }
-.module-card:hover .module-card__arrow { color: var(--brand); }
-
 .home__about {
-  margin-top: var(--sp-10);
+  margin-top: var(--sp-8);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-6);
@@ -61,19 +45,15 @@
 .home__about-col h3 svg { color: var(--brand); }
 .home__about-col p { font-size: var(--text-sm); color: var(--text-2); line-height: 1.7; }
 
-@media (max-width: 1280px) {
-  .home__module-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 @media (max-width: 1024px) {
   .home__hero { grid-template-columns: 1fr; gap: var(--sp-6); }
   .home__title { max-width: none; }
+  .home__hero-visual { max-width: 720px; }
 }
 @media (max-width: 768px) {
   .home { padding-top: var(--sp-6); }
-  .home__module-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home__about { grid-template-columns: 1fr; padding: var(--sp-5); }
 }
 @media (max-width: 480px) {
-  .home__module-grid { grid-template-columns: 1fr; }
   .home__cta .btn { flex: 1 1 100%; }
 }

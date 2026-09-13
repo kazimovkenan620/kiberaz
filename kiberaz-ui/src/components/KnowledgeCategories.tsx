@@ -4,11 +4,12 @@ import { fetchQuizCategories } from '../services/quizService';
 import type { KnowledgeCategory } from '../data/mockData';
 import { categoryIcon } from '../utils/categoryIcon';
 import { Button, EmptyState, SkeletonList } from './ui';
+import CategoryArtwork from './layout/CategoryArtwork';
 import './KnowledgeCategories.css';
 
 // ─── Biliklər bazası: kateqoriya siyahısı (sol) + seçilmiş kateqoriyanın detalı (sağ) ──
 // Bütün məlumat real API-dəndir: ad, ikon, təsvir, mövzular, sual sayı, çətinlik.
-// İctimai səhifədə istifadəçi irəliləyişi göstərilmir.
+// İctimai səhifədə nəzəri məzmuna baxış açıqdır; cavab yoxlaması və nəticələr üçün giriş tələb olunur.
 
 interface KnowledgeCategoriesProps {
   onStartQuiz: (categoryId: number) => void;
@@ -37,7 +38,7 @@ export default function KnowledgeCategories({ onStartQuiz }: KnowledgeCategories
           <div>
             <div className="kicker">Biliklər bazası</div>
             <h2 id="kb-heading">Kibertəhlükəsizlik üzrə nəzəri biliklərin artırılması</h2>
-            <p>Kateqoriya seçin, mövzulara baxın və izahlı suallarla biliklərinizi yoxlayın. Suallar qeydiyyatsız oxuna bilər.</p>
+            <p>Kateqoriya və mövzulara açıq baxın. Cavabları yoxlamaq və nəticələrinizi saxlamaq üçün hesabınıza daxil olun.</p>
           </div>
         </div>
 
@@ -97,19 +98,24 @@ export default function KnowledgeCategories({ onStartQuiz }: KnowledgeCategories
 
             {/* ── Detal ── */}
             <div id="kd-detail-panel" role="tabpanel" aria-labelledby={`kd-tab-${active.id}`} className="kb__detail card" key={active.id}>
-              <div className="kb__detail-head">
-                <span className="kb__detail-icon" aria-hidden="true">{categoryIcon(active.icon, 22)}</span>
-                <div className="kb__detail-meta">
-                  <span className="kicker">{active.difficulty}</span>
-                  <h3 className="kb__detail-title">{active.title}</h3>
-                  <p className="kb__detail-desc">{active.description}</p>
-                </div>
-              </div>
+              <div className="kb__overview">
+                <div className="kb__intro">
+                  <div className="kb__detail-head">
+                    <span className="kb__detail-icon" aria-hidden="true">{categoryIcon(active.icon, 22)}</span>
+                    <div className="kb__detail-meta">
+                      <span className="kicker">{active.difficulty}</span>
+                      <h3 className="kb__detail-title">{active.title}</h3>
+                      <p className="kb__detail-desc">{active.description}</p>
+                    </div>
+                  </div>
 
-              <div className="kb__stats">
-                <span className="tag"><HelpCircle size={13} /> {active.questionCount} sual</span>
-                <span className="tag"><BookOpen size={13} /> {active.topics.length} mövzu</span>
-                <span className="tag"><Layers size={13} /> {active.difficulty}</span>
+                  <div className="kb__stats">
+                    <span className="tag"><HelpCircle size={13} /> {active.questionCount} sual</span>
+                    <span className="tag"><BookOpen size={13} /> {active.topics.length} mövzu</span>
+                    <span className="tag"><Layers size={13} /> {active.difficulty}</span>
+                  </div>
+                </div>
+                <CategoryArtwork title={active.title} />
               </div>
 
               {active.topics.length > 0 && (

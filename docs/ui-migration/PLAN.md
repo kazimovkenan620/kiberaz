@@ -49,7 +49,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 1 | Design foundation (tokens, themes, typography, base primitives, ThemeToggle) | done |
 | 2 | Shared shells (header, layout, dashboard shell, modal, footer, states, scroll-top, cookie) | done |
 | 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | done |
-| 4 | Quiz (setup, active, auth gate, result) | todo |
+| 4 | Quiz (setup, active, auth gate, result) | done |
 | 5 | Exam (create, join, player, teacher dashboard) | todo |
 | 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | todo |
 | 7 | Admin (overview, courses, users, exams) | todo |
@@ -79,6 +79,18 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 4
+- Rewritten: `QuizView.tsx/.css` on `DashboardShell` (category sidebar with real counts; setup card with
+  numbered steps; active question with A–D buttons (states: neutral/hover/pending/correct/wrong/dim via border,
+  icon, key badge and screen-reader text — not color only), explanations per option, prev/next; right rail with
+  question navigator + question info; result card with per-difficulty breakdown). Auth gate now opens the login
+  modal via `requestAuth`. Keyboard: A–D / 1–4 select, ← → navigate. Switching category during an active quiz
+  asks for confirmation. All submit/rollback/score logic unchanged (answer keys only from the submit response).
+- `App.tsx`: `QuizView` keyed by category id; header gets `activeHref` while a quiz is open.
+- Pre-existing `exhaustive-deps` warning in QuizView removed with the rewrite.
+- Verification: `tsc` ✅, `eslint` on touched files ✅, Playwright flow (setup → gate → login → answer → result)
+  screenshotted in both themes against a mock API.
 
 ### Phase 3
 - Rewritten: `AboutSection.tsx/.css` (mission hero + illustration, real stats from `/quiz/categories`,

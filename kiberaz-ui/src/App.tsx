@@ -389,6 +389,7 @@ export default function App() {
         onNavigate={handleNavigate}
         isLoggedIn={isLoggedIn}
         inDashboard={showDashboard}
+        activeHref={activeQuizCategoryId !== null ? '#knowledge' : undefined}
       />
 
       {/* Kabinet görünüşü */}
@@ -407,6 +408,7 @@ export default function App() {
           {/* activeQuizCategoryId null deyilsə quiz ekranı göstərilir, əks halda ana səhifə bölmələri sıralanır. */}
           {activeQuizCategoryId !== null ? (
             <QuizView
+              key={activeQuizCategoryId}
               categoryId={activeQuizCategoryId}
               onGoHome={handleGoKnowledge}
               onSelectCategory={(id) => setActiveQuizCategoryId(id)}

@@ -26,7 +26,7 @@ const roleDisplay = (role: string) => ROLE_LABELS[role.toLowerCase()] ?? role;
 
 type AuthModal = 'login' | 'register' | 'forgot' | null;
 
-export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome, onNavigate, isLoggedIn, inDashboard }: {
+export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome, onNavigate, isLoggedIn, inDashboard, activeHref }: {
   onLoginDemo?: () => void;
   onLogout?: () => void;
   onGoDashboard?: () => void;
@@ -35,6 +35,8 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
   onNavigate?: (href: string) => void;
   isLoggedIn?: boolean;
   inDashboard?: boolean;
+  // Ana səhifədən kənar ekranlarda (quiz) hansı bölmənin aktiv sayılacağı
+  activeHref?: string;
 }) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -59,7 +61,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
 
   // Ana səhifədə hansı bölmənin görünməsinə görə aktiv link (scroll-spy).
   useEffect(() => {
-    if (inDashboard) return;
+    if (inDashboard || activeHref) return;
     const ids = navLinks.map(l => l.href.slice(1));
     const update = () => {
       const line = window.innerHeight * 0.35;
@@ -73,7 +75,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
     window.addEventListener('scroll', update, { passive: true });
     update();
     return () => window.removeEventListener('scroll', update);
-  }, [inDashboard]);
+  }, [inDashboard, activeHref]);
 
   useEffect(() => {
     const onResize = () => { if (window.innerWidth > 1024) setMobileOpen(false); };
@@ -142,6 +144,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
   };
 
   const loggedIn = Boolean(user || isLoggedIn);
+  const currentHref = activeHref ?? activeLink;
   const initials = (user?.nickname ?? 'K').slice(0, 2);
 
   return (
@@ -156,8 +159,8 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    className={`header__link${!inDashboard && activeLink === link.href ? ' is-active' : ''}`}
-                    aria-current={!inDashboard && activeLink === link.href ? 'page' : undefined}
+                    className={`header__link${!inDashboard && currentHref === link.href ? ' is-active' : ''}`}
+                    aria-current={!inDashboard && currentHref === link.href ? 'page' : undefined}
                     onClick={e => handleNavClick(e, link.href)}
                   >
                     {link.label}
@@ -224,7 +227,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
       <div id="mobile-menu" className={`mobile-menu${mobileOpen ? ' is-open' : ''}`} role="dialog" aria-modal="true" aria-hidden={!mobileOpen} aria-label="Mobil menyu">
         <nav aria-label="Bölmələr (mobil)">
           {navLinks.map(link => (
-            <a key={link.href} href={link.href} className={`mobile-menu__link${!inDashboard && activeLink === link.href ? ' is-active' : ''}`}
+            <a key={link.href} href={link.href} className={`mobile-menu__link${!inDashboard && currentHref === link.href ? ' is-active' : ''}`}
               onClick={e => handleNavClick(e, link.href)} tabIndex={mobileOpen ? 0 : -1}>
               {link.label}
             </a>

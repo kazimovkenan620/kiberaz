@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle, ChevronUp, Cookie, Lock } from 'lucide-react';
 import Navbar from './components/Navbar';
 import HeroSlider from './components/HeroSlider';
 import AboutSection from './components/AboutSection';
@@ -9,6 +9,8 @@ import Leaderboard from './components/Leaderboard';
 import UserDashboard from './components/UserDashboard';
 import Footer from './components/Footer';
 import QuizView from './components/QuizView';
+import BrandLogo from './components/layout/BrandLogo';
+import { Button, ButtonLink, FormField, ThemeToggle } from './components/ui';
 import { confirmEmail, confirmEmailChange, exchangeGoogleLoginCode, getToken, logout, resetPassword, setStoredUserNickname, setStoredUserRoles, setTokens } from './services/authService';
 import './index.css';
 import './App.css';
@@ -42,8 +44,9 @@ function ScrollToTop() {
       onClick={scrollTop}
       aria-label="Yuxarıya qayıt"
       title="Yuxarıya qayıt"
+      tabIndex={visible ? 0 : -1}
     >
-      <ChevronUp size={22} strokeWidth={2.5} />
+      <ChevronUp size={20} strokeWidth={2.5} />
     </button>
   );
 }
@@ -75,32 +78,43 @@ function CookieConsent() {
     <div
       className={`cookie-bar ${visible ? 'visible' : ''}`}
       role="dialog"
-      aria-modal="true"
+      aria-modal="false"
       aria-label="Çərəz razılığı"
       aria-hidden={!visible}
     >
+      <Cookie size={18} className="cookie-bar__icon" aria-hidden="true" />
       <p className="cookie-text">
         Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik.{' '}
-        <a href="#">Məxfilik Siyasəti</a>
+        <a href="#" className="text-link">Məxfilik Siyasəti</a>
       </p>
       <div className="cookie-actions">
-        <button
-          id="cookie-decline-btn"
-          className="btn btn-ghost btn-sm"
-          onClick={handleDecline}
-          style={{ color: 'var(--neutral-400)', borderColor: 'rgba(255,255,255,0.1)' }}
-        >
+        <Button id="cookie-decline-btn" variant="ghost" size="sm" onClick={handleDecline} tabIndex={visible ? 0 : -1}>
           Rədd et
-        </button>
-        <button
-          id="cookie-accept-btn"
-          className="btn btn-primary btn-sm"
-          onClick={handleAccept}
-        >
+        </Button>
+        <Button id="cookie-accept-btn" variant="primary" size="sm" onClick={handleAccept} tabIndex={visible ? 0 : -1}>
           Qəbul et
-        </button>
+        </Button>
       </div>
     </div>
+  );
+}
+
+// ─── Xüsusi (auth) səhifələr üçün ortaq qabıq ────────────────
+// Reset / təsdiq / Google callback səhifələri əsas tətbiqdən ayrı, mərkəzləşmiş
+// kartda göstərilir; mövzu dəyişdirici burada da var.
+function AuthPageShell({ title, kicker, children }: { title: string; kicker: string; children: React.ReactNode }) {
+  return (
+    <main className="auth-page" id="main-content">
+      <div className="auth-page__top">
+        <BrandLogo href="/" onClick={undefined} />
+        <ThemeToggle />
+      </div>
+      <section className="auth-card" aria-labelledby="auth-page-title">
+        <div className="kicker">{kicker}</div>
+        <h1 id="auth-page-title" className="auth-card__title">{title}</h1>
+        {children}
+      </section>
+    </main>
   );
 }
 
@@ -141,23 +155,25 @@ function ResetPasswordPage() {
     }
   };
 
+  const locked = loading || !!message;
+
   return (
-    <main className="app-main reset-page">
-      <form onSubmit={submit} className="modal-panel reset-panel">
-        <h1 className="modal-title">Şifrəni yenilə</h1>
-        <div className="form-field">
-          <label htmlFor="reset-pass">Yeni şifrə</label>
-          <input id="reset-pass" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoComplete="new-password" maxLength={30} disabled={loading || !!message} />
-        </div>
-        <div className="form-field">
-          <label htmlFor="reset-confirm">Şifrənin təkrarı</label>
-          <input id="reset-confirm" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" maxLength={30} disabled={loading || !!message} />
-        </div>
-        {message && <p style={{ color: '#22c55e', textAlign: 'center' }}>{message}</p>}
-        {error && <p style={{ color: '#ef4444', textAlign: 'center' }}>{error}</p>}
-        <button className="btn btn-primary" type="submit" disabled={loading || !!message}>{loading ? 'Yenilənir...' : 'Şifrəni yenilə'}</button>
+    <AuthPageShell title="Şifrəni yenilə" kicker="Hesab təhlükəsizliyi">
+      <form onSubmit={submit} className="auth-form" noValidate>
+        <p className="text-2 text-sm">Yeni şifrə ən azı 8 simvol olmalı, 1 böyük hərf və 1 rəqəm ehtiva etməlidir.</p>
+        <FormField id="reset-pass" label="Yeni şifrə" icon={<Lock size={13} />} required>
+          <input id="reset-pass" className="input" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+            autoComplete="new-password" maxLength={30} disabled={locked} />
+        </FormField>
+        <FormField id="reset-confirm" label="Şifrənin təkrarı" icon={<Lock size={13} />} required>
+          <input id="reset-confirm" className="input" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+            autoComplete="new-password" maxLength={30} disabled={locked} />
+        </FormField>
+        {message && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{message}</span></div>}
+        {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
+        <Button type="submit" variant="primary" size="lg" block disabled={locked} loading={loading}>Şifrəni yenilə</Button>
       </form>
-    </main>
+    </AuthPageShell>
   );
 }
 
@@ -166,6 +182,7 @@ function ResetPasswordPage() {
 function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
   const [message, setMessage] = useState('Yoxlanilir...');
   const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
 
   // TƏK İCRA QORUYUCUSU.
   //
@@ -204,6 +221,8 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
         else setError(result.errors?.[0] || result.message || 'Link etibarsızdır və ya vaxtı bitib.');
       } catch {
         setError('Serverlə əlaqə yaradıla bilmir.');
+      } finally {
+        setDone(true);
       }
     };
 
@@ -211,13 +230,19 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
   }, [type]);
 
   return (
-    <main className="app-main" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <section className="modal-panel" style={{ width: '100%', maxWidth: 440, textAlign: 'center' }}>
-        <h1 className="modal-title">Təsdiq</h1>
-        {!error && <p style={{ color: '#22c55e' }}>{message}</p>}
-        {error && <p style={{ color: '#ef4444' }}>{error}</p>}
-      </section>
-    </main>
+    <AuthPageShell title={type === 'email' ? 'E-poçt təsdiqi' : 'E-poçt dəyişikliyi'} kicker="Təsdiq">
+      <div className="auth-form">
+        {!done && (
+          <div className="state state--compact" role="status" aria-live="polite">
+            <span className="spinner spinner--lg" aria-hidden="true" />
+            <span className="state__text">{message}</span>
+          </div>
+        )}
+        {done && !error && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{message}</span></div>}
+        {done && error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
+        {done && <ButtonLink href="/" variant={error ? 'outline' : 'primary'} block>Ana səhifəyə qayıt</ButtonLink>}
+      </div>
+    </AuthPageShell>
   );
 }
 
@@ -245,7 +270,8 @@ function GoogleLoginCallbackPage({ onSuccess }: { onSuccess: () => void }) {
     window.history.replaceState(null, '', window.location.pathname);
 
     if (!code) {
-      setError('Google giriş kodu tapılmadı. Yenidən cəhd edin.');
+      // Effektin içində sinxron setState-dən qaçılır (react-hooks/set-state-in-effect).
+      queueMicrotask(() => setError('Google giriş kodu tapılmadı. Yenidən cəhd edin.'));
       return;
     }
 
@@ -268,14 +294,18 @@ function GoogleLoginCallbackPage({ onSuccess }: { onSuccess: () => void }) {
   }, [onSuccess]);
 
   return (
-    <main className="app-main" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      <section className="modal-panel" style={{ width: '100%', maxWidth: 440, textAlign: 'center' }}>
-        <h1 className="modal-title">Google ilə giriş</h1>
-        {!error && <p style={{ color: '#22c55e' }}>Giriş yoxlanılır...</p>}
-        {error && <p style={{ color: '#ef4444' }}>{error}</p>}
-        {error && <a className="btn btn-primary" href="/">Ana səhifəyə qayıt</a>}
-      </section>
-    </main>
+    <AuthPageShell title="Google ilə giriş" kicker="Giriş">
+      <div className="auth-form">
+        {!error && (
+          <div className="state state--compact" role="status" aria-live="polite">
+            <span className="spinner spinner--lg" aria-hidden="true" />
+            <span className="state__text">Giriş yoxlanılır...</span>
+          </div>
+        )}
+        {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
+        {error && <ButtonLink href="/" variant="primary" block>Ana səhifəyə qayıt</ButtonLink>}
+      </div>
+    </AuthPageShell>
   );
 }
 
@@ -316,6 +346,23 @@ export default function App() {
     }, 50);
   }, []);
 
+  // Başlıq və altlıqdakı bölmə linkləri: kabinet/quiz ekranı bağlanır, sonra
+  // müvafiq bölməyə sürüşdürülür. Hash kontraktı (#about, #home, ...) dəyişmir.
+  const handleNavigate = useCallback((href: string) => {
+    setShowDashboard(false);
+    setActiveQuizCategoryId(null);
+    window.setTimeout(() => {
+      const id = href.replace(/^#/, '');
+      if (id === 'about') {
+        window.history.replaceState(null, '', window.location.pathname);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      window.location.hash = href;
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  }, []);
+
   return (
     <>
       {/* Xüsusi URL səhifələri tam fərqli layout göstərir; şərt zənciri yuxarıdan aşağı yoxlanılır. */}
@@ -332,26 +379,28 @@ export default function App() {
       {/* Skip link */}
       <a href="#main-content" className="skip-link">Əsas məzmuna keç</a>
 
-      {/* Navigation — həmişə görünür (dashboard-da da) */}
-      {/* Dashboard və ya Admin paneli açıq olanda Navbar gizlədilir ki, iki naviqasiya sistemləri üst-üstə düşməsin. */}
-      {!showDashboard && (
-        <Navbar
-          onLoginDemo={() => setIsLoggedIn(true)}
-          onLogout={handleLogout}
-          onGoDashboard={() => { setShowDashboard(true); }}
-          onGoHome={() => { setActiveQuizCategoryId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-          isLoggedIn={isLoggedIn}
-        />
-      )}
+      {/* Başlıq həmişə görünür — kabinetdə də. Kabinetin öz yan paneli yerli
+          naviqasiyadır, başlıq isə qlobal; ikisi bir-birini təkrarlamır. */}
+      <Navbar
+        onLoginDemo={() => setIsLoggedIn(true)}
+        onLogout={handleLogout}
+        onGoDashboard={() => { setShowDashboard(true); window.scrollTo({ top: 0 }); }}
+        onGoHome={() => { setActiveQuizCategoryId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+        onNavigate={handleNavigate}
+        isLoggedIn={isLoggedIn}
+        inDashboard={showDashboard}
+      />
 
-      {/* Admin Panel görünüşü */}
+      {/* Kabinet görünüşü */}
       {/* showDashboard → ana səhifə sırası ilə yalnız bir ekran göstərilir.
           Admin bölmələri ayrıca səhifə deyil — Kabinetim içində rol ilə açılır. */}
       {showDashboard ? (
-        <UserDashboard
-          onLogout={handleLogout}
-          onGoHome={() => setShowDashboard(false)}
-        />
+        <main id="main-content" className="app-main">
+          <UserDashboard
+            onLogout={handleLogout}
+            onGoHome={() => setShowDashboard(false)}
+          />
+        </main>
       ) : (
 
         <main id="main-content" className="app-main">
@@ -360,28 +409,21 @@ export default function App() {
             <QuizView
               categoryId={activeQuizCategoryId}
               onGoHome={handleGoKnowledge}
+              onSelectCategory={(id) => setActiveQuizCategoryId(id)}
             />
           ) : (
             <>
               {/* Giriş — Platforma Haqqında */}
-              <AboutSection />
+              <AboutSection onNavigate={handleNavigate} />
 
-              <div className="section-divider" role="separator" aria-hidden="true" />
-
-              {/* Section 1 — Təlim Reklamları */}
+              {/* Section 1 — Təlimlər */}
               <HeroSlider />
 
-              <div className="section-divider" role="separator" aria-hidden="true" />
-
               {/* Section 2 — Biliklər Bazası */}
-              <KnowledgeCategories onStartQuiz={(id) => setActiveQuizCategoryId(id)} />
-
-              <div className="section-divider" role="separator" aria-hidden="true" />
+              <KnowledgeCategories onStartQuiz={(id) => { setActiveQuizCategoryId(id); window.scrollTo({ top: 0 }); }} />
 
               {/* Section 4 — İmtahan Sessiyaları */}
               <ExamSession />
-
-              <div className="section-divider" role="separator" aria-hidden="true" />
 
               {/* Section 5 — Liderlik Lövhəsi */}
               <Leaderboard />
@@ -390,8 +432,8 @@ export default function App() {
         </main>
       )}
 
-      {/* Footer & Floating UI (həmişə görünür) */}
-      {!showDashboard && <Footer />}
+      {/* Footer & Floating UI */}
+      {!showDashboard && <Footer onNavigate={handleNavigate} />}
       <ScrollToTop />
       <CookieConsent />
       </>

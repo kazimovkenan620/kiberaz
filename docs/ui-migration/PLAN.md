@@ -47,7 +47,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 |---|---|---|
 | 0 | Baseline, branch, PLAN.md | done |
 | 1 | Design foundation (tokens, themes, typography, base primitives, ThemeToggle) | done |
-| 2 | Shared shells (header, layout, dashboard shell, modal, footer, states, scroll-top, cookie) | todo |
+| 2 | Shared shells (header, layout, dashboard shell, modal, footer, states, scroll-top, cookie) | done |
 | 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | todo |
 | 4 | Quiz (setup, active, auth gate, result) | todo |
 | 5 | Exam (create, join, player, teacher dashboard) | todo |
@@ -69,6 +69,17 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `src/utils/{buttonClass,formA11y,courseAccent,categoryIcon}.ts(x)`.
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint src/components/ui src/hooks src/utils` ✅.
 
+### Phase 2
+- Rewritten: `Navbar.tsx/.css` (sticky header: brand, nav, theme toggle, user menu, mobile drawer; login moved
+  from the inline header form into `LoginModal`), `Footer.tsx/.css`, `App.tsx/.css` (header now rendered in the
+  cabinet too, `handleNavigate` for section links, auth special pages on a shared `AuthPageShell`, cookie bar,
+  scroll-to-top).
+- Created: `components/auth/{LoginModal,RegisterModal,ForgotPasswordModal,TurnstileBox,GoogleButton}.tsx`,
+  `components/layout/{BrandLogo,DashboardShell,Sidebar,Breadcrumb,TechIllustration}.tsx`, `components/layout/layout.css`,
+  `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
+- Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
+- Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
 ## 5. Design decisions
 
 - Theme mechanism: `<html data-theme="light|dark">`; preference in `localStorage['kiberaz-theme']`
@@ -82,7 +93,14 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 
 ## 6. Deviations from the prompt
 
-- (none yet)
+- Header is shown inside the cabinet as well (REF-04/05 show the global header above the cabinet sidebar). The
+  `showDashboard` rule still hides the public sections and footer; only the header is global now.
+- Login is a modal opened from a "Daxil ol" header button instead of two inline inputs in the header
+  (REF-01 header composition). All login logic (captcha-on-demand, resend confirmation, vague errors) is unchanged.
+- Footer: the fake newsletter form (no backend, showed a fabricated success), placeholder social links (`#`),
+  the placeholder phone number and "trust badges" were removed per H.3 (no fabricated data). Real contact
+  (e-mail, city), section navigation and legal links remain.
+- Brand tagline follows REF-00/01 wording ("// TƏHSİL PLATFORMASI").
 
 ## 7. Pre-existing issues (not caused by the migration)
 

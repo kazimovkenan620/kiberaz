@@ -12,6 +12,7 @@ type FilterMode = 'Qarışıq' | DifficultyLevel;
 interface QuizViewProps {
   categoryId: number;
   onGoHome: () => void;
+  onSelectCategory?: (id: number) => void;
 }
 
 

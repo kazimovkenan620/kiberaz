@@ -52,7 +52,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 4 | Quiz (setup, active, auth gate, result) | done |
 | 5 | Exam (create, join, player, teacher dashboard) | done |
 | 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | done |
-| 7 | Admin (overview, courses, users, exams) | todo |
+| 7 | Admin (overview, courses, users, exams) | done |
 | 8 | Auth special pages | todo |
 | 9 | Responsive + accessibility pass | todo |
 | 10 | Legacy cleanup | todo |
@@ -79,6 +79,18 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 7
+- Rewritten: `AdminPanel.tsx/.css` — `DashboardTab` (real `AdminStats` fields as stat blocks), `CoursesTab`
+  (status tabs with counts from the full list, server list via `useAsyncData`, create form on shared fields,
+  approve/reject/safe external link, delete behind `ConfirmDialog`, per-row busy + double-submit guard),
+  `UsersTab` (server-side search with 350 ms debounce, role `<select>` with hidden label, e-mail/status badges,
+  block behind `ConfirmDialog`, unblock direct, limit notice from server message), `ExamsTab` (category rows as the
+  backend really returns them; cascade delete behind `ConfirmDialog` with the same warning content).
+  `window.confirm()` calls replaced by the shared dialog. Dead default `AdminPanel` shell component and its
+  duplicated `Toast` removed (Toast lives in `components/ui`).
+- Pre-existing `react-hooks/set-state-in-effect` errors in AdminPanel (×3) are gone with the rewrite.
+- Verification: `tsc` ✅, `eslint` ✅ on touched files, Playwright screenshots of all four admin tabs in both themes.
 
 ### Phase 6
 - Rewritten: `UserDashboard.tsx/.css` on `DashboardShell` + `Sidebar` (user header, tabs, Ana səhifə / Çıxış

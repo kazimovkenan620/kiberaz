@@ -48,7 +48,7 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
 | 0 | Baseline, branch, PLAN.md | done |
 | 1 | Design foundation (tokens, themes, typography, base primitives, ThemeToggle) | done |
 | 2 | Shared shells (header, layout, dashboard shell, modal, footer, states, scroll-top, cookie) | done |
-| 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | todo |
+| 3 | Public experience (About/home, course discovery, KnowledgeCategories, Leaderboard) | done |
 | 4 | Quiz (setup, active, auth gate, result) | todo |
 | 5 | Exam (create, join, player, teacher dashboard) | todo |
 | 6 | Cabinet (overview, progress, sessions, classes, profile, role flow) | todo |
@@ -79,6 +79,17 @@ left untouched: `AGENTS.md` (9 changed lines), untracked `SENIOR-RULES.md`.
   `utils/authUi.ts` (DOM event so deep components can open the login modal without prop drilling).
 - Fixed in passing (file was rewritten): pre-existing `react-hooks/set-state-in-effect` in App.tsx (Google callback).
 - Verification: `tsc` ✅, `npm run build` ✅, `eslint` on the touched files ✅.
+
+### Phase 3
+- Rewritten: `AboutSection.tsx/.css` (mission hero + illustration, real stats from `/quiz/categories`,
+  module cards, mission copy), `HeroSlider.tsx/.css` (auto-carousel → course card grid; details modal; add-course
+  form on shared primitives; loading/empty/error states; hardcoded "4.9/5.0" rating removed; safe-link guard for
+  LinkedIn/GitHub), `KnowledgeCategories.tsx/.css` (sidebar list + detail panel, keyboard arrows on the list),
+  `Leaderboard.tsx/.css` (period pills, category chips, table with subtle top-3 emphasis, skeleton/empty; dead
+  "Tam liderlik lövhəsinə bax" TODO button removed; podium removed).
+- Created: `hooks/useAsyncData.ts` (loading/error/ready state with cancellation and reload).
+- Verification: `tsc` ✅, `npm run build` ✅, `eslint` on touched files ✅; full lint now 5 errors + 1 warning,
+  all pre-existing and in files not yet migrated (AdminPanel ×3, QuizView warning, 2 service files).
 
 ## 5. Design decisions
 

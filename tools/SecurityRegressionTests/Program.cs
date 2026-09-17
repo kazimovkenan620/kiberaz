@@ -162,12 +162,15 @@ internal static partial class Program
             foreach (var route in protectedRoutes.Where(r => r.Method == "GET"))
             {
                 using var permitted = await Send(client, route, tokens[AppRoles.Admin]);
-                Expect(permitted, HttpStatusCode.OK, $"Admin {route}");
+                var expected = route.Path.Contains("security-test-missing", StringComparison.Ordinal)
+                    ? HttpStatusCode.NotFound
+                    : HttpStatusCode.OK;
+                Expect(permitted, expected, $"Admin {route}");
             }
             using (var category = await Send(client, new("POST", "/api/quiz/categories"), tokens[AppRoles.Admin], body: new
             {
                 title = "Admin security test", icon = "shield", description = "Created by the isolated security regression test",
-                color = "cyan", topics = new[] { "Authorization" }, sortOrder = 10
+                color = "#00FFFF", topics = new[] { "Authorization" }, sortOrder = 10
             }))
             {
                 Expect(category, HttpStatusCode.Created, "Admin can create quiz category");
@@ -251,26 +254,65 @@ internal static partial class Program
             using (var denied = await Send(client, new("GET", "/api/admin/stats"), tokens[AppRoles.User]))
                 Expect(denied, HttpStatusCode.Forbidden, "profile overposting does not grant admin access");
 
-            // Only one request may consume a refresh token, including simultaneous requests.
+            // Simultaneous refreshes with the same cookie (two tabs) both succeed inside the reuse grace window and
+            // keep the family alive; a replay after the window is treated as theft and closes only that family.
             var rotation = await NewSession(AppRoles.User);
             var refreshResponses = await Task.WhenAll(Refresh(client, rotation.Session), Refresh(client, rotation.Session));
             try
             {
-                Check(refreshResponses.Count(response => response.StatusCode == HttpStatusCode.OK) == 1
-                    && refreshResponses.Count(response => response.StatusCode == HttpStatusCode.BadRequest) == 1,
-                    "parallel refresh of the same pair has exactly one winner");
+                Check(refreshResponses.All(response => response.StatusCode == HttpStatusCode.OK),
+                    "parallel refresh of the same pair succeeds for both tabs (grace window + concurrency retry)");
                 var winner = refreshResponses.FirstOrDefault(response => response.IsSuccessStatusCode);
                 if (winner is not null)
                 {
                     var rotated = await ReadSession(winner);
                     Check(rotated.RefreshCookie != rotation.Session.RefreshCookie, "refresh token rotates");
                     using var stillValid = await Send(client, new("GET", "/api/user/profile"), rotated.AccessToken);
-                    Expect(stillValid, HttpStatusCode.OK, "winning refresh issues a usable access token");
+                    Expect(stillValid, HttpStatusCode.OK, "refresh issues a usable access token");
                 }
+                using (var db = OpenDb())
+                    Check(db.Users.FindById(rotation.User.Id).RefreshSessions.Count == 1, "parallel refresh does not revoke or duplicate the session");
             }
             finally { foreach (var response in refreshResponses) response.Dispose(); }
-            using (var replay = await Refresh(client, rotation.Session))
-                Expect(replay, HttpStatusCode.BadRequest, "consumed refresh token cannot be replayed");
+            using (var stale = await Refresh(client, rotation.Session))
+                Expect(stale, HttpStatusCode.BadRequest, "token from two rotations ago is unknown");
+
+            // Theft: the previous token presented after the grace window closes only that family.
+            var theft = await NewSession(AppRoles.User);
+            using (var first = await Refresh(client, theft.Session))
+                Expect(first, HttpStatusCode.OK, "legitimate refresh before theft");
+            await Task.Delay(TimeSpan.FromSeconds(SessionPolicy.RefreshReuseGraceSeconds + 1));
+            using (var replay = await Refresh(client, theft.Session))
+                Expect(replay, HttpStatusCode.BadRequest, "consumed refresh token replayed after the grace window is rejected");
+            using (var db = OpenDb())
+                Check(db.Users.FindById(theft.User.Id).RefreshSessions.Count == 0, "late replay revokes the stolen family");
+
+            // Cookie-only refresh (new tab: no access token in the body) restores the session (audit F6).
+            var cookieOnly = await NewSession(AppRoles.User);
+            using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh"))
+            {
+                request.Headers.Add("Cookie", cookieOnly.Session.RefreshCookie);
+                request.Content = JsonContent.Create(new { });
+                using var response = await client.SendAsync(request);
+                Expect(response, HttpStatusCode.OK, "refresh without access token succeeds with the session cookie");
+            }
+            using (var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh"))
+            {
+                request.Headers.Add("Cookie", "refresh_token=" + Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)));
+                request.Content = JsonContent.Create(new { });
+                using var response = await client.SendAsync(request);
+                Expect(response, HttpStatusCode.BadRequest, "refresh without access token rejects an unknown cookie");
+            }
+
+            // Multi-device: a second login must not invalidate the first device's session (audit M1).
+            var deviceA = await NewSession(AppRoles.User);
+            var deviceB = await Login(client, deviceA.User, AppRoles.User);
+            using (var refreshedA = await Refresh(client, deviceA.Session))
+                Expect(refreshedA, HttpStatusCode.OK, "second-device login keeps the first device's refresh session alive");
+            using (var refreshedB = await Refresh(client, deviceB))
+                Expect(refreshedB, HttpStatusCode.OK, "second device keeps its own refresh session");
+            using (var db = OpenDb())
+                Check(db.Users.FindById(deviceA.User.Id).RefreshSessions.Count == 2, "each device owns a separate refresh session");
 
             foreach (var state in new[] { "changed stamp", "missing stamp", "blocked", "unconfirmed", "missing expiry", "expired refresh" })
             {
@@ -284,8 +326,8 @@ internal static partial class Program
                         case "missing stamp": user.SecurityStamp = null; break;
                         case "blocked": user.LockoutEnd = DateTimeOffset.UtcNow.AddDays(1); break;
                         case "unconfirmed": user.EmailConfirmed = false; break;
-                        case "missing expiry": user.RefreshTokenExpiryTime = null; break;
-                        case "expired refresh": user.RefreshTokenExpiryTime = DateTime.UtcNow.AddMinutes(-1); break;
+                        case "missing expiry": user.RefreshSessions.Clear(); break;
+                        case "expired refresh": foreach (var s in user.RefreshSessions) s.ExpiresAt = DateTime.UtcNow.AddMinutes(-1); break;
                     }
                     db.Users.Update(user);
                 }
@@ -563,6 +605,7 @@ internal static partial class Program
         bool omitSubject = false, string[]? roles = null, string algorithm = SecurityAlgorithms.HmacSha256)
     {
         var claims = new List<Claim>();
+        claims.Add(new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N")));
         if (!omitSubject) claims.Add(new(JwtRegisteredClaimNames.Sub, user.Id));
         if (!omitStamp && (stamp ?? user.SecurityStamp) is { } securityStamp) claims.Add(new(TokenService.SecurityStampClaimType, securityStamp));
         claims.AddRange((roles ?? user.Roles.ToArray()).Select(role => new Claim(ClaimTypes.Role, role)));

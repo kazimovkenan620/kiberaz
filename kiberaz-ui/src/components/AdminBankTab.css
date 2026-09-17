@@ -1,0 +1,50 @@
+/* ================================================================
+   AdminBankTab.css — kateqoriya + sual bankı (admin)
+   ================================================================ */
+.bank-form { display: flex; flex-direction: column; gap: var(--sp-4); }
+.bank-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.bank-choices { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.bank-choice {
+  width: 36px; height: 36px; display: grid; place-items: center; font-size: 1rem;
+  border: 1px solid var(--border-2); border-radius: var(--r-md); background: var(--bg-surface);
+  transition: border-color var(--t-fast), background-color var(--t-fast);
+}
+.bank-choice:hover { background: var(--bg-hover); }
+.bank-choice.is-active { border-color: var(--brand); background: var(--brand-subtle); }
+.bank-swatch { width: 36px; height: 36px; border-radius: var(--r-md); border: 2px solid transparent; }
+.bank-swatch.is-active { border-color: var(--text-1); }
+.bank-swatch:focus-visible, .bank-choice:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.bank-choice-input { width: 120px; }
+
+/* Cavab variantları — düzgün olan radio ilə seçilir */
+.bank-options { display: flex; flex-direction: column; gap: var(--sp-3); }
+.bank-option {
+  display: flex; gap: var(--sp-3); padding: var(--sp-3);
+  border: 1px solid var(--border-2); border-radius: var(--r-md); background: var(--bg-surface-2);
+}
+.bank-option.is-correct { border-color: var(--success); background: var(--success-bg); }
+.bank-option__key { display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 700; }
+.bank-option__key span[aria-hidden] { font-family: var(--font-mono); }
+.bank-option__fields { display: flex; flex-direction: column; gap: var(--sp-2); flex: 1; min-width: 0; }
+
+/* Sual siyahısı */
+.bank-filters { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--border-2); flex-wrap: wrap; }
+.bank-filters .select { width: auto; min-width: 150px; }
+.bank-filters .adm-search { margin-left: auto; }
+/* Sual və kateqoriya sütunları kəsilir ki, əməliyyat düymələri üfüqi sürüşdürmədən görünsün. */
+.bank-question { display: block; max-width: 32ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-table td .cell-sub { max-width: 34ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bank-cat-title { display: block; max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bank-cat { display: flex; align-items: center; gap: var(--sp-2); min-width: 200px; }
+.bank-cat__icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-md); background: var(--bg-surface-2); flex-shrink: 0; }
+.adm-table td .bank-cat .cell-sub { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bank-pager { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); border-top: 1px solid var(--border-2); flex-wrap: wrap; }
+.bank-pager__buttons { display: flex; gap: var(--sp-2); }
+
+@media (max-width: 640px) {
+  .bank-filters .select, .bank-filters .adm-search { width: 100%; margin-left: 0; }
+  .bank-option { flex-direction: column; }
+  .bank-option__key { flex-direction: row; }
+}

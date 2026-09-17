@@ -100,7 +100,7 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
         <FormField id="login-password" label="Şifrə" icon={<Lock size={13} />} required>
           <div className="input-wrap">
             <input id="login-password" className="input" type={showPass ? 'text' : 'password'} placeholder="Şifrəniz" value={password}
-              onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+              onChange={e => setPassword(e.target.value)} autoComplete="current-password" maxLength={128} />
             <button type="button" className="input-wrap__action" onClick={() => setShowPass(p => !p)} aria-label={showPass ? 'Şifrəni gizlət' : 'Şifrəni göstər'}>
               {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>

@@ -365,6 +365,293 @@ public class QuizService : IQuizService
     }
 
     // ═══════════════════════════════════════════════════════════
+    // ADMİN PANELİ — KATEQORİYA + SUAL BANKI
+    // ═══════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public Task<List<AdminQuizCategoryResponse>> GetAdminCategoriesAsync(bool deleted = false)
+    {
+        var categories = _db.QuizCategories.Find(c => c.IsDeleted == deleted).OrderBy(c => c.SortOrder).ToList();
+
+        // N+1 qarşısı: saylar bir dəfə yüklənib qruplaşdırılır. Silinmiş kateqoriyada
+        // silinmiş suallar sayılır — "bərpa etsəm nə qayıdır" sualının cavabı.
+        var questions = _db.QuizQuestions.Find(q => q.IsDeleted == deleted)
+            .GroupBy(q => q.QuizCategoryId)
+            .ToDictionary(g => g.Key, g => (Public: g.Count(q => !q.IsExamOnly), Exam: g.Count(q => q.IsExamOnly)));
+
+        // Sistem administratoru heç bir iştirakçı sayında görünmür.
+        var hiddenUserIds = _db.Users.FindAll()
+            .Where(u => ProtectedAccountPolicy.IsHiddenAccount(u))
+            .Select(u => u.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var participants = _db.QuizResults.FindAll()
+            .Where(r => !hiddenUserIds.Contains(r.UserId))
+            .GroupBy(r => r.CategoryId)
+            .ToDictionary(g => g.Key, g => g.Select(r => r.UserId).Distinct(StringComparer.Ordinal).Count());
+
+        var result = categories.Select(c =>
+        {
+            var counts = questions.GetValueOrDefault(c.Id, (Public: 0, Exam: 0));
+            return new AdminQuizCategoryResponse
+            {
+                Id                  = c.Id,
+                Title               = c.Title,
+                Icon                = c.Icon,
+                Description         = c.Description,
+                Color               = c.Color,
+                Topics              = c.Topics,
+                SortOrder           = c.SortOrder,
+                PublicQuestionCount = counts.Public,
+                ExamQuestionCount   = counts.Exam,
+                TotalQuestionCount  = counts.Public + counts.Exam,
+                ParticipantCount    = participants.GetValueOrDefault(c.Id, 0),
+                CreatedAt           = c.CreatedAt,
+                IsDeleted           = c.IsDeleted,
+                DeletedAt           = c.IsDeleted ? c.UpdatedAt : null
+            };
+        }).ToList();
+
+        return Task.FromResult(result);
+    }
+
+    /// <inheritdoc />
+    public Task<QuizCategoryResponse> UpdateCategoryAsync(int categoryId, UpdateQuizCategoryRequest request)
+    {
+        lock (_db.QuizSyncRoot)
+        {
+            var category = _db.QuizCategories.FindOne(c => c.Id == categoryId && !c.IsDeleted)
+                ?? throw new ArgumentException($"Kateqoriya tapılmadı: {categoryId}");
+
+            category.Title       = request.Title.Trim();
+            category.Icon        = request.Icon.Trim();
+            category.Description = request.Description.Trim();
+            category.Color       = request.Color.Trim();
+            category.Topics      = (request.Topics ?? []).Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).ToList();
+            category.SortOrder   = request.SortOrder;
+            category.UpdatedAt   = DateTime.UtcNow;
+            _db.QuizCategories.Update(category);
+
+            var questionCount = _db.QuizQuestions.Count(q => q.QuizCategoryId == categoryId && !q.IsDeleted && !q.IsExamOnly);
+
+            return Task.FromResult(new QuizCategoryResponse
+            {
+                Id            = category.Id,
+                Title         = category.Title,
+                Icon          = category.Icon,
+                Description   = category.Description,
+                Color         = category.Color,
+                Topics        = category.Topics,
+                QuestionCount = questionCount,
+                Difficulty    = "Başlanğıc - Orta - Peşəkar",
+                SortOrder     = category.SortOrder
+            });
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<AdminQuestionPageResponse> GetAdminQuestionsAsync(
+        int? categoryId, string? search, string? difficulty, bool? examOnly, bool deleted, int skip, int take)
+    {
+        // Kənardan gələn ölçülər serverdə məhdudlaşdırılır — böyük cavabla serveri yormaq mümkün olmasın.
+        skip = Math.Max(0, skip);
+        take = Math.Clamp(take, 1, 100);
+
+        var needle = string.IsNullOrWhiteSpace(search) ? null : search.Trim().ToLowerInvariant();
+        DifficultyLevel? level = !string.IsNullOrWhiteSpace(difficulty) && AzToDifficulty.TryGetValue(difficulty, out var d)
+            ? d : null;
+
+        var categoryTitles = _db.QuizCategories.FindAll().ToDictionary(c => c.Id, c => c.Title);
+
+        var matching = _db.QuizQuestions.Find(q => q.IsDeleted == deleted)
+            .Where(q => categoryId is null || q.QuizCategoryId == categoryId)
+            .Where(q => level is null || q.Difficulty == level)
+            .Where(q => examOnly is null || q.IsExamOnly == examOnly)
+            .Where(q => needle is null || q.QuestionText.ToLowerInvariant().Contains(needle))
+            .OrderByDescending(q => q.Id)
+            .ToList();
+
+        // Cavab sayğacları yalnız göstərilən səhifə üçün hesablanır.
+        var page = matching.Skip(skip).Take(take).ToList();
+        var pageIds = page.Select(q => q.Id).ToHashSet();
+        var answerCounts = new Dictionary<int, int>();
+        if (pageIds.Count > 0)
+        {
+            foreach (var result in _db.QuizResults.FindAll())
+            {
+                if (!pageIds.Contains(result.QuestionId)) continue;
+                answerCounts[result.QuestionId] = answerCounts.GetValueOrDefault(result.QuestionId) + 1;
+            }
+        }
+
+        return Task.FromResult(new AdminQuestionPageResponse
+        {
+            Total = matching.Count,
+            Skip  = skip,
+            Take  = take,
+            Items = page.Select(q => MapAdminQuestion(q, categoryTitles, answerCounts.GetValueOrDefault(q.Id))).ToList()
+        });
+    }
+
+    /// <inheritdoc />
+    public Task<AdminQuizQuestionResponse> UpdateQuestionAsync(int questionId, UpdateQuizQuestionRequest request)
+    {
+        if (!AzToDifficulty.TryGetValue(request.Difficulty, out DifficultyLevel difficulty))
+            throw new ArgumentException(
+                $"Yanlış çətinlik dəyəri: {request.Difficulty}. İcazə verilən: Başlanğıc, Orta, Peşəkar");
+
+        if (request.Options.Count != 4)
+            throw new ArgumentException("Hər sualın dəqiq 4 cavab seçimi olmalıdır.");
+
+        if (request.Options.All(o => o.Key != request.CorrectKey))
+            throw new ArgumentException("Düzgün cavab açarı seçimlər arasında olmalıdır.");
+
+        lock (_db.QuizSyncRoot)
+        {
+            _db.Database.BeginTrans();
+            try
+            {
+                // Yaratma yolundakı ilə eyni yazı qapısı: başqa proses (import aləti) eyni anda
+                // banka yazmasın deyə əvvəlcə qapı möhürlənir.
+                _db.Database.GetCollection<LiteDB.BsonDocument>("QuestionBankGate")
+                    .Upsert(new LiteDB.BsonDocument { ["_id"] = "gate", ["version"] = Guid.NewGuid().ToString() });
+
+                var question = _db.QuizQuestions.FindOne(q => q.Id == questionId && !q.IsDeleted)
+                    ?? throw new ArgumentException($"Sual tapılmadı: {questionId}");
+
+                if (!_db.QuizCategories.Exists(c => c.Id == request.CategoryId && !c.IsDeleted))
+                    throw new ArgumentException($"Kateqoriya tapılmadı: {request.CategoryId}");
+
+                // Mətn dəyişəndə əks bankda eyni sualın olmaması yenidən yoxlanılır —
+                // əks halda redaktə ilə açıq sual imtahan bankındakı sualla üst-üstə düşə bilərdi.
+                var normalized = QuizSecurity.NormalizeQuestion(request.Question);
+                if (_db.QuizQuestions.FindAll().Any(q => q.Id != question.Id && !q.IsDeleted &&
+                        q.IsExamOnly != question.IsExamOnly &&
+                        QuizSecurity.NormalizeQuestion(q.QuestionText) == normalized))
+                    throw new ArgumentException("Açıq və məxfi imtahan bankında eyni sual istifadə edilə bilməz.");
+
+                question.QuizCategoryId   = request.CategoryId;
+                question.Difficulty       = difficulty;
+                question.QuestionText     = request.Question.Trim();
+                question.CorrectOptionKey = request.CorrectKey;
+                question.Options          = request.Options.Select(o => new QuizOption
+                {
+                    Key = o.Key, Text = o.Text.Trim(), Explanation = o.Explanation.Trim()
+                }).ToList();
+                question.UpdatedAt        = DateTime.UtcNow;
+                _db.QuizQuestions.Update(question);
+
+                var titles = _db.QuizCategories.FindAll().ToDictionary(c => c.Id, c => c.Title);
+                var answerCount = _db.QuizResults.Count(r => r.QuestionId == question.Id);
+                _db.Database.Commit();
+
+                return Task.FromResult(MapAdminQuestion(question, titles, answerCount));
+            }
+            catch { _db.Database.Rollback(); throw; }
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<int> RestoreCategoryAsync(int categoryId)
+    {
+        // Silmə ilə eyni kilid və eyni tranzaksiya: kateqoriya + onunla birlikdə silinmiş suallar
+        // ya hamısı qayıdır, ya heç biri. Burada `await` YOXDUR.
+        lock (_db.QuizSyncRoot)
+        {
+            _db.Database.BeginTrans();
+            try
+            {
+                var category = _db.QuizCategories.FindOne(c => c.Id == categoryId && c.IsDeleted)
+                    ?? throw new ArgumentException("Silinmiş kateqoriya tapılmadı.");
+
+                var now = DateTime.UtcNow;
+                var cascadeStamp = category.UpdatedAt;
+                category.IsDeleted = false;
+                category.UpdatedAt = now;
+                _db.QuizCategories.Update(category);
+
+                // Kaskad silmə kateqoriya ilə sualları EYNİ `now` damğası ilə işarələyir (DeleteCategoryAsync).
+                // Yalnız o damğanı daşıyan suallar qayıdır — əvvəl ayrıca silinmiş sual silinmiş qalır.
+                var restored = 0;
+                if (cascadeStamp is not null)
+                {
+                    var questions = _db.QuizQuestions
+                        .Find(q => q.QuizCategoryId == categoryId && q.IsDeleted)
+                        .Where(q => q.UpdatedAt == cascadeStamp)
+                        .ToList();
+                    foreach (var q in questions)
+                    {
+                        q.IsDeleted = false;
+                        q.UpdatedAt = now;
+                    }
+                    if (questions.Count > 0) _db.QuizQuestions.Update(questions);
+                    restored = questions.Count;
+                }
+
+                _db.Database.Commit();
+                return Task.FromResult(restored);
+            }
+            catch { _db.Database.Rollback(); throw; }
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<AdminQuizQuestionResponse> RestoreQuestionAsync(int questionId)
+    {
+        lock (_db.QuizSyncRoot)
+        {
+            _db.Database.BeginTrans();
+            try
+            {
+                var question = _db.QuizQuestions.FindOne(q => q.Id == questionId && q.IsDeleted)
+                    ?? throw new ArgumentException("Silinmiş sual tapılmadı.");
+
+                // Kateqoriyası silinmiş sual tək başına qayıtsa "yetim" olar: siyahılarda görünməz,
+                // amma Id ilə oxuna və bal verə bilərdi.
+                if (!_db.QuizCategories.Exists(c => c.Id == question.QuizCategoryId && !c.IsDeleted))
+                    throw new ArgumentException("Sualın kateqoriyası silinib — əvvəlcə kateqoriyanı bərpa edin.");
+
+                // Yaratma qaydası burada da keçərlidir: eyni mətn əks bankda yaranıbsa bərpa sızma yaradar.
+                var normalized = QuizSecurity.NormalizeQuestion(question.QuestionText);
+                if (_db.QuizQuestions.FindAll().Any(q => q.Id != question.Id && !q.IsDeleted &&
+                        q.IsExamOnly != question.IsExamOnly &&
+                        QuizSecurity.NormalizeQuestion(q.QuestionText) == normalized))
+                    throw new ArgumentException("Bu sualın mətni artıq əks bankda mövcuddur — bərpa mümkün deyil.");
+
+                question.IsDeleted = false;
+                question.UpdatedAt = DateTime.UtcNow;
+                _db.QuizQuestions.Update(question);
+
+                var titles = _db.QuizCategories.FindAll().ToDictionary(c => c.Id, c => c.Title);
+                var answerCount = _db.QuizResults.Count(r => r.QuestionId == question.Id);
+                _db.Database.Commit();
+                return Task.FromResult(MapAdminQuestion(question, titles, answerCount));
+            }
+            catch { _db.Database.Rollback(); throw; }
+        }
+    }
+
+    private static AdminQuizQuestionResponse MapAdminQuestion(
+        QuizQuestion q, Dictionary<int, string> categoryTitles, int answerCount) => new()
+    {
+        Id            = q.Id,
+        CategoryId    = q.QuizCategoryId,
+        CategoryTitle = categoryTitles.GetValueOrDefault(q.QuizCategoryId, "—"),
+        Difficulty    = DifficultyToAz.GetValueOrDefault(q.Difficulty, q.Difficulty.ToString()),
+        Question      = q.QuestionText,
+        CorrectKey    = q.CorrectOptionKey,
+        IsExamOnly    = q.IsExamOnly,
+        Options       = q.Options.Select(o => new QuizOptionResponse
+        {
+            Key = o.Key, Text = o.Text, Explanation = o.Explanation
+        }).ToList(),
+        CreatedAt     = q.CreatedAt,
+        UpdatedAt     = q.UpdatedAt,
+        AnswerCount   = answerCount,
+        IsDeleted     = q.IsDeleted,
+        DeletedAt     = q.IsDeleted ? q.UpdatedAt : null
+    };
+
+    // ═══════════════════════════════════════════════════════════
     // LİDERLİK LÖVHƏSİ
     // ═══════════════════════════════════════════════════════════
 

@@ -16,7 +16,8 @@
 .home__cta { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); }
 .home__hero-visual {
   width: 100%;
-  aspect-ratio: 2.15 / 1;
+  /* Vizual mətn sütununun hündürlüyünə yaxın, daha dolğun hero sahəsi tutur. */
+  aspect-ratio: 8 / 5;
   overflow: hidden;
   border: 1px solid var(--border-3);
   border-radius: var(--r-xl);
@@ -26,7 +27,7 @@
 .home__hero-visual img {
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: cover;
 }
 
 .home__stats { margin-top: var(--sp-8); }

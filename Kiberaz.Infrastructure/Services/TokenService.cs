@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Kiberaz.Domain.Common;
 using Kiberaz.Domain.Entities;
 
 namespace Kiberaz.Infrastructure.Services;
@@ -63,7 +64,7 @@ public class TokenService
             issuer:             jwtSettings["Issuer"],
             audience:           jwtSettings["Audience"],
             claims:             claims,
-            expires:            DateTime.UtcNow.AddMinutes(15),
+            expires:            DateTime.UtcNow.AddMinutes(SessionPolicy.AccessTokenMinutes),
             signingCredentials: creds
         );
 

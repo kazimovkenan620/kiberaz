@@ -214,12 +214,31 @@ export function getPrimaryRoleLabel(): string {
 // ona görə burada JavaScript koduna heç vaxt açılmır.
 export function setTokens(accessToken: string): void {
     sessionStorage.setItem('access_token', accessToken);
+    try { localStorage.setItem(SESSION_HINT_KEY, '1'); } catch { /* storage yoxdur */ }
     // Köhnə localStorage açarlarını təmizlə
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('token');
 }
 
+// Serverdə də çıxış: cari access token (jti) qara siyahıya düşür, bu cihazın refresh sessiyası silinir və
+// httpOnly cookie server tərəfindən təmizlənir. Şəbəkə olmasa belə lokal təmizlik hər halda aparılır.
+export async function logoutOnServer(): Promise<void> {
+  const accessToken = sessionStorage.getItem('access_token');
+  logout(); // lokal tokenlər dərhal silinir; server sorğusu ondan sonra gedir
+  if (!accessToken) return;
+  try {
+    await fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      credentials: 'include',
+    });
+  } catch {
+    // oflayn / server əlçatmaz — lokal çıxış kifayətdir, sessiya 7 gün sonra onsuz da bitir
+  }
+}
+
 export function logout() {
+    try { localStorage.removeItem(SESSION_HINT_KEY); } catch { /* storage yoxdur */ }
     sessionStorage.removeItem('access_token');
     sessionStorage.removeItem(USER_NICKNAME_KEY);
     sessionStorage.removeItem(USER_ROLES_KEY);
@@ -231,18 +250,31 @@ export function logout() {
 // Servər 401 qaytardıqda bu funksiya köhnə access token-i göndərib yenisini alır.
 // Refresh token httpOnly cookie olaraq brauzer tərəfindən avtomatik əlavə edilir —
 // JavaScript heç vaxt ona birbaşa toxuna bilmir, bu da XSS hücumlarından qoruyur.
+//
+// Access token olmadan da çağırıla bilər (yeni tab, səhifə yenilənməsi): server sessiyanı cookie ilə tapır (audit F6).
+// Anonim ziyarətçi üçün boş yerə sorğu getməsin deyə yalnız "sessiya var" işarəsi (localStorage) olanda sınanır.
+const SESSION_HINT_KEY = 'kiberaz-session';
+
+export function hasSessionHint(): boolean {
+  try { return localStorage.getItem(SESSION_HINT_KEY) === '1'; } catch { return false; }
+}
+
 export async function refreshTokens(): Promise<boolean> {
   const accessToken = sessionStorage.getItem('access_token');
-  if (!accessToken) return false;
+  if (!accessToken && !hasSessionHint()) return false;
 
   try {
     const response = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ accessToken }),
+      body: JSON.stringify({ accessToken: accessToken ?? undefined }),
     });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      // Sessiya serverdə yoxdur (çıxış/expired) — işarəni silirik ki, hər açılışda sorğu getməsin.
+      if (!accessToken) { try { localStorage.removeItem(SESSION_HINT_KEY); } catch { /* storage yoxdur */ } }
+      return false;
+    }
     const data: AuthResponse = await response.json();
     if (data.success && data.data) {
       setTokens(data.data.accessToken);

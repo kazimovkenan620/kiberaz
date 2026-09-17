@@ -9,181 +9,70 @@ using MimeKit;
 
 namespace Kiberaz.Infrastructure.Services;
 
-/// <summary>
-/// SMTP vasitəsilə e-poçt göndərən servis.
-/// Etimadnamələr (credentials) HEÇVAXT appsettings-ə yazılmır —
-/// mütləq environment variable ilə təmin edilir.
-/// </summary>
-// E-poçt göndərməni idarə edən servis — hesab aktivləşdirmə, şifrə sıfırlama və e-poçt dəyişikliyi üçün istifadə olunur.
-// MailKit kitabxanası ilə real SMTP bağlantısı qurulur; token və şəxsi məlumatlar heç vaxt loglanmır.
+// E-poçt məzmununu qurur və EmailQueue-ya atır — SMTP ilə real göndərişi EmailDispatcher (fon) edir.
+// Sorğu cavabı SMTP gecikməsindən asılı olmur: hesab varlığı cavab vaxtından sızmır, Gmail ləngiyəndə
+// "auth"/"sensitive" limiti altındakı thread-lər tutulmur. Linklərdəki tokenlər fragment-də (#) daşınır.
 public class EmailService : IEmailService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<EmailService> _logger;
     private readonly IHostEnvironment _environment;
+    private readonly EmailQueue _queue;
 
-    public EmailService(IConfiguration config, ILogger<EmailService> logger, IHostEnvironment environment)
+    public EmailService(IConfiguration config, ILogger<EmailService> logger, IHostEnvironment environment, EmailQueue queue)
     {
         _config = config;
         _logger = logger;
         _environment = environment;
+        _queue = queue;
     }
 
-    /// <inheritdoc />
-    // İstifadəçiyə e-poçt təsdiq linki göndərir.
-    // Token URL-safe kodlaşdırılır ki, xüsusi simvollar link pozmasın.
-    public async Task<ApiResponse<bool>> SendConfirmationEmailAsync(
-        string toEmail, string userId, string token)
+    public Task<ApiResponse<bool>> SendConfirmationEmailAsync(string toEmail, string userId, string token)
     {
-        try
-        {
-            var settings  = _config.GetSection("EmailSettings");
-            var smtpHost  = settings["SmtpHost"]  ?? throw new InvalidOperationException("SMTP host konfiqurasiya edilməyib.");
-            var smtpPort  = int.Parse(settings["SmtpPort"] ?? "465");
-            var fromEmail = settings["FromEmail"] ?? throw new InvalidOperationException("Göndərici e-poçt konfiqurasiya edilməyib.");
-            var fromName  = settings["FromName"]  ?? "Kiberaz.az";
-            var username  = settings["SmtpUsername"] ?? throw new InvalidOperationException("SMTP username konfiqurasiya edilməyib.");
-            var password  = settings["SmtpPassword"] ?? throw new InvalidOperationException("SMTP password konfiqurasiya edilməyib.");
-            var frontendUrl = _config["FrontendUrl"] ?? "http://localhost:5173";
-
-            // Token URL-safe formata çevrilir
-            var encodedToken = Uri.EscapeDataString(token);
-            var confirmUrl   = $"{frontendUrl}/confirm-email#userId={Uri.EscapeDataString(userId)}&token={encodedToken}";
-
-            // Development-də də təsdiq tokenini loglamaq olmaz. SMTP yoxdursa əməliyyat
-            // açıq şəkildə uğursuz qaytarılır ki, sistem göndərilməmiş məktubu uğurlu saymasın.
-            if (_environment.IsDevelopment() && IsSmtpNotConfigured(username, password))
-            {
-                _logger.LogWarning("SMTP konfiqurasiya edilməyib. Təsdiq e-poçtu göndərilmədi.");
-                return ApiResponse<bool>.Fail("Development rejimi: SMTP konfiqurasiya edilməyib.");
-            }
-
-            var htmlBody = BuildEmailHtml(confirmUrl);
-
-            await SendHtmlEmailAsync(
-                smtpHost,
-                smtpPort,
-                username,
-                password,
-                fromEmail,
-                fromName,
-                toEmail,
-                "Kiberaz.az - Email tesdiqi",
-                htmlBody);
-            _logger.LogInformation("Təsdiq e-poçtu göndərildi.");
-            return ApiResponse<bool>.Ok(true, "E-poçt göndərildi.");
-        }
-        catch (Exception ex)
-        {
-            // 🛡️ OWASP A09: SMTP xətası loglanır, lakin client-ə açılmır
-            _logger.LogError(ex, "Təsdiq e-poçtu göndərilərkən xəta baş verdi.");
-            return ApiResponse<bool>.Fail("E-poçt göndərilə bilmədi.");
-        }
+        var frontendUrl = _config["FrontendUrl"] ?? "http://localhost:5173";
+        var confirmUrl  = $"{frontendUrl}/confirm-email#userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}";
+        return Task.FromResult(Enqueue(toEmail, "Kiberaz.az - Email tesdiqi", BuildEmailHtml(confirmUrl)));
     }
 
-    /// <summary>Kiberaz.az brendinə uyğun HTML e-poçt şablonu.</summary>
-    // Şifrə sıfırlama linkini e-poçtla göndərir.
-    // Ümumi SendActionEmailAsync metodunu çağırır — yalnız URL və düymə mətni fərqlənir.
     public Task<ApiResponse<bool>> SendPasswordResetEmailAsync(string toEmail, string userId, string token)
     {
         var frontendUrl = _config["FrontendUrl"] ?? "http://localhost:5173";
         var resetUrl = $"{frontendUrl}/reset-password#userId={Uri.EscapeDataString(userId)}&token={Uri.EscapeDataString(token)}";
-        return SendActionEmailAsync(toEmail, "Kiberaz.az - Şifrə yeniləmə", resetUrl, "Şifrəni yenilə");
+        return Task.FromResult(Enqueue(toEmail, "Kiberaz.az - Şifrə yeniləmə", BuildActionEmailHtml(resetUrl, "Şifrəni yenilə")));
     }
 
-    // E-poçt dəyişikliyi üçün təsdiq linki göndərir.
-    // Yeni e-poçt ünvanı da URL-ə əlavə edilir — backend dəyişikliyi yalnız bu linkin açılmasından sonra tətbiq edir.
     public Task<ApiResponse<bool>> SendEmailChangeConfirmationAsync(string toEmail, string userId, string newEmail, string token)
     {
         var frontendUrl = _config["FrontendUrl"] ?? "http://localhost:5173";
         var confirmUrl = $"{frontendUrl}/confirm-email-change#userId={Uri.EscapeDataString(userId)}&newEmail={Uri.EscapeDataString(newEmail)}&token={Uri.EscapeDataString(token)}";
-        return SendActionEmailAsync(toEmail, "Kiberaz.az - E-poçt dəyişikliyi", confirmUrl, "Dəyişikliyi təsdiqlə");
+        return Task.FromResult(Enqueue(toEmail, "Kiberaz.az - E-poçt dəyişikliyi", BuildActionEmailHtml(confirmUrl, "Dəyişikliyi təsdiqlə")));
     }
 
-    // Fərqli e-poçt növlərini (şifrə sıfırlama, e-poçt dəyişikliyi) eyni şablonla göndərən ümumi metod.
-    // SMTP konfiqurasiyası oxunur; development daxil olmaqla heç bir mühitdə gizli link loglanmır.
-    private async Task<ApiResponse<bool>> SendActionEmailAsync(string toEmail, string subject, string actionUrl, string actionText)
+    // Konfiqurasiya növbəyə atmazdan ƏVVƏL yoxlanılır: çatışmayan SMTP ayarı sorğu anında görünsün, fon prosesində itməsin.
+    private ApiResponse<bool> Enqueue(string toEmail, string subject, string htmlBody)
     {
         try
         {
-            var settings = _config.GetSection("EmailSettings");
-            var smtpHost = settings["SmtpHost"] ?? throw new InvalidOperationException("SMTP host konfiqurasiya edilmeyib.");
-            var smtpPort = int.Parse(settings["SmtpPort"] ?? "465");
-            var fromEmail = settings["FromEmail"] ?? throw new InvalidOperationException("Göndərici e-poçt konfiqurasiya edilməyib.");
-            var fromName = settings["FromName"] ?? "Kiberaz.az";
-            var username = settings["SmtpUsername"] ?? throw new InvalidOperationException("SMTP username konfiqurasiya edilmeyib.");
-            var password = settings["SmtpPassword"] ?? throw new InvalidOperationException("SMTP password konfiqurasiya edilmeyib.");
-
-            if (_environment.IsDevelopment() && IsSmtpNotConfigured(username, password))
+            var settings = SmtpSender.ReadSettings(_config);
+            if (_environment.IsDevelopment() && SmtpSender.IsPlaceholder(settings))
             {
-                _logger.LogWarning("SMTP konfiqurasiya edilməyib. Əməliyyat e-poçtu göndərilmədi.");
+                _logger.LogWarning("SMTP konfiqurasiya edilməyib. E-poçt göndərilmədi: {Subject}", subject);
                 return ApiResponse<bool>.Fail("Development rejimi: SMTP konfiqurasiya edilməyib.");
             }
-
-            await SendHtmlEmailAsync(
-                smtpHost,
-                smtpPort,
-                username,
-                password,
-                fromEmail,
-                fromName,
-                toEmail,
-                subject,
-                BuildActionEmailHtml(actionUrl, actionText));
-            _logger.LogInformation("Əməliyyat e-poçtu göndərildi.");
-            return ApiResponse<bool>.Ok(true, "E-poçt göndərildi.");
+            if (!_queue.TryEnqueue(new EmailJob(toEmail, subject, htmlBody)))
+            {
+                _logger.LogError("E-poçt növbəsi doludur ({Capacity}); e-poçt atıldı: {Subject}", EmailQueue.Capacity, subject);
+                return ApiResponse<bool>.Fail("E-poçt xidməti hazırda məşğuldur. Bir az sonra yenidən cəhd edin.");
+            }
+            return ApiResponse<bool>.Ok(true, "E-poçt göndərilir.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Əməliyyat e-poçtu göndərilərkən xəta baş verdi.");
+            _logger.LogError(ex, "E-poçt növbəyə əlavə edilərkən xəta baş verdi.");
             return ApiResponse<bool>.Fail("E-poçt göndərilə bilmədi.");
         }
     }
 
-    // SMTP parolunun "placeholder" dəyər olub-olmadığını yoxlayır.
-    // Developer konfiqurasiya etməyi unutsa belə sistem düzgün xəbərdarlıq verir — real parol ilə qarışıqlıq olmur.
-    private static bool IsSmtpNotConfigured(string username, string password)
-    {
-        return string.IsNullOrWhiteSpace(username)
-               || string.IsNullOrWhiteSpace(password)
-               || username.Equals("your_email_here", StringComparison.OrdinalIgnoreCase)
-               || password.Equals("your_password_here", StringComparison.OrdinalIgnoreCase);
-    }
-
-    // MailKit ilə real SMTP bağlantısı quraraq HTML e-poçt göndərir.
-    // Port 465-də SSL, digər portlarda STARTTLS istifadə olunur — bağlantı şifrələnmiş olur.
-    private static async Task SendHtmlEmailAsync(
-        string smtpHost,
-        int smtpPort,
-        string username,
-        string password,
-        string fromEmail,
-        string fromName,
-        string toEmail,
-        string subject,
-        string htmlBody)
-    {
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(fromName, fromEmail));
-        message.To.Add(MailboxAddress.Parse(toEmail));
-        message.Subject = subject;
-        message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
-
-        using var client = new SmtpClient { Timeout = 30000 };
-
-        // Port 465 birbaşa SSL tələb edir; digər portlar (587 kimi) TLS handshake ilə başlayır.
-        var socketOptions = smtpPort == 465
-            ? SecureSocketOptions.SslOnConnect
-            : SecureSocketOptions.StartTls;
-
-        await client.ConnectAsync(smtpHost, smtpPort, socketOptions);
-        await client.AuthenticateAsync(username, password);
-        await client.SendAsync(message);
-        await client.DisconnectAsync(true);
-    }
-
-    // Ümumi əməliyyat e-poçtları üçün sadə HTML şablonu qaytarır.
-    // Inline CSS istifadə edilir — e-poçt müştəriləri xarici CSS-i bloklaya bilir.
     private static string BuildActionEmailHtml(string actionUrl, string actionText) => $"""
         <!DOCTYPE html>
         <html lang="az">
@@ -314,4 +203,44 @@ public class EmailService : IEmailService
         </body>
         </html>
         """;
+}
+
+// SMTP göndərişi (MailKit). Singleton; EmailDispatcher çağırır.
+public sealed class SmtpSender(IConfiguration config)
+{
+    public sealed record Settings(string Host, int Port, string FromEmail, string FromName, string Username, string Password);
+
+    public static Settings ReadSettings(IConfiguration config)
+    {
+        var settings = config.GetSection("EmailSettings");
+        return new Settings(
+            settings["SmtpHost"] ?? throw new InvalidOperationException("SMTP host konfiqurasiya edilməyib."),
+            int.Parse(settings["SmtpPort"] ?? "465"),
+            settings["FromEmail"] ?? throw new InvalidOperationException("Göndərici e-poçt konfiqurasiya edilməyib."),
+            settings["FromName"] ?? "Kiberaz.az",
+            settings["SmtpUsername"] ?? throw new InvalidOperationException("SMTP username konfiqurasiya edilməyib."),
+            settings["SmtpPassword"] ?? throw new InvalidOperationException("SMTP password konfiqurasiya edilməyib."));
+    }
+
+    public static bool IsPlaceholder(Settings s)
+        => string.IsNullOrWhiteSpace(s.Username) || string.IsNullOrWhiteSpace(s.Password)
+           || s.Username.Equals("your_email_here", StringComparison.OrdinalIgnoreCase)
+           || s.Password.Equals("your_password_here", StringComparison.OrdinalIgnoreCase);
+
+    public async Task SendAsync(EmailJob job, CancellationToken cancellationToken)
+    {
+        var s = ReadSettings(config);
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(s.FromName, s.FromEmail));
+        message.To.Add(MailboxAddress.Parse(job.To));
+        message.Subject = job.Subject;
+        message.Body = new BodyBuilder { HtmlBody = job.HtmlBody }.ToMessageBody();
+
+        using var client = new SmtpClient { Timeout = 30000 };
+        var socketOptions = s.Port == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
+        await client.ConnectAsync(s.Host, s.Port, socketOptions, cancellationToken);
+        await client.AuthenticateAsync(s.Username, s.Password, cancellationToken);
+        await client.SendAsync(message, cancellationToken);
+        await client.DisconnectAsync(true, cancellationToken);
+    }
 }

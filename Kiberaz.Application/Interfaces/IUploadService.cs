@@ -3,22 +3,15 @@ using System.Threading.Tasks;
 
 namespace Kiberaz.Application.Interfaces;
 
-/// <summary>
-/// Platformada təhlükəsiz fayl yükləmə (File Upload) servisinin müqaviləsi.
-/// Clean Architecture qaydalarına uyğun olaraq, Application layihəsi Microsoft.AspNetCore.Http (IFormFile)
-/// asılılığı daşımır, bunun əvəzinə saf .NET Stream və fayl adı istifadə edir.
-/// </summary>
 public interface IUploadService
 {
+    /// <summary>Sillabus PDF-ini oxuyur; yalnız təmizlənmiş (SafePdf) məzmun qaytarır.</summary>
     Task<byte[]> ReadSafePdfAsync(string fileName);
+
     /// <summary>
-    /// Faylı Stream vasitəsilə təhlükəsiz şəkildə serverə yükləyir və URL-ni qaytarır.
+    /// Faylı yoxlayıb (uzantı, magic bytes, ölçü, PDF sanitizasiyası) saxlayır və nisbi yolu qaytarır.
+    /// <paramref name="ownerId"/> hesab başına günlük kvota və sahiblik qeydi üçündür.
     /// </summary>
-    /// <param name="fileStream">Faylın data axını (stream)</param>
-    /// <param name="fileName">Faylın adı (uzantısını yoxlamaq üçün)</param>
-    /// <param name="folderName">wwwroot/uploads/ altında yerləşəcək alt qovluq (məs: "photos", "syllabus")</param>
-    /// <param name="allowedExtensions">İcazə verilən uzantılar (məs: ['.jpg', '.png'])</param>
-    /// <param name="maxSizeBytes">Maksimum icazə verilən fayl ölçüsü (bayt ilə)</param>
-    /// <returns>Faylın brauzerdən əlçatan olan nisbi URL-i</returns>
-    Task<string> UploadFileAsync(Stream fileStream, string fileName, string folderName, string[] allowedExtensions, long maxSizeBytes);
+    Task<string> UploadFileAsync(Stream fileStream, string fileName, string folderName,
+        string[] allowedExtensions, long maxSizeBytes, string ownerId);
 }

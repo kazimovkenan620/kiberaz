@@ -5,7 +5,11 @@ namespace Kiberaz.Application.DTOs.Auth;
 /// </summary>
 public class TokenRefreshRequest
 {
-    public string AccessToken { get; set; } = string.Empty;
+    /// <summary>
+    /// Vaxtı keçmiş access token. Boş göndərilə bilər (yeni tab / səhifə yenilənməsi) — bu halda sessiya
+    /// yalnız cookie-dəki refresh tokenin hash-i ilə tapılır.
+    /// </summary>
+    public string? AccessToken { get; set; }
 
     /// <summary>
     /// Refresh token. Body-də göndərilməyə bilər — bu halda httpOnly cookie-dən oxunur.

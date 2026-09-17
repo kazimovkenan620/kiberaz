@@ -1,10 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useAsyncData } from '../hooks/useAsyncData';
-import { ArrowRight, BarChart2, BookOpen, Clock, FileText, Globe, Mail, Phone, Plus, Send, ShieldCheck } from 'lucide-react';
-import { createCourse, getApprovedCourses, uploadInstructorPhoto, uploadSyllabusPdf, type CourseResponse, type CreateCourseRequest } from '../services/courseService';
-import { getToken } from '../services/authService';
-import { courseAccentColor, DEFAULT_COURSE_ACCENT } from '../utils/courseAccent';
-import { Button, ButtonLink, EmptyState, ErrorState, FormField, Modal, SkeletonList } from './ui';
+import { ArrowRight, BarChart2, BookOpen, Check, Clock, Crown, FileText, Globe, Mail, Phone, Plus, Send, ShieldCheck } from 'lucide-react';
+import { createCourse, getApprovedCourses, getVipStatus, resolveUploadUrl, type CourseResponse, type CreateCourseRequest, type VipStatus } from '../services/courseService';
+import { getStoredUserRoles, getToken } from '../services/authService';
+import { courseAccentColor } from '../utils/courseAccent';
+import CourseForm from './CourseForm';
+import { Button, ButtonLink, EmptyState, ErrorState, Modal, SkeletonList } from './ui';
 import './HeroSlider.css';
 
 // ─── Təlimlər (kurs kəşfi) ────────────────────────────────────
@@ -12,6 +13,10 @@ import './HeroSlider.css';
 // skan edilə bilən əsas məlumat, tam təfərrüat detal pəncərəsindədir.
 // Backend məlumatının heç bir sahəsi itirilməyib (müəllim, sosial linklər,
 // əlaqə, müddət, səviyyə, dil, mövzular, sillabus PDF, detal, kurs əlavə etmə).
+
+const formatDay = (iso: string | null) => iso
+  ? new Intl.DateTimeFormat('az-AZ', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(iso))
+  : '—';
 
 // ── Social Icons ───────────────────────────────────────────────
 const IconLinkedin = ({ size = 16 }: { size?: number }) => (
@@ -60,7 +65,6 @@ interface CourseAdUI {
 }
 
 function mapCourseToUI(course: CourseResponse): CourseAdUI {
-  const host = (import.meta.env.VITE_API_URL || 'http://localhost:5251/api').replace('/api', '');
   return {
     id: String(course.id),
     kicker: course.kicker || 'YENİ TƏLİM',
@@ -68,7 +72,7 @@ function mapCourseToUI(course: CourseResponse): CourseAdUI {
     instructorInitials: course.instructorInitials,
     role: course.instructorRole,
     company: course.instructorCompany || '',
-    instructorPhoto: course.instructorPhotoUrl ? `${host}${course.instructorPhotoUrl}` : undefined,
+    instructorPhoto: resolveUploadUrl(course.instructorPhotoUrl),
     socials: {
       linkedin: course.linkedInUrl || undefined,
       github: course.gitHubUrl || undefined,
@@ -82,7 +86,7 @@ function mapCourseToUI(course: CourseResponse): CourseAdUI {
     language: course.language,
     syllabus: course.syllabusTopics,
     accentColor: courseAccentColor(course.accentColor),
-    syllabusFile: course.syllabusFileUrl ? `${host}${course.syllabusFileUrl}` : undefined,
+    syllabusFile: resolveUploadUrl(course.syllabusFileUrl),
   };
 }
 
@@ -95,182 +99,79 @@ function InstructorAvatar({ ad, size = 'md' }: { ad: CourseAdUI; size?: 'md' | '
 }
 
 // ── Add Course Modal ───────────────────────────────────────────
+// Təlimi yalnız VIP hesab paylaşa bilər (aktiv 30 günlük dövr + dövrdə 1 kredit). Burada göstərilən
+// vəziyyət serverin /course/vip-status cavabıdır; həqiqi qərar serverdə, yazı anında verilir.
 function AddCourseModal({ onClose, onCourseAdded }: { onClose: () => void; onCourseAdded: () => void }) {
-  const [syllabus, setSyllabus] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [syllabusFile, setSyllabusFile] = useState<File | null>(null);
   const loggedIn = Boolean(getToken());
+  const isVip = getStoredUserRoles().some(r => r.toLowerCase() === 'vip');
 
-  const addSyllabus = () => setSyllabus(p => [...p, '']);
-  const updateSyllabus = (i: number, v: string) => setSyllabus(p => p.map((x, idx) => idx === i ? v : x));
+  const statusLoader = useCallback(async (): Promise<VipStatus | null> => {
+    if (!getToken()) return null;
+    const result = await getVipStatus();
+    return result.success && result.data ? result.data : null;
+  }, []);
+  const { state: statusState } = useAsyncData(statusLoader);
+  const vip = statusState.status === 'ready' ? statusState.data : null;
+  const canShare = Boolean(vip?.hasVipRole && vip.hasActiveTerm && vip.coursesRemaining > 0);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setErrors([]);
-
-    // Təlim göndərmə və fayl yükləmə artıq hesaba bağlıdır. Bunu formanı
-    // doldurduqdan SONRA serverdən öyrənmək pis təcrübədir — burada dərhal deyilir.
-    if (!getToken()) {
-      setErrors(['Təlim göndərmək üçün daxil olun. Giriş düyməsi səhifənin yuxarısındadır.']);
-      setLoading(false);
-      return;
-    }
-
-    const form = e.target as HTMLFormElement;
-
-    // 1. Faylları təhlükəsiz şəkildə yükləyirik
-    let instructorPhotoUrl: string | undefined = undefined;
-    let syllabusFileUrl: string | undefined = undefined;
-
-    try {
-      if (photoFile) {
-        const photoResult = await uploadInstructorPhoto(photoFile);
-        if (!photoResult.success || !photoResult.data) {
-          setErrors(photoResult.errors?.length ? photoResult.errors : [photoResult.message || 'Müəllim şəkli yüklənərkən xəta baş verdi.']);
-          setLoading(false);
-          return;
-        }
-        instructorPhotoUrl = photoResult.data;
-      }
-
-      if (syllabusFile) {
-        const syllabusResult = await uploadSyllabusPdf(syllabusFile);
-        if (!syllabusResult.success || !syllabusResult.data) {
-          setErrors(syllabusResult.errors?.length ? syllabusResult.errors : [syllabusResult.message || 'Təlim sillabusu yüklənərkən xəta baş verdi.']);
-          setLoading(false);
-          return;
-        }
-        syllabusFileUrl = syllabusResult.data;
-      }
-
-      const request: CreateCourseRequest = {
-        instructorName: (form.querySelector('#instructor') as HTMLInputElement).value,
-        instructorRole: (form.querySelector('#role') as HTMLInputElement).value,
-        instructorCompany: (form.querySelector('#company') as HTMLInputElement).value || undefined,
-        linkedInUrl: (form.querySelector('#linkedin') as HTMLInputElement).value || undefined,
-        gitHubUrl: (form.querySelector('#github') as HTMLInputElement).value || undefined,
-        contactEmail: (form.querySelector('#contactEmail') as HTMLInputElement).value || undefined,
-        contactPhone: (form.querySelector('#contactPhone') as HTMLInputElement).value || undefined,
-        courseTitle: (form.querySelector('#courseTitle') as HTMLInputElement).value,
-        kicker: (form.querySelector('#kicker') as HTMLInputElement).value || undefined,
-        description: (form.querySelector('#description') as HTMLTextAreaElement).value,
-        duration: (form.querySelector('#duration') as HTMLInputElement).value || '',
-        level: (form.querySelector('#level') as HTMLSelectElement).value || '',
-        language: (form.querySelector('#lang') as HTMLSelectElement).value || 'Azərbaycan dili',
-        syllabusTopics: syllabus.filter(s => s.trim() !== ''),
-        // API kontraktı: yalnız icazəli token adları; dizayn sistemində vurğu brend rəngidir.
-        accentColor: DEFAULT_COURSE_ACCENT,
-        instructorPhotoUrl: instructorPhotoUrl,
-        syllabusFileUrl: syllabusFileUrl,
-      };
-
-      const result = await createCourse(request);
-      if (result.success) {
-        setSubmitted(true);
-        onCourseAdded();
-      } else {
-        // Serverdən bir neçə xəta gələ bilər — hamısı bir sətirdə birləşdirilsə oxunmur.
-        setErrors(result.errors?.length ? result.errors : [result.message || 'Xəta baş verdi.']);
-      }
-    } catch {
-      setErrors(['Serverlə əlaqə yaradıla bilmədi.']);
-    } finally {
-      setLoading(false);
-    }
+  const submit = async (request: CreateCourseRequest) => {
+    const result = await createCourse(request);
+    if (result.success) { setSubmitted(true); onCourseAdded(); }
+    return result;
   };
 
+  const gate = (() => {
+    if (!loggedIn) return (
+      <div className="notice notice--info" role="status">
+        <ShieldCheck size={16} />
+        <span>Təlim paylaşmaq üçün hesabla daxil olmalısınız — bu funksiya yalnız VIP hesablar üçündür.</span>
+      </div>
+    );
+    if (!isVip || (vip && !vip.hasVipRole)) return (
+      <div className="notice notice--warning" role="status">
+        <Crown size={16} />
+        <span>Təlim paylaşmaq yalnız <strong>VIP</strong> hesablar üçündür. VIP üzvlük 30 gün davam edir və hər dövr 1 təlim paylaşma hüququ verir.</span>
+      </div>
+    );
+    if (vip && !vip.hasActiveTerm) return (
+      <div className="notice notice--warning" role="status">
+        <Crown size={16} />
+        <span>Aktiv VIP dövrünüz yoxdur. Yeni təlim paylaşmaq üçün VIP üzvlüyü yeniləyin.</span>
+      </div>
+    );
+    if (vip && vip.coursesRemaining <= 0) return (
+      <div className="notice notice--warning" role="status">
+        <Crown size={16} />
+        <span>Bu VIP dövründə {vip.courseAllowance} təlim paylaşılıb. Növbəti VIP ödənişinə qədər yeni təlim əlavə edilə bilməz; eyni dövrdə əlavə təlim əlavə ödəniş tələb edir (ödəniş sistemi tezliklə).</span>
+      </div>
+    );
+    if (vip) return (
+      <div className="notice notice--success" role="status">
+        <Crown size={16} />
+        <span>VIP dövrü {formatDay(vip.termEndsAt)} tarixinədək aktivdir · bu dövrdə <strong>{vip.coursesRemaining} / {vip.courseAllowance}</strong> təlim hüququ qalıb. Təlim admin təsdiqindən sonra <strong>{vip.courseActiveDays} gün</strong> saytda qalır, sonra passivə düşür; kabinetdən idarə edə bilərsiniz.</span>
+      </div>
+    );
+    return null;
+  })();
+
   return (
-    <Modal open onClose={onClose} title="Təlimini platformaya əlavə et" kicker="KIBERAZ.AZ" size="lg">
+    <Modal open onClose={onClose} title="Təlimini platformaya əlavə et" kicker="KIBERAZ.AZ · VIP" size="lg">
       {submitted ? (
         <div className="auth-success">
           <div className="auth-success__icon"><Send size={24} /></div>
           <h3>Göndərildi!</h3>
-          <p>Təliminiz qeydə alındı və <strong>moderasiya növbəsinə</strong> düşdü. Admin təsdiqlədikdən sonra saytda görünəcək.</p>
+          <p>Təliminiz qeydə alındı və <strong>moderasiya növbəsinə</strong> düşdü. Admin təsdiqlədikdən sonra 30 gün saytda görünəcək; müddəti və dəyişiklikləri kabinetdəki <strong>Təlimlərim</strong> bölməsindən idarə edin.</p>
           <Button variant="primary" onClick={onClose}>Bağla</Button>
         </div>
       ) : (
-        <form className="course-form" onSubmit={handleSubmit}>
-          {!loggedIn && (
-            <div className="notice notice--info" role="status">
-              <ShieldCheck size={16} />
-              <span>Təlim təklifi göndərmək üçün hesabla daxil olmalısınız — bu, təklifin sizin adınıza qeyd olunması üçün lazımdır.</span>
-            </div>
-          )}
-
-          <div className="form-section">Müəllim məlumatları</div>
-          <div className="form-grid form-grid--2">
-            <FormField id="instructor" label="Müəllim adı" required><input id="instructor" className="input" type="text" placeholder="Ad Soyad" required /></FormField>
-            <FormField id="role" label="Vəzifə" required><input id="role" className="input" type="text" placeholder="Senior Security Engineer" required /></FormField>
-          </div>
-          <div className="form-grid form-grid--3">
-            <FormField id="company" label="Şirkət"><input id="company" className="input" type="text" placeholder="Şirkət adı" /></FormField>
-            <FormField id="linkedin" label="LinkedIn URL"><input id="linkedin" className="input" type="url" placeholder="https://linkedin.com/in/..." /></FormField>
-            <FormField id="github" label="GitHub URL"><input id="github" className="input" type="url" placeholder="https://github.com/..." /></FormField>
-          </div>
-          <FormField id="photoFile" label="Müəllim şəkli" hint="PNG, JPG, WEBP — maksimum 2MB">
-            <input id="photoFile" className="input" type="file" accept="image/*" onChange={e => setPhotoFile(e.target.files?.[0] || null)} />
-          </FormField>
-
-          <div className="form-section">Təlim məlumatları</div>
-          <div className="form-grid form-grid--2">
-            <FormField id="courseTitle" label="Təlim başlığı" required><input id="courseTitle" className="input" type="text" placeholder="Web Application Pentesting" required /></FormField>
-            <FormField id="kicker" label="Üst başlıq (kicker)"><input id="kicker" className="input" type="text" placeholder="YENİ QRUP: 15 OKTYABR" /></FormField>
-          </div>
-          <div className="form-grid form-grid--3">
-            <FormField id="duration" label="Müddət" required><input id="duration" className="input" type="text" placeholder="8 həftə" required minLength={2} /></FormField>
-            <FormField id="level" label="Səviyyə" required>
-              <select id="level" className="select" required defaultValue="">
-                <option value="">Seçin...</option>
-                <option>Başlanğıc</option><option>Başlanğıc → Orta</option>
-                <option>Orta</option><option>Orta → Peşəkar</option><option>Peşəkar</option>
-              </select>
-            </FormField>
-            <FormField id="lang" label="Dil">
-              <select id="lang" className="select"><option>Azərbaycan dili</option><option>İngilis dili</option><option>Rus dili</option></select>
-            </FormField>
-          </div>
-          <FormField id="syllabusFile" label="Təlim sillabusu" hint="PDF — maksimum 10MB">
-            <input id="syllabusFile" className="input" type="file" accept="application/pdf" onChange={e => setSyllabusFile(e.target.files?.[0] || null)} />
-          </FormField>
-          <FormField id="description" label="Təlim açıqlaması" required>
-            <textarea id="description" className="textarea" rows={3} placeholder="Təlimin məzmunu, hədəf auditoriyası..." required />
-          </FormField>
-          <div className="form-grid form-grid--2">
-            <FormField id="contactEmail" label="E-poçt (Gmail)"><input id="contactEmail" className="input" type="email" placeholder="təlim@gmail.com" /></FormField>
-            <FormField id="contactPhone" label="Əlaqə nömrəsi"><input id="contactPhone" className="input" type="tel" placeholder="+994 XX XXX XX XX" /></FormField>
-          </div>
-
-          <div className="field">
-            <span className="field__label" id="syllabus-label">Proqram mövzuları</span>
-            <div className="syllabus-inputs" role="group" aria-labelledby="syllabus-label">
-              {syllabus.map((s, i) => (
-                <div key={i} className="syllabus-input-row">
-                  <span className="syllabus-input-num" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
-                  <input type="text" className="input" value={s} onChange={e => updateSyllabus(i, e.target.value)} placeholder={`Mövzu ${i + 1}...`} aria-label={`Mövzu ${i + 1}`} />
-                </div>
-              ))}
-              <Button variant="ghost" size="sm" onClick={addSyllabus}><Plus size={13} /> Mövzu əlavə et</Button>
-            </div>
-          </div>
-
-          {errors.length > 0 && (
-            <div className="notice notice--danger" role="alert" aria-live="assertive">
-              <ul>{errors.map((msg, i) => <li key={i}>{msg}</li>)}</ul>
-            </div>
-          )}
-
-          <div className="modal__actions modal__actions--between">
-            <span className="modal__note">* Mütləq doldurulmalı olan sahələr.</span>
-            <div className="auth-form__actions">
-              <Button variant="outline" onClick={onClose}>Ləğv et</Button>
-              <Button type="submit" variant="primary" loading={loading}><Send size={14} /> Göndər</Button>
-            </div>
-          </div>
-        </form>
+        <CourseForm
+          notice={gate}
+          disabled={!loggedIn || !isVip || !canShare}
+          submitLabel="Göndər"
+          onCancel={onClose}
+          onSubmit={submit}
+        />
       )}
     </Modal>
   );
@@ -342,37 +243,61 @@ function CourseCard({ ad, onDetails }: { ad: CourseAdUI; onDetails: () => void }
   const shownTopics = ad.syllabus.slice(0, 3);
   return (
     <article className="course-card" style={{ '--accent': ad.accentColor } as React.CSSProperties}>
-      <div className="course-card__top">
-        <span className="kicker course-card__kicker">{ad.kicker}</span>
-        <span className="badge badge--outline"><BarChart2 size={12} /> {ad.level}</span>
-      </div>
-      <h3 className="course-card__title">{ad.courseTitle}</h3>
-      <div className="course-card__instructor">
-        <InstructorAvatar ad={ad} />
-        <div className="course-card__who">
-          <span className="course-card__name">{ad.instructor}</span>
-          <span className="course-card__role">{ad.role}{ad.company ? ` · ${ad.company}` : ''}</span>
+      <div className="course-card__visual" aria-hidden="true">
+        <span className="course-card__visual-kicker">KIBERAZ.AZ TƏLİMİ</span>
+        <div className="course-card__visual-media">
+          <span className="course-card__visual-icon"><ShieldCheck size={28} strokeWidth={1.5} /></span>
+          <div className={`course-card__visual-photo${ad.instructorPhoto ? '' : ' course-card__visual-photo--placeholder'}`}>
+            {ad.instructorPhoto
+              ? <img src={ad.instructorPhoto} alt="" />
+              : <span>{ad.instructorInitials}</span>}
+          </div>
         </div>
+        <strong>{ad.instructor}</strong>
+        <span>{ad.role}{ad.company ? ` · ${ad.company}` : ''}</span>
       </div>
-      <p className="course-card__desc">{ad.description}</p>
-      <div className="course-meta">
-        <span className="tag"><Clock size={12} /> {ad.duration}</span>
-        <span className="tag"><Globe size={12} /> {ad.language}</span>
-        {ad.syllabus.length > 0 && <span className="tag"><BookOpen size={12} /> {ad.syllabus.length} mövzu</span>}
-      </div>
-      {shownTopics.length > 0 && (
-        <ul className="course-card__topics" aria-label="Proqram mövzuları">
-          {shownTopics.map((t, i) => <li key={i}>{t}</li>)}
-          {ad.syllabus.length > shownTopics.length && <li className="course-card__more">+{ad.syllabus.length - shownTopics.length} mövzu</li>}
-        </ul>
-      )}
-      <div className="course-card__actions">
-        <Button variant="primary" size="sm" onClick={onDetails}>Ətraflı <ArrowRight size={14} /></Button>
-        {ad.syllabusFile && (
-          <ButtonLink href={ad.syllabusFile} target="_blank" rel="noreferrer" variant="outline" size="sm">
-            <FileText size={13} /> Sillabus (PDF)
-          </ButtonLink>
+
+      <div className="course-card__content">
+        <div className="course-card__top">
+          <span className="kicker course-card__kicker">{ad.kicker}</span>
+          <span className="course-card__status"><ShieldCheck size={13} /> Təlim elanı</span>
+        </div>
+        <h3 className="course-card__title">{ad.courseTitle}</h3>
+        <p className="course-card__desc">{ad.description}</p>
+
+        <div className="course-meta course-card__meta">
+          <span className="tag"><Clock size={12} /> {ad.duration}</span>
+          <span className="tag"><BarChart2 size={12} /> {ad.level}</span>
+          <span className="tag"><Globe size={12} /> {ad.language}</span>
+          {ad.syllabus.length > 0 && <span className="tag"><BookOpen size={12} /> {ad.syllabus.length} mövzu</span>}
+        </div>
+
+        {shownTopics.length > 0 && (
+          <div className="course-card__program">
+          <h4>Təlimdə nələr öyrənəcəksiniz?</h4>
+          <ul className="course-card__topics" aria-label="Təlimdə öyrənəcəkləriniz">
+            {shownTopics.map((topic, index) => <li key={index}><Check size={13} /> {topic}</li>)}
+          </ul>
+          </div>
         )}
+
+        <div className="course-card__footer">
+          <div className="course-card__instructor">
+            <InstructorAvatar ad={ad} />
+            <div className="course-card__who">
+              <span className="course-card__name">{ad.instructor}</span>
+              <span className="course-card__role">{ad.role}{ad.company ? ` · ${ad.company}` : ''}</span>
+            </div>
+          </div>
+          <div className="course-card__actions">
+            {ad.syllabusFile && (
+              <ButtonLink href={ad.syllabusFile} target="_blank" rel="noreferrer" variant="outline" size="sm">
+                <FileText size={13} /> Sillabus
+              </ButtonLink>
+            )}
+            <Button variant="primary" onClick={onDetails}>Proqram və əlaqə <ArrowRight size={15} /></Button>
+          </div>
+        </div>
       </div>
     </article>
   );
@@ -397,15 +322,14 @@ export default function HeroSlider() {
   return (
     <section id="home" className="courses page-section" aria-labelledby="courses-heading">
       <div className="container">
-        <div className="section-heading">
-          <div>
-            <div className="kicker">Təlimlər</div>
-            <h2 id="courses-heading">Azərbaycanın kibertəhlükəsizlik təlimləri</h2>
-            <p>Peşəkar müəllimlərin platformada təqdim etdiyi, admin tərəfindən təsdiqlənmiş təlim proqramları.</p>
+        <div className="courses__showcase">
+        <div className="courses__intro">
+          <div className="courses__intro-copy">
+            <div className="kicker">KIBERAZ.AZ / TƏLİMLƏR</div>
+            <h2 id="courses-heading">Kibertəhlükəsizlikdə ilk addımın<br /><span>buradan başlayır.</span></h2>
+            <p>Təlimçilərlə tanış ol, proqramları müqayisə et və sənə uyğun təlimi seç.</p>
           </div>
-          <Button variant="outline" onClick={() => setModalOpen(true)} id="course-add-btn">
-            <Plus size={15} /> Təlim əlavə et
-          </Button>
+
         </div>
 
         {state.status === 'loading' && (
@@ -427,7 +351,7 @@ export default function HeroSlider() {
             <EmptyState
               icon={<BookOpen size={20} />}
               title="Hələ ki təlim əlavə olunmayıb"
-              text="İlk təliminizi platformaya əlavə edin — admin təsdiqindən sonra burada görünəcək."
+              text="VIP hesabla ilk təliminizi platformaya əlavə edin — admin təsdiqindən sonra 30 gün burada görünəcək."
               action={<Button variant="primary" onClick={() => setModalOpen(true)}><Plus size={15} /> Təlim əlavə et</Button>}
             />
           </div>
@@ -438,6 +362,15 @@ export default function HeroSlider() {
             {courses.map(ad => <CourseCard key={ad.id} ad={ad} onDetails={() => setDetailsId(ad.id)} />)}
           </div>
         )}
+        <aside className="courses__publisher" aria-labelledby="courses-teachers-heading">
+          <span className="courses__invitation-symbol" aria-hidden="true"><BookOpen size={24} /></span>
+          <div>
+            <h3 id="courses-teachers-heading">Öyrədəcəyin bilik var? Onu axtaran tələbələr də var.</h3>
+            <p>Müəllimlər və təlim mərkəzləri: təlim proqramınızı Kiberaz.az-da təqdim edin.</p>
+          </div>
+          <Button variant="outline" onClick={() => setModalOpen(true)} id="course-add-btn"><Plus size={16} /> Təlimini paylaş <ArrowRight size={15} /></Button>
+        </aside>
+        </div>
       </div>
 
       {modalOpen && <AddCourseModal onClose={() => setModalOpen(false)} onCourseAdded={reload} />}

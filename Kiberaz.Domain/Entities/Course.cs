@@ -86,6 +86,56 @@ public class Course : BaseEntity
     /// <summary>Kursun moderasiya statusu</summary>
     public CourseStatus Status { get; set; } = CourseStatus.Approved;
 
-    /// <summary>Kursu göndərən istifadəçinin ID-si (nullable — anonim göndərmə mümkündür)</summary>
+    /// <summary>
+    /// Kursu göndərən istifadəçinin ID-si — təlimin SAHİBİ (kabinetdən idarə edən VIP).
+    /// Admin panelindən əl ilə əlavə edilən təlimlərdə null qalır.
+    /// </summary>
     public string? SubmittedByUserId { get; set; }
+
+    // ─── AKTİV MÜDDƏT (VIP təlimləri) ────────────────────────────
+    /// <summary>Cari nəşrin admin tərəfindən təsdiqləndiyi an (UTC). Heç vaxt təsdiqlənməyibsə null.</summary>
+    public DateTime? PublishedAt { get; set; }
+
+    /// <summary>
+    /// Platformadan avtomatik çıxarılma anı (UTC) = PublishedAt + 30 gün.
+    /// null = müddətsiz (admin panelindən əlavə edilən və köhnə qeydlər — mövcud sənədlər oxunaqlı qalır).
+    /// Redaktə bu tarixi DƏYİŞMİR; yalnız yenidən aktivləşdirmə + admin təsdiqi yeni 30 gün açır.
+    /// </summary>
+    public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>Kreditini istifadə edən VIP dövrünün Id-si (audit). Yenidən aktivləşdirmədə yenilənir.</summary>
+    public int? VipTermId { get; set; }
+
+    // ─── GÖZLƏYƏN DƏYİŞİKLİK ─────────────────────────────────────
+    /// <summary>
+    /// Aktiv (təsdiqli) təlimə edilən redaktə burada gözləyir: canlı sahələr dəyişmir,
+    /// admin təsdiqləyəndə bu məzmun canlı sahələrin üzərinə yazılır, rədd edəndə atılır.
+    /// Beləliklə saytdakı nəşr admin görməmiş heç vaxt dəyişmir.
+    /// </summary>
+    public CourseRevision? PendingRevision { get; set; }
+}
+
+/// <summary>Təlimin redaktə edilə bilən məzmununun snapshot-u (embedded, ayrıca kolleksiya deyil).</summary>
+public class CourseRevision
+{
+    public string InstructorName { get; set; } = string.Empty;
+    public string InstructorRole { get; set; } = string.Empty;
+    public string? InstructorCompany { get; set; }
+    public string? InstructorPhotoUrl { get; set; }
+    public string? LinkedInUrl { get; set; }
+    public string? GitHubUrl { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+    public string CourseTitle { get; set; } = string.Empty;
+    public string? Kicker { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string Duration { get; set; } = string.Empty;
+    public string Level { get; set; } = string.Empty;
+    public string Language { get; set; } = "Azərbaycan dili";
+    public List<string> SyllabusTopics { get; set; } = new();
+    public string? SyllabusFileUrl { get; set; }
+    public string AccentColor { get; set; } = "--brand-primary";
+
+    /// <summary>Dəyişikliyin göndərildiyi an (UTC).</summary>
+    public DateTime SubmittedAt { get; set; }
 }

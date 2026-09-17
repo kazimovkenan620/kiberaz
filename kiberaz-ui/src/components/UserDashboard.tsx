@@ -2,13 +2,17 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Shield, User, Mail, ChevronRight, LogOut, Target, TrendingUp, ClipboardList, CheckCircle, Clock, Star,
   Edit3, Home, BookOpen, Save, Users, Plus, UserPlus, School, Eye, Lock, Copy, Check, Trash2, ArrowLeftRight,
-  AlertTriangle, Trophy, Activity, Calendar, KeyRound, X, Layers, BarChart2,
+  AlertTriangle, Trophy, Activity, Calendar, KeyRound, X, Layers, BarChart2, Crown,
 } from 'lucide-react';
 import { addStudentToClass, changeRole, createTeacherClass, deleteTeacherClass, getMyOverview, getProfile, getStudentOverview, getTeacherClasses, requestEmailChange, requestPasswordChange, updateProfile } from '../services/userService';
 import type { ProfileResponse, StudentOverviewResponse, SwitchableRole, TeacherClassResponse } from '../services/userService';
 import { isAdmin } from '../services/authService';
 import { getAdminStats, type AdminStats } from '../services/adminService';
-import { CoursesTab, DashboardTab, ExamsTab, UsersTab } from './AdminPanel';
+import { CoursesTab, DashboardTab, UsersTab } from './AdminPanel';
+import AdminExamsTab from './AdminExamsTab';
+import AdminBankTab from './AdminBankTab';
+import MyCoursesTab from './MyCoursesTab';
+import { getMyCourses } from '../services/courseService';
 import DashboardShell from './layout/DashboardShell';
 import Sidebar, { SidebarPromo } from './layout/Sidebar';
 import { Badge, Button, Card, CardHead, ConfirmDialog, EmptyState, ErrorState, FormField, IconButton, LoadingState, ProgressBar, StatCard, Toast } from './ui';
@@ -50,13 +54,13 @@ const ROLE_BADGES: Record<string, { label: string; tone: 'brand' | 'info' | 'suc
 
 // ── Tab tipləri ──────────────────────────────────────────────────
 type Tab =
-  | 'overview' | 'progress' | 'sessions' | 'students' | 'profile'
+  | 'overview' | 'progress' | 'sessions' | 'students' | 'courses' | 'profile'
   // Admin bölmələri — yalnız Admin rolunda göstərilir.
-  | 'adm-overview' | 'adm-courses' | 'adm-users' | 'adm-exams';
+  | 'adm-overview' | 'adm-users' | 'adm-courses' | 'adm-exams' | 'adm-bank';
 
 // Admin tablarının siyahısı bir yerdədir: yeni bölmə əlavə edəndə şərti
 // hər yerdə təkrar yazmaq lazım gəlmir, bu massivə bir sətir yazılır.
-const ADMIN_TABS: Tab[] = ['adm-overview', 'adm-courses', 'adm-users', 'adm-exams'];
+const ADMIN_TABS: Tab[] = ['adm-overview', 'adm-users', 'adm-courses', 'adm-exams', 'adm-bank'];
 
 interface Props {
   onLogout: () => void;
@@ -112,6 +116,9 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   const [studentLoading, setStudentLoading] = useState(false);
   const [studentError, setStudentError] = useState('');
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassResponse[]>([]);
+  // "Təlimlərim" VIP-ə həmişə, başqalarına yalnız paylaşdığı təlim varsa göstərilir
+  // (VIP bitəndən sonra da təlimləri idarə edə/silə bilsin).
+  const [hasOwnCourses, setHasOwnCourses] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
   const [className, setClassName] = useState('');
   const [classLoading, setClassLoading] = useState(false);
@@ -137,6 +144,10 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
             nickname: res.data.nickname,
             gender: genderLabel(res.data.gender),
           });
+          if (!isAdminUser && !res.data.roles.includes('VIP')) {
+            getMyCourses().then(mine => setHasOwnCourses(Boolean(mine.success && mine.data && mine.data.length > 0)))
+              .catch(() => { /* tab sadəcə gizli qalır */ });
+          }
           if (!isAdminUser && res.data.roles.includes('Teacher')) {
             setClassLoading(true);
             const classesRes = await getTeacherClasses();
@@ -169,6 +180,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
     : '-';
   const realRoles: string[] = profile?.roles ?? ['User'];
   const isTeacher = !isAdminUser && realRoles.includes('Teacher');
+  const isVip = !isAdminUser && realRoles.includes('VIP');
 
   // ── Rol keçidi üçün törəmə dəyərlər ──────────────────────────
   // Yalnız İstifadəçi ⇄ Müəllim keçidi var. Admin bu kartı ümumiyyətlə görmür:
@@ -450,21 +462,23 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
   // ── Yan panel ────────────────────────────────────────────────
   const navItems = isAdminUser
     ? [
-        { id: 'adm-overview' as Tab, label: 'Admin · İcmal', icon: <Shield size={16} /> },
-        { id: 'adm-courses' as Tab, label: 'Admin · Təlimlər', icon: <BookOpen size={16} /> },
-        { id: 'adm-users' as Tab, label: 'Admin · İstifadəçilər', icon: <Users size={16} /> },
-        { id: 'adm-exams' as Tab, label: 'Admin · İmtahanlar', icon: <ClipboardList size={16} /> },
+        { id: 'adm-overview' as Tab, label: 'İcmal', icon: <Shield size={16} /> },
+        { id: 'adm-users' as Tab, label: 'İstifadəçilər', icon: <Users size={16} /> },
+        { id: 'adm-courses' as Tab, label: 'Təlimlər', icon: <BookOpen size={16} /> },
+        { id: 'adm-exams' as Tab, label: 'İmtahan sessiyaları', icon: <ClipboardList size={16} /> },
+        { id: 'adm-bank' as Tab, label: 'Kateqoriyalar + suallar', icon: <Layers size={16} /> },
       ]
     : [
         { id: 'overview' as Tab, label: 'Ümumi Baxış', icon: <Home size={16} /> },
         { id: 'progress' as Tab, label: 'İrəliləyiş', icon: <TrendingUp size={16} /> },
         { id: 'sessions' as Tab, label: 'İmtahanlarım', icon: <ClipboardList size={16} /> },
         ...(isTeacher ? [{ id: 'students' as Tab, label: 'Tələbələr', icon: <Users size={16} /> }] : []),
+        ...(isVip || hasOwnCourses ? [{ id: 'courses' as Tab, label: 'Təlimlərim', icon: <Crown size={16} /> }] : []),
         { id: 'profile' as Tab, label: 'Profil', icon: <User size={16} /> },
       ];
 
   const roleBadge = (role: string) => ROLE_BADGES[role] ?? { label: role, tone: 'neutral' as const };
-  const primaryRole = isAdminUser ? 'Admin' : currentRole;
+  const primaryRole = isAdminUser ? 'Admin' : isVip ? 'VIP' : currentRole;
 
   const sidebar = (
     <Sidebar
@@ -700,6 +714,11 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         </div>
       )}
 
+      {/* ═══ MY COURSES (VIP) ═══ */}
+      {!isAdminUser && tab === 'courses' && (isVip || hasOwnCourses) && (
+        <MyCoursesTab onToast={showAdminToast} />
+      )}
+
       {/* ═══ STUDENTS (Teacher) ═══ */}
       {!isAdminUser && tab === 'students' && isTeacher && (
         <div className="ud-section">
@@ -806,7 +825,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
           Hər biri isAdminUser ilə qapalıdır. Bu yalnız görünüş qatıdır:
           api/admin endpoint-ləri serverdə Admin rolu tələb edir. */}
       {isAdminUser && tab === 'adm-overview' && (
-        <div className="ud-section"><DashboardTab stats={adminStats} onRefresh={loadAdminStats} /></div>
+        <div className="ud-section"><DashboardTab stats={adminStats} onRefresh={loadAdminStats} onNavigate={next => setTab(next as Tab)} /></div>
       )}
       {isAdminUser && tab === 'adm-courses' && (
         <div className="ud-section"><CoursesTab onToast={showAdminToast} /></div>
@@ -815,7 +834,11 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
         <div className="ud-section"><UsersTab onToast={showAdminToast} /></div>
       )}
       {isAdminUser && tab === 'adm-exams' && (
-        <div className="ud-section"><ExamsTab onToast={showAdminToast} /></div>
+        <div className="ud-section"><AdminExamsTab onToast={showAdminToast} /></div>
+      )}
+
+      {isAdminUser && tab === 'adm-bank' && (
+        <div className="ud-section"><AdminBankTab onToast={showAdminToast} /></div>
       )}
 
       {/* ═══ PROFILE ═══ */}
@@ -927,6 +950,13 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
               {/* ── Hesab tipi (rol keçidi) ─────────────────────────────
                   Yalnız İstifadəçi ⇄ Müəllim. Server admin hesabını rədd etdiyi üçün
                   bu kart admin kabinetində ümumiyyətlə render olunmur. */}
+              {isVip ? (
+                <Card>
+                  <CardHead icon={<Crown size={15} />} title="Hesab tipi" action={<Badge tone="warning">VIP</Badge>} />
+                  {/* VIP rolu ödənişli dövrə bağlıdır — server kabinetdən rol keçidini rədd edir, ona görə düymə də yoxdur. */}
+                  <p className="note">VIP hesabın rolu kabinetdən dəyişdirilmir: üzvlük dövrü, təlim paylaşma hüququ və imtahan sessiyaları bu rola bağlıdır. Dəyişiklik üçün administratora müraciət edin.</p>
+                </Card>
+              ) : (
               <Card>
                 <CardHead icon={<ArrowLeftRight size={15} />} title="Hesab tipi" action={<Badge tone={currentRole === 'Teacher' ? 'success' : 'neutral'}>{ROLE_LABELS[currentRole]}</Badge>} />
                 <div className="ud-role">
@@ -983,6 +1013,7 @@ export default function UserDashboard({ onLogout, onGoHome }: Props) {
                   {roleError && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{roleError}</span></div>}
                 </div>
               </Card>
+              )}
             </div>
           </div>
         </div>

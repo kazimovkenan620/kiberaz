@@ -1,0 +1,33 @@
+/* ================================================================
+   MyCoursesTab.css — kabinet · Təlimlərim (VIP təlim idarəetməsi)
+   ================================================================ */
+.mc { display: flex; flex-direction: column; gap: var(--sp-5); }
+
+.mc-vip__body { display: flex; flex-direction: column; gap: var(--sp-3); }
+.mc-vip__row { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--text-sm); color: var(--text-2); }
+.mc-vip__row svg { color: var(--brand); flex-shrink: 0; }
+.mc-vip__quota { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); background: var(--bg-surface-2); border: 1px solid var(--border-2); border-radius: var(--r-md); }
+.mc-vip__quota-row { display: flex; justify-content: space-between; gap: var(--sp-3); font-size: var(--text-sm); color: var(--text-2); }
+.mc-vip__quota-row strong { color: var(--text-1); }
+.mc-vip__actions { display: flex; justify-content: flex-end; margin-top: var(--sp-3); }
+
+.mc-table-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); border-bottom: 1px solid var(--border-2); flex-wrap: wrap; }
+
+.mc-list { display: flex; flex-direction: column; }
+.mc-course { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-4) var(--sp-5); border-top: 1px solid var(--border-1); }
+.mc-course:first-child { border-top: 0; }
+.mc-course__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.mc-course__title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mc-course__title h3 { font-size: var(--text-md); }
+.mc-course__badges { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.mc-course__term { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); background: var(--bg-surface-2); border-radius: var(--r-md); }
+.mc-course__term-row { display: flex; justify-content: space-between; gap: var(--sp-3); font-size: var(--text-sm); color: var(--text-2); flex-wrap: wrap; }
+.mc-course__term-row span { display: inline-flex; align-items: center; gap: 6px; }
+.mc-course__term-row strong { color: var(--text-1); }
+.mc-course__hint { display: flex; align-items: flex-start; gap: 6px; font-size: var(--text-sm); color: var(--text-2); line-height: 1.5; }
+.mc-course__hint svg { flex-shrink: 0; margin-top: 3px; color: var(--text-3); }
+.mc-course__actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+
+@media (max-width: 480px) {
+  .mc-course__actions .btn { flex: 1 1 auto; }
+}

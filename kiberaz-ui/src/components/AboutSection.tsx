@@ -1,37 +1,50 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, BookOpen, Clock, Globe, Layers, Unlock, Users } from 'lucide-react';
+import { ArrowRight, BookOpen, Globe, GraduationCap, Layers, ListChecks, Users } from 'lucide-react';
 import { fetchQuizCategories } from '../services/quizService';
+import { getApprovedCourses } from '../services/courseService';
 import { Button, StatCard } from './ui';
+import PlatformShowcase from './PlatformShowcase';
 import './AboutSection.css';
 
 // ─── Ana səhifə: missiya, real göstəricilər və platforma haqqında ──
-// Sual və sahə sayı kateqoriya API-sindən hesablanır — sabit "595+" yoxdur.
-// "Pulsuz" və "24/7" məhsul faktıdır, rəqəm deyil.
+// DÖRD göstəricinin hamısı canlı API-dən hesablanır, heç biri sabit rəqəm deyil:
+//   sual və sahə sayı  → /api/quiz/categories
+//   mövzu sayı         → həmin kateqoriyaların `topics` massivlərinin cəmi
+//   aktiv təlim        → /api/course (yalnız admin təsdiqlədikləri qayıdır)
+// Sorğu alınmasa dəyər "—" qalır — sıfır göstərmək "məlumat yoxdur" ilə
+// "həqiqətən sıfırdır" arasındakı fərqi itirərdi.
 
 interface Props {
   onNavigate?: (href: string) => void;
 }
 
 export default function AboutSection({ onNavigate }: Props) {
-  const [totals, setTotals] = useState<{ questions: number; areas: number } | null>(null);
+  const [totals, setTotals] = useState<{ questions: number; areas: number; topics: number } | null>(null);
+  const [courseCount, setCourseCount] = useState<number | null>(null);
+  const [showPlatform, setShowPlatform] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
     fetchQuizCategories().then(cats => {
       if (cancelled || cats.length === 0) return;
       setTotals({
         questions: cats.reduce((sum, c) => sum + (Number.isFinite(c.questionCount) ? c.questionCount : 0), 0),
         areas: cats.length,
+        topics: cats.reduce((sum, c) => sum + (Array.isArray(c.topics) ? c.topics.length : 0), 0),
       });
     });
+
+    // Təsdiqlənmiş təlimlər ictimai endpoint-dir, giriş tələb etmir.
+    getApprovedCourses()
+      .then(res => { if (!cancelled && res.success && res.data) setCourseCount(res.data.length); })
+      .catch(() => { /* şəbəkə xətası — kart "—" qalır */ });
+
     return () => { cancelled = true; };
   }, []);
 
-  const go = (href: string) => (e: React.MouseEvent) => {
-    if (!onNavigate) return;
-    e.preventDefault();
-    onNavigate(href);
-  };
+  const num = (value: number | null | undefined) =>
+    typeof value === 'number' ? value.toLocaleString('az-AZ') : '—';
 
   return (
     <section id="about" className="home" aria-labelledby="home-heading">
@@ -50,12 +63,14 @@ export default function AboutSection({ onNavigate }: Props) {
               birlikdə addımlayaq!
             </p>
             <div className="home__cta">
-              <Button variant="primary" size="lg" onClick={() => onNavigate?.('#home')}>
+              {/* Əsas CTA quiz bölməsinə (Biliklər) aparır — istifadəçi oradan
+                  kateqoriya seçib dərhal sual həll etməyə başlayır. */}
+              <Button variant="primary" size="lg" onClick={() => onNavigate?.('#knowledge')}>
                 Təlimlərə başla <ArrowRight size={16} />
               </Button>
-              <a href="#platform" className="btn btn--outline btn--lg" onClick={go('#platform')}>
+              <Button variant="outline" size="lg" onClick={() => setShowPlatform(true)}>
                 <Layers size={16} /> Platforma haqqında
-              </a>
+              </Button>
             </div>
           </div>
           <div className="home__hero-visual">
@@ -69,11 +84,13 @@ export default function AboutSection({ onNavigate }: Props) {
         {/* ── Real göstəricilər ── */}
         <div className="home__stats stat-grid" aria-label="Platforma göstəriciləri">
           <StatCard icon={<BookOpen size={18} />} tone="brand"
-            value={totals ? totals.questions.toLocaleString('az-AZ') : '—'} label="Nəzəri sual" />
+            value={num(totals?.questions)} label="Nəzəri sual" />
           <StatCard icon={<Layers size={18} />} tone="info"
-            value={totals ? totals.areas : '—'} label="Bilik sahəsi" />
-          <StatCard icon={<Unlock size={18} />} tone="success" value="Pulsuz" label="Bütün nəzəri material" />
-          <StatCard icon={<Clock size={18} />} tone="warning" value="24/7" label="Əlçatanlıq" />
+            value={num(totals?.areas)} label="Bilik sahəsi" />
+          <StatCard icon={<ListChecks size={18} />} tone="success"
+            value={num(totals?.topics)} label="Mövzu" />
+          <StatCard icon={<GraduationCap size={18} />} tone="warning"
+            value={num(courseCount)} label="Aktiv təlim" />
         </div>
 
         {/* ── Platforma haqqında ── */}
@@ -98,6 +115,11 @@ export default function AboutSection({ onNavigate }: Props) {
           </div>
         </div>
       </div>
+      <PlatformShowcase
+        open={showPlatform}
+        onClose={() => setShowPlatform(false)}
+        onNavigate={onNavigate}
+      />
     </section>
   );
 }

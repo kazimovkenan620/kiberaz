@@ -37,7 +37,7 @@ internal static partial class Program
         var student = NewUser("remediation", AppRoles.User);
         db.Users.Insert(student);
         var studentToken = MakeToken(student);
-        var quiz = new QuizService(db);
+        var quiz = new QuizService(db, new LeaderboardCache(TimeProvider.System));
         var categoryId = db.QuizCategories.FindAll().First().Id;
         CreateQuizQuestionRequest Question(string text, bool secret = false) => new()
         {
@@ -70,7 +70,8 @@ internal static partial class Program
         using (var correct = await Send(client, new("POST", "/api/quiz/submit"), studentToken,
             body: new { questionId = correctQuestion.Id, selectedKey = "B" }))
             Expect(correct, HttpStatusCode.OK, "correct first answer accepted");
-        Check((await quiz.GetLeaderboardAsync("all", null, 100)).Single(e => e.Name == student.Nickname).Score == 5,
+        var refreshedQuiz = new QuizService(db, new LeaderboardCache(TimeProvider.System));
+        Check((await refreshedQuiz.GetLeaderboardAsync("all", null, 100)).Single(e => e.Name == student.Nickname).Score == 5,
             "legitimate correct first answer earns exactly five points");
 
         using (var list = await client.GetAsync($"/api/quiz/questions?categoryId={categoryId}&count=50"))
@@ -83,7 +84,8 @@ internal static partial class Program
         {
             using var hidden = await Send(client, new("POST", "/api/quiz/submit"), token,
                 body: new { questionId = privateQuestion.Id, selectedKey = "A" });
-            Expect(hidden, HttpStatusCode.BadRequest, "private answer oracle blocked for every submit caller");
+            Expect(hidden, token is null ? HttpStatusCode.Unauthorized : HttpStatusCode.BadRequest,
+                "private answer oracle blocked for every submit caller");
             Check(!(await hidden.Content.ReadAsStringAsync()).Contains("correctKey"), "private answer never serialized");
         }
         await Reject<ArgumentException>(() => quiz.CreateQuestionAsync(Question("  PUBLIC   practice security fixture ", true)),
@@ -124,11 +126,38 @@ internal static partial class Program
             "repeated import is idempotent");
         Check(!(await quiz.GetQuestionsAsync(categoryId, count: 50)).Any(q => q.Question == "Fresh private import fixture"),
             "imported private question not exposed publicly");
+        // Sessiya yaratmaq yalnız VIP rolu üçündür; müəllim (Teacher) hesabı servis səviyyəsində rədd edilir.
         var teacher = NewUser("examteacher", AppRoles.Teacher);
         db.Users.Insert(teacher);
         var exams = new ExamSessionService(db, TimeProvider.System);
-        var session = exams.Create(teacher.Id, new CreateExamRequest("Private fixture exam", 10,
+        await Reject<ExamRequestException>(() => Task.FromResult(exams.Create(teacher.Id,
+            new CreateExamRequest("Teacher cannot host", 10, [new ExamCategorySelection(categoryId, 1)]))),
+            "non-VIP account cannot create an exam session");
+        var host = NewUser("examvip", AppRoles.VIP);
+        db.Users.Insert(host);
+        var vipNow = DateTime.UtcNow;
+        db.VipTerms.Insert(new VipTerm
+        {
+            UserId = host.Id,
+            StartsAt = vipNow.AddMinutes(-1),
+            EndsAt = vipNow.AddDays(VipPolicy.TermDays),
+            Source = VipPolicy.SourceAdmin
+        });
+        var session = exams.Create(host.Id, new CreateExamRequest("Private fixture exam", 10,
             [new ExamCategorySelection(categoryId, 1)]));
+        Check(exams.GetOverview(host.Id).Quota is { DailyLimit: ExamPolicy.DailySessionsPerHost, UsedToday: 1 },
+            "VIP overview reports daily quota usage");
+        Check(exams.GetOverview(student.Id).Quota is null, "non-VIP overview carries no quota");
+        // Günlük limit: 7-ci sessiyaya qədər icazə, 8-ci 429 ilə rədd edilir.
+        for (var i = 1; i < ExamPolicy.DailySessionsPerHost; i++)
+            exams.Create(host.Id, new CreateExamRequest("Quota fixture " + i, 10, [new ExamCategorySelection(categoryId, 1)]));
+        try
+        {
+            exams.Create(host.Id, new CreateExamRequest("Over quota", 10, [new ExamCategorySelection(categoryId, 1)]));
+            Check(false, "eighth session in one UTC day is rejected");
+        }
+        catch (ExamRequestException e) { Check(e.StatusCode == 429, "daily session limit returns 429"); }
+        Check(exams.GetOverview(host.Id).Quota is { Remaining: 0 }, "quota remaining reaches zero at the limit");
         var attempt = exams.Join(student.Id, session.Code);
         Check(attempt.Questions.Count == 1 && (attempt.Questions[0].Text == privateQuestion.Question ||
             attempt.Questions[0].Text == "Fresh private import fixture"),
@@ -137,7 +166,7 @@ internal static partial class Program
             new SaveExamAnswerRequest(attempt.Questions[0].Id, "B", attempt.Revision));
         var result = exams.Submit(student.Id, attempt.Id);
         Check(result.CorrectCount == 1 && result.Percentage == 100, "legitimate private exam grades correctly");
-        var legacy = new ExamSession { Code = "KBR-0123456789ABCDEF", TeacherId = teacher.Id,
+        var legacy = new ExamSession { Code = "KBR-0123456789ABCDEF", TeacherId = host.Id,
             Title = "Exposed legacy exam", DurationMinutes = 10 };
         db.ExamSessions.Insert(legacy);
         await Reject<ExamRequestException>(() => Task.FromResult(exams.Join(student.Id, legacy.Code)),
@@ -173,9 +202,12 @@ internal static partial class Program
         {
             using var form = new MultipartFormDataContent();
             form.Add(new ByteArrayContent(PdfFixture(active)), "file", "fixture.pdf");
-            using var upload = await client.PostAsync("/api/upload/syllabus", form);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/upload/syllabus") { Content = form };
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", tokens[AppRoles.Admin]);
+            using var upload = await client.SendAsync(request);
             Expect(upload, active ? HttpStatusCode.BadRequest : HttpStatusCode.OK,
-                active ? "anonymous active PDF upload blocked" : "anonymous safe PDF upload preserved through worker");
+                active ? "authenticated active PDF upload blocked" : "authenticated safe PDF upload preserved through worker");
         }
         // Existing PDFs must not be served directly by static files.
         var syllabus = Path.Combine(sandbox, "wwwroot", "uploads", "syllabus");
@@ -216,6 +248,8 @@ internal static partial class Program
         services.AddSingleton<IEmailService>(email);
         services.AddSingleton<ICaptchaService, RejectCaptcha>();
         services.AddSingleton<IAttemptTracker, InMemoryAttemptTracker>();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ITokenDenylist, LiteDbTokenDenylist>();
         services.AddSingleton<TokenService>();
         services.AddSingleton<ProtectedAccountPolicy>();
         services.AddScoped<AuthService>();
@@ -251,10 +285,10 @@ internal static partial class Program
         Check(confirmed.Success, "old-mailbox confirmation accepted");
         var newState = db.Users.FindById(user.Id);
         Check(newState.Email == target && !newState.EmailConfirmed && newState.SecurityStamp != oldStamp &&
-            newState.RefreshToken is null && newState.GoogleLoginCodeHash is null,
+            newState.RefreshSessions.Count == 0 && newState.GoogleLoginCodeHash is null,
             "email, unconfirmed state and revocation committed together");
-        Check(!(await userService.ConfirmEmailChangeAsync(user.Id, target, email.ChangeToken!)).Success,
-            "old-mailbox change link cannot replay");
+        Check((await userService.ConfirmEmailChangeAsync(user.Id, target, email.ChangeToken!)).Success,
+            "repeated old-mailbox link is idempotent after the change is applied");
         var accepted = await auth.ConfirmEmailAsync(user.Id, email.ConfirmationToken!);
         Check(accepted.Success && db.Users.FindById(user.Id).EmailConfirmed, "new mailbox can complete confirmation");
     }
@@ -264,24 +298,47 @@ internal static partial class Program
         var root = Path.Combine(sandbox, "upload-tests");
         Directory.CreateDirectory(root);
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        { ["Uploads:MaxTotalBytes"] = "300", ["Uploads:MaxFiles"] = "4", ["Uploads:MinFreeBytes"] = "0" }).Build();
+        {
+            ["Uploads:MaxTotalBytes"] = "300", ["Uploads:MaxFiles"] = "4", ["Uploads:MinFreeBytes"] = "0",
+            ["ConnectionStrings:LiteDb"] = "Filename=" + Path.Combine(root, "uploads.db")
+        }).Build();
         var sanitizer = new PdfProcessSanitizer(typeof(Kiberaz.Api.Controllers.UploadController).Assembly.Location);
-        var upload = new UploadService(new UploadEnvironment(root), config, sanitizer);
+        using var db = new LiteDbContext(config, new TestEnvironment(root));
+        const string owner = "upload-owner";
+        var upload = new UploadService(new UploadEnvironment(root), config, sanitizer, db, TimeProvider.System);
         var png = new byte[100];
         new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }.CopyTo(png, 0);
-        var url = await upload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100);
-        Check(url.StartsWith("/uploads/photos/"), "legitimate anonymous image upload preserved");
-        await upload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100);
-        await upload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100);
+        var url = await upload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100, owner);
+        Check(url.StartsWith("/uploads/photos/"), "legitimate image upload preserved");
+        Check(db.UploadedFiles.FindOne(f => f.Path == url) is { OwnerId: owner, ClaimedByCourseId: null },
+            "upload is recorded against its owner and starts unclaimed");
+        await upload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100, owner);
+        await upload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100, owner);
         await Reject<UploadCapacityException>(() => upload.UploadFileAsync(new MemoryStream(png),
-            "photo.png", "photos", [".png"], 100), "aggregate storage budget enforced");
+            "photo.png", "photos", [".png"], 100, owner), "aggregate storage budget enforced");
         Check(Directory.GetFiles(Path.Combine(root, "wwwroot", "uploads", "photos")).Length == 3,
             "quota rejection leaves no extra files");
         var streamRoot = Path.Combine(sandbox, "upload-stream-tests");
         Directory.CreateDirectory(streamRoot);
-        var streamUpload = new UploadService(new UploadEnvironment(streamRoot), config, sanitizer);
+        var streamUpload = new UploadService(new UploadEnvironment(streamRoot), config, sanitizer, db, TimeProvider.System);
         await Reject<ArgumentException>(() => streamUpload.UploadFileAsync(new NonSeekable(png),
-            "photo.png", "photos", [".png"], 50), "actual bytes bounded for nonseekable stream");
+            "photo.png", "photos", [".png"], 50, owner), "actual bytes bounded for nonseekable stream");
+        // Per-account daily quota (audit M2): the 21st file inside 24 hours is refused before any disk work.
+        var quotaRoot = Path.Combine(sandbox, "upload-quota-tests");
+        Directory.CreateDirectory(quotaRoot);
+        var wideConfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Uploads:MaxTotalBytes"] = "100000000", ["Uploads:MaxFiles"] = "1000", ["Uploads:MinFreeBytes"] = "0",
+            ["ConnectionStrings:LiteDb"] = "Filename=" + Path.Combine(quotaRoot, "uploads.db")
+        }).Build();
+        using var quotaDb = new LiteDbContext(wideConfig, new TestEnvironment(quotaRoot));
+        var quotaUpload = new UploadService(new UploadEnvironment(quotaRoot), wideConfig, sanitizer, quotaDb, TimeProvider.System);
+        for (var i = 0; i < Kiberaz.Domain.Common.UploadPolicy.PerUserDailyFiles; i++)
+            await quotaUpload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100, owner);
+        await Reject<UploadQuotaException>(() => quotaUpload.UploadFileAsync(new MemoryStream(png),
+            "photo.png", "photos", [".png"], 100, owner), "per-account daily upload quota enforced");
+        Check((await quotaUpload.UploadFileAsync(new MemoryStream(png), "photo.png", "photos", [".png"], 100, "other-owner"))
+            .StartsWith("/uploads/photos/"), "quota is per account, not global");
         var good = PdfFixture(false);
         Check(SafePdf.Rewrite(good, 100000).Length > 0, "ordinary PDF survives canonical rewrite");
         Check((await sanitizer.RewriteAsync(CompressedPdf(false), 100000)).Length > 0,

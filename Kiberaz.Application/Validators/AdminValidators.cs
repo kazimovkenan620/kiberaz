@@ -44,6 +44,36 @@ public class CreateAdminCourseRequestValidator : AbstractValidator<CreateAdminCo
 }
 
 /// <summary>
+/// Admin tərəfindən istifadəçi məlumatlarının düzəlişi.
+/// Qaydalar istifadəçinin öz profil formasındakı ilə EYNİDİR — admin yolu daha sərbəst olmamalıdır,
+/// əks halda paneldən keçən dəyər (məs. 200 simvolluq ləqəb) sonradan öz formasında redaktə edilə bilmirdi.
+/// </summary>
+public class AdminUpdateUserRequestValidator : AbstractValidator<AdminUpdateUserRequest>
+{
+    public AdminUpdateUserRequestValidator()
+    {
+        RuleFor(x => x.FirstName)
+            .NotEmpty().WithMessage("Ad boş ola bilməz.")
+            .MaximumLength(50).WithMessage("Ad maksimum 50 simvol ola bilər.")
+            .Matches(@"^[\p{L}\s\-']+$").WithMessage("Ad yalnız hərf, boşluq və defis ehtiva edə bilər.");
+
+        RuleFor(x => x.LastName)
+            .NotEmpty().WithMessage("Soyad boş ola bilməz.")
+            .MaximumLength(50).WithMessage("Soyad maksimum 50 simvol ola bilər.")
+            .Matches(@"^[\p{L}\s\-']+$").WithMessage("Soyad yalnız hərf, boşluq və defis ehtiva edə bilər.");
+
+        RuleFor(x => x.Nickname)
+            .NotEmpty().WithMessage("Ləqəb boş ola bilməz.")
+            .MinimumLength(3).WithMessage("Ləqəb minimum 3 simvol olmalıdır.")
+            .MaximumLength(16).WithMessage("Ləqəb maksimum 16 simvol ola bilər.")
+            .Matches("^[a-zA-Z0-9_]+$").WithMessage("Ləqəbdə yalnız hərf, rəqəm və alt xətt (_) işlənə bilər.");
+
+        RuleFor(x => x.Gender)
+            .InclusiveBetween(1, 2).WithMessage("Cins 1 (Kişi) və ya 2 (Qadın) olmalıdır.");
+    }
+}
+
+/// <summary>
 /// Admin tərəfindən rol dəyişikliyi sorğusunun yoxlanması.
 /// Rolun özü servisdə də yoxlanılır (defence in depth) — burada isə sorğu
 /// controller-ə çatmadan kəsilir.

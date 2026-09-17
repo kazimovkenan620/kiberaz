@@ -137,11 +137,29 @@ public static class DbInitializer
             updated);
     }
 
+    // Sxem miqrasiyası: admin bloku əvvəl yalnız LockoutEnd = MaxValue ilə ifadə olunurdu. BlockedByAdminAt sahəsi
+    // olmayan belə hesablar paneldə "müvəqqəti kilid" kimi görünməsin deyə bayraq bir dəfə doldurulur. İdempotentdir.
+    public static void BackfillAdminBlocks(LiteDbContext db, ILogger logger)
+    {
+        var changed = 0;
+        lock (db.UsersSyncRoot)
+        {
+            foreach (var user in db.Users.FindAll().ToList())
+            {
+                if (user.BlockedByAdminAt is not null || user.LockoutEnd != DateTimeOffset.MaxValue) continue;
+                user.BlockedByAdminAt = DateTime.UtcNow;
+                user.ConcurrencyStamp = Guid.NewGuid().ToString();
+                if (db.Users.Update(user)) changed++;
+            }
+        }
+        if (changed > 0)
+            logger.LogWarning("Sxem miqrasiyası: {Count} hesabda admin bloku bayrağı (BlockedByAdminAt) dolduruldu.", changed);
+    }
+
     private static void RevokeSessions(AppUser user)
     {
         user.SecurityStamp = Guid.NewGuid().ToString();
-        user.RefreshToken = null;
-        user.RefreshTokenExpiryTime = null;
+        user.RefreshSessions.Clear();
         user.GoogleLoginCodeHash = null;
         user.GoogleLoginCodeExpiryTime = null;
         user.GoogleLoginCodeSecurityStamp = null;

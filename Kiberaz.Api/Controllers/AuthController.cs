@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
@@ -74,23 +75,8 @@ public class AuthController : ControllerBase
             : BadRequest(result);
     }
 
-    /// <summary>E-poçt təsdiqi linki üçün endpoint</summary>
-    [HttpGet("confirm-email")]
-    [AllowAnonymous]
-    [EnableRateLimiting("sensitive")]
-    public async Task<IActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
-    {
-        var result = await _authService.ConfirmEmailAsync(userId, token);
-        var frontendUrl = _configuration["FrontendUrl"]
-            ?? Environment.GetEnvironmentVariable("FRONTEND_URL")
-            ?? "http://localhost:5173";
-        
-        if (result.Success)
-            return Redirect($"{frontendUrl}/login?confirmed=true");
-            
-        return Redirect($"{frontendUrl}/login?confirmed=false");
-    }
-
+    // Qeyd: GET /confirm-email endpoint-i silindi — token query string-də proxy/server loglarına düşürdü.
+    // E-poçt linkləri fragment (#) daşıyır, SPA POST ilə təsdiqləyir (audit L1).
     [HttpPost("confirm-email")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
@@ -237,7 +223,30 @@ public class AuthController : ControllerBase
                      ?? User.FindFirstValue("sub")
                      ?? string.Empty;
 
-        var result = await _authService.LogoutAsync(userId);
+        // Yalnız bu cihaz: cookie-dəki refresh token sessiyanı, jti isə cari access tokeni tanıdır.
+        Request.Cookies.TryGetValue("refresh_token", out var refreshToken);
+        var tokenId = User.FindFirstValue(JwtRegisteredClaimNames.Jti);
+        DateTime? expiresAt = long.TryParse(User.FindFirstValue(JwtRegisteredClaimNames.Exp), out var exp)
+            ? DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime
+            : null;
+
+        var result = await _authService.LogoutAsync(userId, refreshToken, tokenId, expiresAt);
+        ClearAuthCookies();
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>Bütün cihazlardan çıxış — SecurityStamp yenilənir, hər sessiya ləğv olunur.</summary>
+    [HttpPost("logout-all")]
+    [Authorize]
+    [EnableRateLimiting("sensitive")]
+    [ProducesResponseType(typeof(ApiResponse<bool>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> LogoutAll()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized(ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
+
+        var result = await _authService.LogoutAllAsync(userId);
         ClearAuthCookies();
         return result.Success ? Ok(result) : BadRequest(result);
     }
@@ -245,7 +254,9 @@ public class AuthController : ControllerBase
     /// <summary>Refresh token vasitəsilə yeni token almaq</summary>
     [HttpPost("refresh")]
     [AllowAnonymous]
-    [EnableRateLimiting("auth")]
+    // "refresh" siyasəti: açar cookie-dəki tokenin hash-idir, IP deyil — NAT arxasındakı onlarla istifadəçi
+    // bir-birinin limitini yemir (audit M5).
+    [EnableRateLimiting("refresh")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponse>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RefreshToken([FromBody] TokenRefreshRequest request)

@@ -290,6 +290,12 @@ p  { overflow-wrap: anywhere; }
 }
 
 .page-section { padding: var(--sp-12) 0; }
+
+/* Bölmələrə sürüşəndə yapışqan başlıq məzmunu örtməsin: hash linkləri və
+   scrollIntoView bu qədər yuxarıdan dayanır. */
+[id='about'], [id='home'], [id='knowledge'], [id='exam-session'], [id='leaderboard'], [id='platform'] {
+  scroll-margin-top: calc(var(--header-h) + var(--sp-4));
+}
 .page-section + .page-section { border-top: 1px solid var(--border-2); }
 
 .visually-hidden {

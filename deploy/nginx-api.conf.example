@@ -1,0 +1,62 @@
+# Nginx nümunəsi — api.kiberaz.az (Kestrel reverse proxy).
+# Tətbiq eyni serverdə 127.0.0.1:5000-də işləyir (deploy/kiberaz-api.service).
+#
+# Quraşdırma:
+#   sudo cp deploy/nginx-api.conf.example /etc/nginx/sites-available/api.kiberaz.az
+#   sudo ln -s /etc/nginx/sites-available/api.kiberaz.az /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+# Sertifikat: sudo certbot --nginx -d api.kiberaz.az
+#
+# Tətbiq tərəfi (appsettings.Production.json):
+#   • AllowedHosts-da api.kiberaz.az var — `proxy_set_header Host $host` OLMASA 400 "Invalid Host".
+#   • ForwardedHeaders yalnız loopback-ə etibar edir — nginx eyni maşındadır, KnownProxies boş qalır.
+#   • X-Forwarded-Proto=https OLMASA UseHttpsRedirection dövrəyə düşür / cookie Secure problemi çıxır.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name api.kiberaz.az;
+    return 301 https://api.kiberaz.az$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name api.kiberaz.az;
+
+    ssl_certificate     /etc/letsencrypt/live/api.kiberaz.az/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.kiberaz.az/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Tətbiq JSON üçün 64 KB, yükləmə action-ları üçün 10 MB (+ multipart başlığı) qəbul edir.
+    # Nginx default 1 MB-dır — sillabus PDF yükləməsi burada kəsilərdi.
+    client_max_body_size 12m;
+
+    # Log-larda token/sirr yoxdur (hamısı body/cookie-dədir), amma query string-i də yazmırıq.
+    access_log /var/log/nginx/api.kiberaz.az.access.log;
+    error_log  /var/log/nginx/api.kiberaz.az.error.log;
+
+    location / {
+        proxy_pass         http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;   # $proxy_add_x_forwarded_for DEYİL — client saxta zəncir göndərə bilməsin
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    60s;   # PDF sanitizasiyası ≤10 s, SMTP növbədədir — 60 s bol-boldur
+        proxy_buffering       off;
+    }
+
+    # Uptime monitorinqi üçün (tətbiqdə /health anonimdir)
+    location = /health {
+        proxy_pass http://127.0.0.1:5000/health;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        access_log off;
+    }
+}

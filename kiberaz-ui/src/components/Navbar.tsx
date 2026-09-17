@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronDown, LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { navLinks } from '../data/mockData';
-import { getPrimaryRoleLabel, getStoredUserNickname, getToken, logout, setStoredUserNickname, setStoredUserRoles, setTokens } from '../services/authService';
+import { getPrimaryRoleLabel, getStoredUserNickname, getToken, logoutOnServer, setStoredUserNickname, setStoredUserRoles, setTokens } from '../services/authService';
 import { onAuthRequest, type AuthRequestKind } from '../utils/authUi';
 import { Button, IconButton, ThemeToggle } from './ui';
 import BrandLogo from './layout/BrandLogo';
@@ -12,7 +12,7 @@ import './Navbar.css';
 
 // ─── Tətbiq başlığı (ictimai + kabinet) ──────────────────────
 // Giriş, qeydiyyat və şifrə bərpası modal pəncərələrdədir (components/auth).
-// Təhlükəsizlik məntiqi dəyişməyib: token yaddaşda (sessionStorage), refresh
+// Access token yalnız modul yaddaşında, refresh
 // HttpOnly cookie-də; rol nişanı yalnız məlumat xarakterlidir.
 
 function getInitialNavbarUser(): { nickname: string } | null {
@@ -149,7 +149,7 @@ export default function Navbar({ onLoginDemo, onLogout, onGoDashboard, onGoHome,
   };
 
   const handleLogout = () => {
-    logout();
+    void logoutOnServer(); // lokal tokenlər dərhal silinir, server sorğusu fonda gedir
     setUser(null);
     setRoleLabel('');
     setMenuOpen(false);

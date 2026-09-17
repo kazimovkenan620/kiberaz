@@ -1,0 +1,70 @@
+Əsas məzmuna keç
+KIBERAZ.AZ
+// TƏHSİL PLATFORMASI
+Ana Səhifə
+Təlimlər
+Biliklər
+İmtahan
+Liderlik
+QA
+qateachera
+Müəllim
+QA
+qateachera
+Müəllim
+KABİNET
+Ümumi Baxış
+İrəliləyiş
+İmtahanlarım
+Tələbələr
+Profil
+Ana səhifə
+Çıxış
+
+Daha güclü gələcək üçün birlikdə öyrənək.
+
+PROFİL
+Mənim profilim
+
+Şəxsi məlumatlarınızı, e-poçt və şifrə təhlükəsizliyini idarə edin.
+
+QA
+Sınaq TeacherA
+@qateachera
+Müəllim
+Ad
+Soyad
+Ləqəb (nickname)
+Liderlik lövhəsində yalnız bu ad görünür.
+Cins
+Kişi
+Qadın
+Müəllim ID-si
+Bu, sizin müəllim hesabınızın unikal identifikatorudur.
+Məlumatları redaktə et
+
+Qeydiyyat tarixi: 2026-09-17 · Aktiv hesab
+
+E-poçt və təhlükəsizlik
+Cari e-poçt
+Yeni e-poçt
+Təsdiq linki göndər
+Dəyişiklik əvvəl cari ünvandan təsdiqlənir, sonra yeni ünvana gələn linklə aktivləşir.
+Şifrə
+Şifrə yeniləmə linki göndər
+Link təsdiqli e-poçt ünvanına göndərilir və yeni şifrə link üzərindən yazılır.
+Hesab tipi
+Müəllim
+
+Tələbə hesabına qayıtsanız sinif idarəetməsi bağlanır, öz nəticələriniz isə olduğu kimi qalır.
+
+Tələbə roluna keçmək üçün əvvəlcə bütün sinifləri silin (1).
+QA 20260917T-predeploy-132107
+1 tələbə
+Sil
+Sinif silindikdə yalnız sinfə bağlılıq itir — tələbə hesabları və onların nəticələri silinmir.
+
+Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik. Məxfilik Siyasəti
+
+Rədd et
+Qəbul et

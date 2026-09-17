@@ -28,41 +28,44 @@ public class AuthService : IAuthService
     private static readonly TimeSpan PasswordResetEmailCooldown = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan GoogleLoginCodeLifetime = TimeSpan.FromMinutes(2);
 
-    private readonly UserManager<AppUser>    _userManager;
-    private readonly SignInManager<AppUser>  _signInManager;
-    private readonly TokenService            _tokenService;
-    private readonly IEmailService           _emailService;
-    private readonly IHostEnvironment        _environment;
-    private readonly LiteDbContext           _db;
-    private readonly ICaptchaService         _captcha;
-    private readonly IAttemptTracker         _attempts;
-    private readonly IHttpContextAccessor    _http;
-    private readonly ILogger<AuthService>    _logger;
+    private readonly UserManager<AppUser> _userManager;
+    private readonly SignInManager<AppUser> _signInManager;
+    private readonly TokenService _tokenService;
+    private readonly IEmailService _emailService;
+    private readonly IHostEnvironment _environment;
+    private readonly LiteDbContext _db;
+    private readonly ICaptchaService _captcha;
+    private readonly IAttemptTracker _attempts;
+    private readonly IHttpContextAccessor _http;
+    private readonly ITokenDenylist _denylist;
+    private readonly ILogger<AuthService> _logger;
 
     // Konstruktor vasitəsilə bütün lazımi xidmətlər inyeksiya edilir ki, servis öz asılılıqlarını özü yaratmasın.
     // Bu "Dependency Injection" prinsipidir — testlərdə mock obyektlər ötürmək mümkün olur.
     public AuthService(
-        UserManager<AppUser>   userManager,
+        UserManager<AppUser> userManager,
         SignInManager<AppUser> signInManager,
-        TokenService           tokenService,
-        IEmailService          emailService,
-        IHostEnvironment       environment,
-        LiteDbContext          db,
-        ICaptchaService        captcha,
-        IAttemptTracker        attempts,
-        IHttpContextAccessor   http,
-        ILogger<AuthService>   logger)
+        TokenService tokenService,
+        IEmailService emailService,
+        IHostEnvironment environment,
+        LiteDbContext db,
+        ICaptchaService captcha,
+        IAttemptTracker attempts,
+        IHttpContextAccessor http,
+        ITokenDenylist denylist,
+        ILogger<AuthService> logger)
     {
-        _logger        = logger;
-        _userManager   = userManager;
+        _denylist = denylist;
+        _logger = logger;
+        _userManager = userManager;
         _signInManager = signInManager;
-        _tokenService  = tokenService;
-        _emailService  = emailService;
-        _environment   = environment;
-        _db            = db;
-        _captcha       = captcha;
-        _attempts      = attempts;
-        _http          = http;
+        _tokenService = tokenService;
+        _emailService = emailService;
+        _environment = environment;
+        _db = db;
+        _captcha = captcha;
+        _attempts = attempts;
+        _http = http;
     }
 
     private string ClientIp()
@@ -99,20 +102,23 @@ public class AuthService : IAuthService
         var existingUser = await _userManager.FindByEmailAsync(request.Email);
         if (existingUser is not null)
         {
+            // Təsdiqsiz hesabın sübut olunmuş sahibi yoxdur: kim əvvəl qeydiyyatdan keçibsə onun parolu qalsaydı,
+            // qurban öz "qeydiyyatını" təsdiqləyib hücumçunun parolu ilə hesab almış olardı (pre-registration takeover).
+            // Ona görə təsdiqsiz hesab bu sorğunun parolu/profili ilə üstündən yazılır, köhnə təsdiq linkləri ölür.
             if (!existingUser.EmailConfirmed)
-                await TrySendConfirmationEmailAsync(existingUser);
+                await OverwriteUnconfirmedAccountAsync(existingUser, request);
             // Həm confirmed, həm unconfirmed halda eyni cavab — account existence sızmır
             return ApiResponse<AuthResponse>.Ok(null, genericSuccess);
         }
 
         var user = new AppUser
         {
-            UserName  = request.Nickname,
-            Email     = request.Email,
+            UserName = request.Nickname,
+            Email = request.Email,
             FirstName = request.FirstName,
-            LastName  = request.LastName,
-            Gender    = request.Gender,
-            Nickname  = request.Nickname,
+            LastName = request.LastName,
+            Gender = request.Gender,
+            Nickname = request.Nickname,
             EmailConfirmed = false,
         };
 
@@ -141,12 +147,12 @@ public class AuthService : IAuthService
     /// <inheritdoc />
     public async Task<ApiResponse<AuthResponse>> LoginAsync(LoginRequest request)
     {
-        var ip    = ClientIp();
+        var ip = ClientIp();
         var emailKey = $"login:{request.Email.ToLowerInvariant()}";
-        var ipKey    = $"login:ip:{ip}";
+        var ipKey = $"login:ip:{ip}";
+        const string genericFailure = "E-poçt və ya parol yanlışdır.";
 
         // İki qat qoruma: həm e-poçt-bazalı (eyni hesaba hücum), həm IP-bazalı (credential stuffing).
-        // Hücumçu N fərqli e-poçt sınasa, ipKey sayğacı artır və CAPTCHA tətbiq olunur.
         if (_attempts.RequiresCaptcha(emailKey) || _attempts.RequiresCaptcha(ipKey))
         {
             if (string.IsNullOrWhiteSpace(request.CaptchaToken))
@@ -159,67 +165,89 @@ public class AuthService : IAuthService
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null)
         {
-            // Timing attack önlənməsi: istifadəçi tapılmasa da real BCrypt işlədilir.
-            // new AppUser() ilə CheckPasswordAsync çağıranda PasswordHash=null olur, BCrypt atlanır —
-            // cavab vaxtı fərqindən e-poçt mövcudluğu aşkar edilə bilər.
+            // Timing attack önlənməsi: istifadəçi tapılmasa da real hash yoxlaması işlədilir.
             _userManager.PasswordHasher.VerifyHashedPassword(new AppUser(), _dummyPasswordHash, request.Password);
-            _attempts.Record(emailKey);
-            _attempts.Record(ipKey);
-            return ApiResponse<AuthResponse>.Fail("E-poçt və ya parol yanlışdır.",
-                captchaRequired: _attempts.RequiresCaptcha(emailKey) || _attempts.RequiresCaptcha(ipKey));
+            return LoginFailed(null, ip, emailKey, ipKey, genericFailure);
         }
 
-        if (!user.EmailConfirmed || user.LockoutEnd > DateTimeOffset.UtcNow)
+        // Hesab varlığı YALNIZ düzgün parolla üzə çıxır: təsdiqsiz/kilidli/bloklanmış hesab üçün də əvvəlcə parol
+        // yoxlanılır; parol yanlışdırsa cavab mövcud olmayan hesabla eynidir (mesaj + hash işi).
+        var now = DateTimeOffset.UtcNow;
+        var blocked = user.BlockedByAdminAt is not null;
+        var lockedOut = user.LockoutEnd > now;
+        if (!user.EmailConfirmed || blocked || lockedOut)
         {
-            // Təsdiqlənməmiş hesaba qarşı brute-force: cəhd sayılır
-            _attempts.Record(emailKey);
-            _attempts.Record(ipKey);
-            return ApiResponse<AuthResponse>.Fail("Hesabınız aktiv deyil. Zəhmət olmasa e-poçtunuza göndərilən təsdiq linkinə daxil olun.");
+            var passwordOk = await _userManager.CheckPasswordAsync(user, request.Password);
+            if (!passwordOk)
+                return LoginFailed(user, ip, emailKey, ipKey, genericFailure);
+
+            _logger.LogInformation("Giriş rədd edildi: hesab {UserId} vəziyyəti {State}, IP {Ip}", user.Id,
+                blocked ? "blocked" : lockedOut ? "locked" : "unconfirmed", ip);
+            return ApiResponse<AuthResponse>.Fail(
+                blocked ? "Hesabınız bloklanıb. Administratorla əlaqə saxlayın." :
+                lockedOut ? "Çox sayda uğursuz cəhd səbəbilə hesab müvəqqəti kilidlənib. Bir neçə dəqiqə sonra yenidən cəhd edin." :
+                            "Hesabınız hələ təsdiqlənməyib. E-poçtunuza göndərilən təsdiq linkinə daxil olun.");
         }
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
         if (!result.Succeeded)
         {
-            _attempts.Record(emailKey);
-            _attempts.Record(ipKey);
-            return ApiResponse<AuthResponse>.Fail("E-poçt və ya parol yanlışdır.",
-                captchaRequired: _attempts.RequiresCaptcha(emailKey) || _attempts.RequiresCaptcha(ipKey));
+            if (result.IsLockedOut)
+                _logger.LogWarning("Hesab uğursuz cəhdlərdən sonra kilidləndi: {UserId}, IP {Ip}", user.Id, ip);
+            return LoginFailed(user, ip, emailKey, ipKey, genericFailure);
         }
 
         _attempts.Reset(emailKey);
         // ipKey sıfırlanmır — IP-dən uğurlu giriş credential stuffing hücumunu bitirmir
 
-        var roles        = await _userManager.GetRolesAsync(user);
-        var refreshToken = _tokenService.GenerateRefreshToken();
-
-        // Refresh token verilənlər bazasına açıq deyil, hash edilmiş formada saxlanılır.
-        // Beləliklə, DB sızdırılsa belə, tokeni birbaşa istifadə etmək mümkün olmayacaq.
-        user.RefreshToken = HashToken(refreshToken);
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        var roles = await _userManager.GetRolesAsync(user);
         if (string.IsNullOrWhiteSpace(user.SecurityStamp))
             user.SecurityStamp = Guid.NewGuid().ToString();
+
+        // Hər giriş yeni cihaz sessiyası açır; digər cihazların sessiyaları toxunulmaz qalır.
+        var refreshToken = _tokenService.GenerateRefreshToken();
+        IssueSession(user, refreshToken, now.UtcDateTime, ip);
         if (!(await _userManager.UpdateAsync(user)).Succeeded)
             return ApiResponse<AuthResponse>.Fail("Hesab dəyişib. Yenidən daxil olun.");
 
         var accessToken = _tokenService.GenerateAccessToken(user, roles);
-        var response = BuildAuthResponse(user, roles, accessToken, refreshToken);
+        return ApiResponse<AuthResponse>.Ok(BuildAuthResponse(user, roles, accessToken, refreshToken), "Giriş uğurludur.");
+    }
 
-        return ApiResponse<AuthResponse>.Ok(response, "Giriş uğurludur.");
+    private ApiResponse<AuthResponse> LoginFailed(AppUser? user, string ip, string emailKey, string ipKey, string message)
+    {
+        _attempts.Record(emailKey);
+        _attempts.Record(ipKey);
+        // Hesab ID-si (e-poçt yox) və IP — brute-force / credential stuffing izlənə bilsin (A09).
+        _logger.LogWarning("Uğursuz giriş cəhdi: hesab {UserId}, IP {Ip}", user?.Id ?? "-", ip);
+        return ApiResponse<AuthResponse>.Fail(message,
+            captchaRequired: _attempts.RequiresCaptcha(emailKey) || _attempts.RequiresCaptcha(ipKey));
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<bool>> LogoutAsync(string userId)
+    public async Task<ApiResponse<bool>> LogoutAsync(string userId, string? refreshToken, string? accessTokenId, DateTime? accessTokenExpiresAt)
     {
-        // Retry fresh reads on a concurrent refresh; never report a logout that did not persist.
+        // Cari access token dərhal qara siyahıya düşür (15 dəq gözləmədən), yalnız BU cihazın refresh sessiyası silinir.
+        if (!string.IsNullOrWhiteSpace(accessTokenId))
+            _denylist.Revoke(accessTokenId, accessTokenExpiresAt ?? DateTime.UtcNow.AddMinutes(SessionPolicy.AccessTokenMinutes));
+
+        var providedHash = string.IsNullOrWhiteSpace(refreshToken) ? null : HashToken(refreshToken);
         for (var attempt = 0; attempt < 3; attempt++)
         {
             var user = await _userManager.FindByIdAsync(userId);
             if (user is null) break;
-            user.RefreshToken = null;
-            user.RefreshTokenExpiryTime = null;
+
+            var session = providedHash is null ? null : user.RefreshSessions.FirstOrDefault(x => HashesEqual(x.TokenHash, providedHash));
+            if (session is not null)
+                user.RefreshSessions.Remove(session);
+            else
+            {
+                // Cihaz tanınmadı (cookie yoxdur/köhnədir): təhlükəsiz tərəfdə qalıb hər yerdən çıxılır.
+                user.RefreshSessions.Clear();
+                user.SecurityStamp = Guid.NewGuid().ToString();
+            }
             user.GoogleLoginCodeHash = null;
             user.GoogleLoginCodeExpiryTime = null;
-            user.SecurityStamp = Guid.NewGuid().ToString();
             if ((await _userManager.UpdateAsync(user)).Succeeded) break;
             if (attempt == 2) return ApiResponse<bool>.Fail("Çıxış tamamlanmadı. Yenidən cəhd edin.");
         }
@@ -229,99 +257,136 @@ public class AuthService : IAuthService
     }
 
     /// <inheritdoc />
-    public async Task<ApiResponse<AuthResponse>> RefreshTokenAsync(TokenRefreshRequest request)
+    public async Task<ApiResponse<bool>> LogoutAllAsync(string userId)
     {
-        string accessToken = request.AccessToken;
-        string refreshToken = request.RefreshToken ?? string.Empty;
-
-        // Algorithm confusion cəhdini try-catch ilə tut
-        ClaimsPrincipal? principal;
-        try
+        for (var attempt = 0; attempt < 3; attempt++)
         {
-            principal = _tokenService.GetPrincipalFromExpiredToken(accessToken);
-        }
-        catch
-        {
-            return ApiResponse<AuthResponse>.Fail("Etibarsız token.");
-        }
-
-        if (principal == null)
-            return ApiResponse<AuthResponse>.Fail("Etibarsız token.");
-
-        var userId = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");
-        if (string.IsNullOrEmpty(userId))
-            return ApiResponse<AuthResponse>.Fail("Etibarsız token.");
-
-        var user = await _userManager.FindByIdAsync(userId);
-
-        // Constant-time müqayisə — timing attack qarşısı.
-        // Adi == operatoru ilk fərqli baytda dayanır; sabit vaxt müqayisəsi isə tokenin uzunluğundan asılı olmayaraq eyni vaxt aparır.
-        //
-        // Hər iki tərəf SHA-256-dan bir dəfə də keçirilir: nəticə HƏMİŞƏ 32 baytdır.
-        // Əvvəlki PadRight(128) yanaşması hash uzunluğu dəyişsə səssizcə sınardı —
-        // FixedTimeEquals fərqli uzunluqda sadəcə false qaytarır və müqayisə mənasını itirirdi.
-        var storedToken   = user?.RefreshToken ?? string.Empty;
-        var providedToken = HashToken(refreshToken ?? string.Empty);
-        var tokensMatch = CryptographicOperations.FixedTimeEquals(
-            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(storedToken)),
-            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(providedToken)));
-
-        // Boş storedToken (logout edilmiş hesab) real hash-ə heç vaxt bərabər ola bilməz,
-        // amma niyyəti açıq saxlamaq üçün açıq şəkildə rədd edilir.
-        if (string.IsNullOrEmpty(storedToken))
-            tokensMatch = false;
-
-        var stamp = principal.FindFirstValue(TokenService.SecurityStampClaimType);
-        var stampMatches = user is not null && !string.IsNullOrWhiteSpace(user.SecurityStamp) &&
-                           string.Equals(user.SecurityStamp, stamp, StringComparison.Ordinal);
-
-        // ── TOKEN TƏKRAR İSTİFADƏSİNİN AŞKARLANMASI ──────────────────────
-        //
-        // Rotation köhnə tokeni etibarsız edir, amma bu, oğurluğu DAYANDIRMIR:
-        // hücumçu tokeni oğurlayıb istifadə edirsə, qurbanın köhnə tokeni sadəcə rədd olunurdu,
-        // hücumçunun yeni tokeni isə işləməyə davam edirdi.
-        //
-        // Bu vəziyyət tanınandır: imza etibarlıdır, SecurityStamp uyğundur (yəni token bu hesaba
-        // aiddir və yaxın vaxta qədər etibarlı idi), amma təqdim edilən refresh token bazadakı ilə
-        // üst-üstə düşmür — yəni artıq bir dəfə istifadə olunub və rotasiya edilib.
-        // Belə halda sessiya OĞURLANMIŞ sayılır: SecurityStamp yenilənir və saxlanılan refresh token
-        // silinir. Nəticədə HƏM hücumçunun, HƏM qurbanın sessiyası dərhal ölür və hesab sahibi
-        // yenidən parolla daxil olmağa məcbur olur.
-        //
-        // Yan təsir: eyni anda iki lövhə (tab) refresh etsə, ikincisi bu yolla çıxarıla bilər.
-        // Bu, oğurlanmış sessiyanın açıq qalmasından daha ucuz seçimdir.
-        if (user is not null && stampMatches && !tokensMatch && !string.IsNullOrEmpty(user.RefreshToken))
-        {
-            user.SecurityStamp = Guid.NewGuid().ToString();
-            user.RefreshToken = null;
-            user.RefreshTokenExpiryTime = null;
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user is null) break;
+            user.RefreshSessions.Clear();
             user.GoogleLoginCodeHash = null;
             user.GoogleLoginCodeExpiryTime = null;
-            await _userManager.UpdateAsync(user);
+            user.SecurityStamp = Guid.NewGuid().ToString(); // bütün access tokenlər dərhal etibarsız
+            if ((await _userManager.UpdateAsync(user)).Succeeded) break;
+            if (attempt == 2) return ApiResponse<bool>.Fail("Çıxış tamamlanmadı. Yenidən cəhd edin.");
+        }
+        _logger.LogInformation("Bütün cihazlardan çıxış: {UserId}", userId);
+        await _signInManager.SignOutAsync();
+        return ApiResponse<bool>.Ok(true, "Bütün cihazlardan çıxış edildi.");
+    }
 
-            return ApiResponse<AuthResponse>.Fail("Sessiya təhlükəsizlik səbəbi ilə bağlandı. Yenidən daxil olun.");
+    /// <inheritdoc />
+    public async Task<ApiResponse<AuthResponse>> RefreshTokenAsync(TokenRefreshRequest request)
+    {
+        string refreshToken = request.RefreshToken ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            return ApiResponse<AuthResponse>.Fail("Etibarsız client sorğusu.");
+
+        var providedHash = HashToken(refreshToken);
+        AppUser? user;
+        string? userId;
+
+        if (!string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            // Klassik yol: vaxtı keçmiş access token imzası + sstamp yoxlanır, sessiya həmin hesabda axtarılır.
+            ClaimsPrincipal? principal;
+            try
+            {
+                principal = _tokenService.GetPrincipalFromExpiredToken(request.AccessToken);
+            }
+            catch
+            {
+                return ApiResponse<AuthResponse>.Fail("Etibarsız token.");
+            }
+
+            userId = principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal?.FindFirstValue("sub");
+            if (principal is null || string.IsNullOrEmpty(userId))
+                return ApiResponse<AuthResponse>.Fail("Etibarsız token.");
+
+            user = await _userManager.FindByIdAsync(userId);
+            var stamp = principal.FindFirstValue(TokenService.SecurityStampClaimType);
+            if (user is null || string.IsNullOrWhiteSpace(user.SecurityStamp) ||
+                !string.Equals(user.SecurityStamp, stamp, StringComparison.Ordinal))
+            {
+                _logger.LogInformation("Refresh rədd edildi: hesab {UserId} (stamp)", userId);
+                return ApiResponse<AuthResponse>.Fail("Etibarsız client sorğusu.");
+            }
+        }
+        else
+        {
+            // Access tokensiz yol (yeni tab / səhifə yenilənməsi — audit F6): sessiya yalnız cookie tokeninin hash-i ilə
+            // tapılır. Hash 64 bayt təsadüfi tokenin SHA-256-sıdır — təxminlə tapılmır; stamp yenilənəndə sessiyalar da
+            // silindiyi üçün stamp yoxlamasının verdiyi zəmanət burada da qorunur.
+            // Axtarış yaddaşda gedir (LiteDbUserStore.FindByLoginAsync ilə eyni yanaşma) — "refresh" limiti tokensiz
+            // sorğunu IP-yə görə 10/dəq ilə məhdudlaşdırır; istifadəçi sayı böyüyəndə ayrıca hash→hesab kolleksiyası açılmalıdır.
+            user = _db.Users.FindAll().FirstOrDefault(u => u.RefreshSessions.Any(s =>
+                HashesEqual(s.TokenHash, providedHash) ||
+                (s.PreviousTokenHash is not null && HashesEqual(s.PreviousTokenHash, providedHash))));
+            userId = user?.Id;
+            if (user is null)
+                return ApiResponse<AuthResponse>.Fail("Etibarsız client sorğusu.");
         }
 
-        if (user == null || !tokensMatch || user.RefreshTokenExpiryTime is null ||
-            user.RefreshTokenExpiryTime <= DateTime.UtcNow || !user.EmailConfirmed ||
-            user.LockoutEnd > DateTimeOffset.UtcNow || !stampMatches)
+        if (!user.EmailConfirmed || user.BlockedByAdminAt is not null || user.LockoutEnd > DateTimeOffset.UtcNow)
         {
+            _logger.LogInformation("Refresh rədd edildi: hesab {UserId} (vəziyyət)", userId);
             return ApiResponse<AuthResponse>.Fail("Etibarsız client sorğusu.");
         }
 
-        var roles = await _userManager.GetRolesAsync(user);
-        var newRefreshToken = _tokenService.GenerateRefreshToken();
+        // Paralel iki refresh (iki tab) eyni sənədi yazır: ikinci UpdateAsync ConcurrencyFailure alır — bir dəfə təzə
+        // oxunub təkrarlanır; təzə oxuda təqdim olunan token artıq PreviousTokenHash-dir və yarış pəncərəsi ilə keçir.
+        for (var attempt = 0; ; attempt++)
+        {
+            if (attempt > 0)
+            {
+                user = await _userManager.FindByIdAsync(user.Id);
+                if (user is null) return ApiResponse<AuthResponse>.Fail("Etibarsız client sorğusu.");
+            }
+            var now = DateTime.UtcNow;
+            PruneSessions(user, now);
 
-        // Token hər yeniləmədə dəyişdirilir (rotation) — oğurlanmış köhnə token bir dəfə istifadə edildikdən sonra etibarsız olur.
-        user.RefreshToken = HashToken(newRefreshToken);
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
-        if (!(await _userManager.UpdateAsync(user)).Succeeded)
-            return ApiResponse<AuthResponse>.Fail("Sessiya dəyişib. Yenidən daxil olun.");
+            var session = user.RefreshSessions.FirstOrDefault(x => HashesEqual(x.TokenHash, providedHash));
+            if (session is null)
+            {
+                // ── TOKEN TƏKRAR İSTİFADƏSİNİN AŞKARLANMASI ──
+                // Rotasiya olunmuş köhnə token təqdim edilirsə, HƏMİN cihazın sessiyası oğurlanmış sayılır və yalnız o
+                // ailə ləğv olunur — digər cihazlar (telefon, iş kompüteri) işləməyə davam edir.
+                var reused = user.RefreshSessions.FirstOrDefault(x =>
+                    x.PreviousTokenHash is not null && HashesEqual(x.PreviousTokenHash, providedHash));
+                if (reused is null)
+                    return ApiResponse<AuthResponse>.Fail("Etibarsız client sorğusu.");
 
-        var newAccessToken = _tokenService.GenerateAccessToken(user, roles);
-        var response = BuildAuthResponse(user, roles, newAccessToken, newRefreshToken);
+                if (now - reused.LastUsedAt > TimeSpan.FromSeconds(SessionPolicy.RefreshReuseGraceSeconds))
+                {
+                    user.RefreshSessions.Remove(reused);
+                    await _userManager.UpdateAsync(user);
+                    _logger.LogWarning("Refresh token təkrar istifadəsi aşkarlandı: hesab {UserId}, sessiya {SessionId}, IP {Ip}",
+                        user.Id, reused.Id, ClientIp());
+                    return ApiResponse<AuthResponse>.Fail("Sessiya təhlükəsizlik səbəbi ilə bağlandı. Yenidən daxil olun.");
+                }
 
-        return ApiResponse<AuthResponse>.Ok(response, "Token uğurla yeniləndi.");
+                // Yarış pəncərəsi: eyni cookie ilə paralel iki sorğu (iki tab, StrictMode, səhifə yenilənməsi) — ikinci
+                // sorğu da yeni cüt alır; brauzerin cookie anbarı ortaq olduğu üçün son Set-Cookie hər iki tab üçün keçərlidir.
+                session = reused;
+            }
+
+            var roles = await _userManager.GetRolesAsync(user);
+            var newRefreshToken = _tokenService.GenerateRefreshToken();
+
+            // Rotasiya: köhnə hash "əvvəlki" kimi qalır ki, təkrar təqdim olunanda tanınsın.
+            session.PreviousTokenHash = session.TokenHash;
+            session.TokenHash = HashToken(newRefreshToken);
+            session.LastUsedAt = now;
+            session.ExpiresAt = now.AddDays(SessionPolicy.RefreshTokenDays);
+            if (!(await _userManager.UpdateAsync(user)).Succeeded)
+            {
+                if (attempt == 0) continue;
+                return ApiResponse<AuthResponse>.Fail("Sessiya dəyişib. Yenidən daxil olun.");
+            }
+
+            var newAccessToken = _tokenService.GenerateAccessToken(user, roles);
+            return ApiResponse<AuthResponse>.Ok(BuildAuthResponse(user, roles, newAccessToken, newRefreshToken), "Token uğurla yeniləndi.");
+        }
     }
 
     /// <inheritdoc />
@@ -412,8 +477,7 @@ public class AuthService : IAuthService
         var roles = await _userManager.GetRolesAsync(user);
         var refreshToken = _tokenService.GenerateRefreshToken();
 
-        user.RefreshToken = HashToken(refreshToken);
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7);
+        IssueSession(user, refreshToken, DateTime.UtcNow, ClientIp());
         if (!(await _userManager.UpdateAsync(user)).Succeeded)
             return ApiResponse<AuthResponse>.Fail("Hesab dəyişib. Yenidən daxil olun.");
 
@@ -526,7 +590,7 @@ public class AuthService : IAuthService
     }
     public async Task<ApiResponse<bool>> ForgotPasswordAsync(ForgotPasswordRequest request)
     {
-        var ip  = ClientIp();
+        var ip = ClientIp();
         // Açar e-poçtla qurulur ki, eyni hesaba qarşı parol sıfırlama spam cəhdlərini izləyək.
         var key = $"forgot:{request.Email.Trim().ToLowerInvariant()}";
 
@@ -576,8 +640,7 @@ public class AuthService : IAuthService
             return ApiResponse<bool>.Fail("Şifrə yeniləmə linki etibarsızdır və ya vaxtı bitib.");
         }
 
-        user.RefreshToken = null;
-        user.RefreshTokenExpiryTime = null;
+        user.RefreshSessions.Clear(); // parol dəyişdi — bütün cihazlar yenidən daxil olmalıdır
         user.PasswordResetFailedAttempts = 0;
         user.PasswordResetLockoutEnd = null;
         await _userManager.UpdateAsync(user);
@@ -634,18 +697,18 @@ public class AuthService : IAuthService
     private static AuthResponse BuildAuthResponse(AppUser user, IList<string> roles, string accessToken, string refreshToken)
         => new()
         {
-            AccessToken  = accessToken,
+            AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresAt    = DateTime.UtcNow.AddMinutes(15),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(SessionPolicy.AccessTokenMinutes),
             User = new UserInfo
             {
-                Id              = user.Id,
-                Nickname        = user.Nickname,
-                FirstName       = user.FirstName,
-                LastName        = user.LastName,
-                Gender          = (int)user.Gender,
-                JoinDate        = user.CreatedAt,
-                Roles           = roles.ToList(),
+                Id = user.Id,
+                Nickname = user.Nickname,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                Gender = (int)user.Gender,
+                JoinDate = user.CreatedAt,
+                Roles = roles.ToList(),
                 ProfileImageUrl = user.ProfileImageUrl
             }
         };
@@ -657,5 +720,58 @@ public class AuthService : IAuthService
         var bytes = System.Text.Encoding.UTF8.GetBytes(token);
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
+    }
+
+    // Sabit-vaxt müqayisə: hər iki tərəf SHA-256 hex (64 simvol); uzunluq fərqlidirsə sadəcə false.
+    private static bool HashesEqual(string stored, string provided)
+        => CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(stored), System.Text.Encoding.UTF8.GetBytes(provided));
+
+    // Yeni cihaz sessiyası: vaxtı keçənlər təmizlənir, limit aşılırsa ən uzun istifadə olunmayan çıxarılır.
+    private static void IssueSession(AppUser user, string refreshToken, DateTime now, string? ip)
+    {
+        PruneSessions(user, now);
+        user.RefreshSessions.Add(new RefreshSession
+        {
+            TokenHash = HashToken(refreshToken),
+            CreatedAt = now,
+            LastUsedAt = now,
+            ExpiresAt = now.AddDays(SessionPolicy.RefreshTokenDays),
+            Ip = ip
+        });
+        while (user.RefreshSessions.Count > SessionPolicy.MaxSessionsPerUser)
+            user.RefreshSessions.Remove(user.RefreshSessions.OrderBy(x => x.LastUsedAt).First());
+    }
+
+    private static void PruneSessions(AppUser user, DateTime now)
+        => user.RefreshSessions.RemoveAll(x => x.ExpiresAt <= now ||
+                                              now - x.CreatedAt > TimeSpan.FromDays(SessionPolicy.AbsoluteSessionDays));
+
+    // Təsdiqsiz hesab yeni qeydiyyat sorğusu ilə əvəz olunur (bax RegisterAsync). Ləqəb yuxarıda sərt yoxlanılıb —
+    // başqasının (o cümlədən bu hesabın köhnə) ləqəbi ola bilməz. AddPasswordAsync Identity parol siyasətini tətbiq edir
+    // və SecurityStamp-i yeniləyir: əvvəlki təsdiq linkləri və sessiyalar etibarsız olur.
+    private async Task OverwriteUnconfirmedAccountAsync(AppUser user, RegisterRequest request)
+    {
+        user.FirstName = request.FirstName;
+        user.LastName = request.LastName;
+        user.Gender = request.Gender;
+        user.Nickname = request.Nickname;
+        user.Roles = [request.Role];
+        user.RefreshSessions.Clear();
+        user.GoogleLoginCodeHash = null;
+        user.GoogleLoginCodeExpiryTime = null;
+        user.GoogleLoginCodeSecurityStamp = null;
+        user.LastConfirmationEmailSentAt = null; // yeni sahib dərhal öz linkini almalıdır
+
+        var nameResult = await _userManager.SetUserNameAsync(user, request.Nickname);
+        if (!nameResult.Succeeded) { _logger.LogWarning("Təsdiqsiz hesabın yenidən qeydiyyatı: ləqəb yenilənmədi ({UserId})", user.Id); return; }
+        if (await _userManager.HasPasswordAsync(user))
+            await _userManager.RemovePasswordAsync(user);
+        var passwordResult = await _userManager.AddPasswordAsync(user, request.Password);
+        if (!passwordResult.Succeeded) { _logger.LogWarning("Təsdiqsiz hesabın yenidən qeydiyyatı: parol yenilənmədi ({UserId})", user.Id); return; }
+        if (!(await _userManager.UpdateAsync(user)).Succeeded) return;
+
+        _logger.LogInformation("Təsdiqsiz hesab yeni qeydiyyat sorğusu ilə əvəz olundu: {UserId}", user.Id);
+        await TrySendConfirmationEmailAsync(user, ignoreCooldown: true);
     }
 }

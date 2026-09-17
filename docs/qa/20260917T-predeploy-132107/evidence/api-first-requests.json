@@ -1,0 +1,2855 @@
+[
+  {
+    "method": "GET",
+    "path": "/health",
+    "alias": "Guest",
+    "status": 200,
+    "elapsedMs": 18,
+    "body": {
+      "status": "ok"
+    },
+    "timestamp": "2026-09-17T09:30:09.862272+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 231,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:10.1699832Z",
+        "user": {
+          "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+          "nickname": "qausera",
+          "firstName": "Sınaq",
+          "lastName": "UserA",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "User"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.187299+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 48,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "UserA",
+        "roles": [
+          "User"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.315226+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "UserB",
+    "status": 200,
+    "elapsedMs": 81,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:10.4795733Z",
+        "user": {
+          "id": "dea4a132-cf7c-414e-a7ce-43482dabc3bb",
+          "nickname": "qauserb",
+          "firstName": "Sınaq",
+          "lastName": "UserB",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "User"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.480524+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "UserB",
+    "status": 200,
+    "elapsedMs": 4,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "dea4a132-cf7c-414e-a7ce-43482dabc3bb",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "UserB",
+        "roles": [
+          "User"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.567696+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "TeacherA",
+    "status": 200,
+    "elapsedMs": 75,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:10.7352421Z",
+        "user": {
+          "id": "4d3b64bb-0099-416f-9dd8-9846a1d3c41d",
+          "nickname": "qateachera",
+          "firstName": "Sınaq",
+          "lastName": "TeacherA",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "Teacher"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.736092+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "TeacherA",
+    "status": 200,
+    "elapsedMs": 3,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "4d3b64bb-0099-416f-9dd8-9846a1d3c41d",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "TeacherA",
+        "roles": [
+          "Teacher"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.819858+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "TeacherB",
+    "status": 200,
+    "elapsedMs": 75,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:10.9865633Z",
+        "user": {
+          "id": "4deb2196-de9c-448a-b82c-886cf352c492",
+          "nickname": "qateacherb",
+          "firstName": "Sınaq",
+          "lastName": "TeacherB",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "Teacher"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:10.987397+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "TeacherB",
+    "status": 200,
+    "elapsedMs": 3,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "4deb2196-de9c-448a-b82c-886cf352c492",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "TeacherB",
+        "roles": [
+          "Teacher"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.072910+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "VIPA",
+    "status": 200,
+    "elapsedMs": 74,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:11.2312138Z",
+        "user": {
+          "id": "6a1677e6-2294-4e41-9b6e-4bb7566a4f4d",
+          "nickname": "qavipa",
+          "firstName": "Sınaq",
+          "lastName": "VIPA",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "VIP"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.232132+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "VIPA",
+    "status": 200,
+    "elapsedMs": 4,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "6a1677e6-2294-4e41-9b6e-4bb7566a4f4d",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "VIPA",
+        "roles": [
+          "VIP"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.327747+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "VIPB",
+    "status": 200,
+    "elapsedMs": 71,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:11.4864867Z",
+        "user": {
+          "id": "9a6374c4-370c-461c-9ddd-a653eef7e21e",
+          "nickname": "qavipb",
+          "firstName": "Sınaq",
+          "lastName": "VIPB",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "VIP"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.487320+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "VIPB",
+    "status": 200,
+    "elapsedMs": 3,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "9a6374c4-370c-461c-9ddd-a653eef7e21e",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "VIPB",
+        "roles": [
+          "VIP"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.587634+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "ModeratorA",
+    "status": 200,
+    "elapsedMs": 70,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:11.784696Z",
+        "user": {
+          "id": "773ff157-10f7-4692-ab66-f30d73c4d20d",
+          "nickname": "qamoderatora",
+          "firstName": "Sınaq",
+          "lastName": "ModeratorA",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "Moderator"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.785491+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "ModeratorA",
+    "status": 200,
+    "elapsedMs": 3,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "773ff157-10f7-4692-ab66-f30d73c4d20d",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "ModeratorA",
+        "roles": [
+          "Moderator"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:11.870341+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "ModeratorB",
+    "status": 200,
+    "elapsedMs": 66,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:12.0221368Z",
+        "user": {
+          "id": "8585492b-bdf4-4b27-836b-64f1d182300e",
+          "nickname": "qamoderatorb",
+          "firstName": "Sınaq",
+          "lastName": "ModeratorB",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "Moderator"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:12.022969+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "ModeratorB",
+    "status": 200,
+    "elapsedMs": 6,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "8585492b-bdf4-4b27-836b-64f1d182300e",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "ModeratorB",
+        "roles": [
+          "Moderator"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:12.114289+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "AdminA",
+    "status": 200,
+    "elapsedMs": 67,
+    "body": {
+      "success": true,
+      "message": "Giriş uğurludur.",
+      "data": {
+        "accessToken": "[REDACTED]",
+        "refreshToken": "[REDACTED]",
+        "expiresAt": "2026-09-17T09:45:12.2865947Z",
+        "user": {
+          "id": "4df68517-d757-48c5-8ec6-1661973fc748",
+          "nickname": "qaadmina",
+          "firstName": "Sınaq",
+          "lastName": "AdminA",
+          "gender": 1,
+          "joinDate": "2026-09-17T09:27:29.995Z",
+          "roles": [
+            "Admin"
+          ],
+          "profileImageUrl": null
+        }
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:12.287425+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "AdminA",
+    "status": 200,
+    "elapsedMs": 4,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "4df68517-d757-48c5-8ec6-1661973fc748",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "AdminA",
+        "roles": [
+          "Admin"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:12.377394+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/profile",
+    "alias": "Guest",
+    "status": 401,
+    "elapsedMs": 8,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:12.481930+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/teacher/classes",
+    "alias": "Guest",
+    "status": 401,
+    "elapsedMs": 5,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:12.579571+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "alias": "Guest",
+    "status": 401,
+    "elapsedMs": 2,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:12.671715+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/quiz/submit",
+    "alias": "Guest",
+    "status": 401,
+    "elapsedMs": 3,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:12.778170+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/teacher/classes",
+    "alias": "UserA",
+    "status": 403,
+    "elapsedMs": 5,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:12.899622+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exam-sessions",
+    "alias": "UserA",
+    "status": 403,
+    "elapsedMs": 4,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:13.017618+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "alias": "UserA",
+    "status": 403,
+    "elapsedMs": 3,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:13.104108+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "alias": "Guest",
+    "status": 200,
+    "elapsedMs": 17,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": [
+        {
+          "id": 1,
+          "title": "QA Açıq Praktika",
+          "icon": "shield",
+          "description": "Yalnız sintetik audit sualları",
+          "color": "#00FFFF",
+          "topics": [
+            "QA"
+          ],
+          "questionCount": 4,
+          "difficulty": "Başlanğıc - Orta - Peşəkar",
+          "sortOrder": 1
+        },
+        {
+          "id": 2,
+          "title": "QA Qapalı İmtahan",
+          "icon": "shield",
+          "description": "Yalnız sintetik audit sualları",
+          "color": "#00FFFF",
+          "topics": [
+            "QA"
+          ],
+          "questionCount": 0,
+          "difficulty": "Başlanğıc - Orta - Peşəkar",
+          "sortOrder": 2
+        }
+      ],
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.203374+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quiz/questions?categoryId=1&count=500",
+    "alias": "Guest",
+    "status": 200,
+    "elapsedMs": 19,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": [
+        {
+          "id": 2,
+          "categoryId": 1,
+          "difficulty": "Başlanğıc",
+          "question": "QA açıq sintetik sual 2",
+          "options": [
+            {
+              "key": "A",
+              "text": "Sintetik variant A"
+            },
+            {
+              "key": "B",
+              "text": "Sintetik variant B"
+            },
+            {
+              "key": "C",
+              "text": "Sintetik variant C"
+            },
+            {
+              "key": "D",
+              "text": "Sintetik variant D"
+            }
+          ]
+        },
+        {
+          "id": 1,
+          "categoryId": 1,
+          "difficulty": "Başlanğıc",
+          "question": "QA açıq sintetik sual 1",
+          "options": [
+            {
+              "key": "A",
+              "text": "Sintetik variant A"
+            },
+            {
+              "key": "B",
+              "text": "Sintetik variant B"
+            },
+            {
+              "key": "C",
+              "text": "Sintetik variant C"
+            },
+            {
+              "key": "D",
+              "text": "Sintetik variant D"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "categoryId": 1,
+          "difficulty": "Başlanğıc",
+          "question": "QA açıq sintetik sual 3",
+          "options": [
+            {
+              "key": "A",
+              "text": "Sintetik variant A"
+            },
+            {
+              "key": "B",
+              "text": "Sintetik variant B"
+            },
+            {
+              "key": "C",
+              "text": "Sintetik variant C"
+            },
+            {
+              "key": "D",
+              "text": "Sintetik variant D"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "categoryId": 1,
+          "difficulty": "Başlanğıc",
+          "question": "QA açıq sintetik sual 4",
+          "options": [
+            {
+              "key": "A",
+              "text": "Sintetik variant A"
+            },
+            {
+              "key": "B",
+              "text": "Sintetik variant B"
+            },
+            {
+              "key": "C",
+              "text": "Sintetik variant C"
+            },
+            {
+              "key": "D",
+              "text": "Sintetik variant D"
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.303380+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quiz/questions?categoryId=2",
+    "alias": "Guest",
+    "status": 200,
+    "elapsedMs": 6,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": [],
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.396979+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quiz/questions?categoryId=-1",
+    "alias": "Guest",
+    "status": 400,
+    "elapsedMs": 3,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "categoryId müsbət olmalıdır."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.486282+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/quiz/submit",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 49,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "isCorrect": false,
+        "correctKey": "[REDACTED]",
+        "options": [
+          {
+            "key": "A",
+            "explanation": "Sintetik QA izahı"
+          },
+          {
+            "key": "B",
+            "explanation": "Sintetik QA izahı"
+          },
+          {
+            "key": "C",
+            "explanation": "Sintetik QA izahı"
+          },
+          {
+            "key": "D",
+            "explanation": "Sintetik QA izahı"
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.631259+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/me/overview",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 29,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+        "nickname": "qausera",
+        "firstName": "Sınaq",
+        "lastName": "UserA",
+        "joinDate": "2026-09-17T09:27:29.995Z",
+        "summary": {
+          "examsTaken": 1,
+          "averageScore": 0,
+          "bestScore": 0,
+          "totalPoints": 0,
+          "overallProgress": 0
+        },
+        "examSessions": [
+          {
+            "id": "CAT-1",
+            "title": "QA Açıq Praktika",
+            "date": "2026-09-17T09:30:13.623Z",
+            "score": 0,
+            "maxScore": 1,
+            "percentage": 0,
+            "status": "Tamamlandı"
+          }
+        ],
+        "progressAreas": [
+          {
+            "area": "QA Açıq Praktika",
+            "solved": 0,
+            "total": 1,
+            "percentage": 0,
+            "lastActivity": "2026-09-17T09:30:13.623Z"
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.747890+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/quiz/submit",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 5,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "isCorrect": false,
+        "correctKey": "[REDACTED]",
+        "options": [
+          {
+            "key": "A",
+            "explanation": "Sintetik QA izahı"
+          },
+          {
+            "key": "B",
+            "explanation": "Sintetik QA izahı"
+          },
+          {
+            "key": "C",
+            "explanation": "Sintetik QA izahı"
+          },
+          {
+            "key": "D",
+            "explanation": "Sintetik QA izahı"
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.841384+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/me/overview",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 7,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+        "nickname": "qausera",
+        "firstName": "Sınaq",
+        "lastName": "UserA",
+        "joinDate": "2026-09-17T09:27:29.995Z",
+        "summary": {
+          "examsTaken": 1,
+          "averageScore": 0,
+          "bestScore": 0,
+          "totalPoints": 0,
+          "overallProgress": 0
+        },
+        "examSessions": [
+          {
+            "id": "CAT-1",
+            "title": "QA Açıq Praktika",
+            "date": "2026-09-17T09:30:13.623Z",
+            "score": 0,
+            "maxScore": 1,
+            "percentage": 0,
+            "status": "Tamamlandı"
+          }
+        ],
+        "progressAreas": [
+          {
+            "area": "QA Açıq Praktika",
+            "solved": 0,
+            "total": 1,
+            "percentage": 0,
+            "lastActivity": "2026-09-17T09:30:13.623Z"
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:13.965843+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/User/teacher/classes",
+    "alias": "TeacherA",
+    "status": 200,
+    "elapsedMs": 26,
+    "body": {
+      "success": true,
+      "message": "Sinif yaradıldı.",
+      "data": {
+        "id": 1,
+        "name": "QA 20260917T-predeploy-132107",
+        "createdAt": "2026-09-17T09:30:14.0879055Z",
+        "studentCount": 0,
+        "students": []
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.098543+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/User/teacher/classes/1/students",
+    "alias": "TeacherA",
+    "status": 200,
+    "elapsedMs": 13,
+    "body": {
+      "success": true,
+      "message": "Tələbə sinfə əlavə edildi.",
+      "data": {
+        "id": 1,
+        "name": "QA 20260917T-predeploy-132107",
+        "createdAt": "2026-09-17T09:30:14.087Z",
+        "studentCount": 1,
+        "students": [
+          {
+            "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+            "nickname": "qausera",
+            "firstName": "Sınaq",
+            "lastName": "UserA",
+            "addedAt": "2026-09-17T09:30:14.1902247Z",
+            "summary": {
+              "examsTaken": 1,
+              "averageScore": 0,
+              "bestScore": 0,
+              "totalPoints": 0,
+              "overallProgress": 0
+            }
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.193608+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/students/6c3ca10a-24b7-492f-91b9-aee9eada11b0/overview",
+    "alias": "TeacherA",
+    "status": 200,
+    "elapsedMs": 9,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+        "nickname": "qausera",
+        "firstName": "Sınaq",
+        "lastName": "UserA",
+        "joinDate": "2026-09-17T09:27:29.995Z",
+        "summary": {
+          "examsTaken": 1,
+          "averageScore": 0,
+          "bestScore": 0,
+          "totalPoints": 0,
+          "overallProgress": 0
+        },
+        "examSessions": [
+          {
+            "id": "CAT-1",
+            "title": "QA Açıq Praktika",
+            "date": "2026-09-17T09:30:13.623Z",
+            "score": 0,
+            "maxScore": 1,
+            "percentage": 0,
+            "status": "Tamamlandı"
+          }
+        ],
+        "progressAreas": [
+          {
+            "area": "QA Açıq Praktika",
+            "solved": 0,
+            "total": 1,
+            "percentage": 0,
+            "lastActivity": "2026-09-17T09:30:13.623Z"
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.280982+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/students/6c3ca10a-24b7-492f-91b9-aee9eada11b0/overview",
+    "alias": "TeacherB",
+    "status": 400,
+    "elapsedMs": 3,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Tələbə əvvəlcə müəllimin sinfinə əlavə edilməlidir."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.368329+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/User/teacher/classes/1/students",
+    "alias": "TeacherB",
+    "status": 400,
+    "elapsedMs": 4,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Sinif tapılmadı."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.458893+00:00"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/User/teacher/classes/1",
+    "alias": "TeacherB",
+    "status": 400,
+    "elapsedMs": 9,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": false,
+      "errors": [
+        "Sinif tapılmadı."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.562625+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/teacher/classes",
+    "alias": "TeacherA",
+    "status": 200,
+    "elapsedMs": 8,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": [
+        {
+          "id": 1,
+          "name": "QA 20260917T-predeploy-132107",
+          "createdAt": "2026-09-17T09:30:14.087Z",
+          "studentCount": 1,
+          "students": [
+            {
+              "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+              "nickname": "qausera",
+              "firstName": "Sınaq",
+              "lastName": "UserA",
+              "addedAt": "2026-09-17T09:30:14.19Z",
+              "summary": {
+                "examsTaken": 1,
+                "averageScore": 0,
+                "bestScore": 0,
+                "totalPoints": 0,
+                "overallProgress": 0
+              }
+            }
+          ]
+        }
+      ],
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.674338+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exam-sessions",
+    "alias": "VIPA",
+    "status": 200,
+    "elapsedMs": 49,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "76fde567a83a4beeaf21f480bba83f61",
+        "code": "KBR-EC8914F79CC155AB",
+        "title": "QA 20260917T-predeploy-132107",
+        "teacherName": "qavipa",
+        "durationMinutes": 5,
+        "questionCount": 4,
+        "createdAt": "2026-09-17T09:30:14.794+00:00",
+        "isClosed": false
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.809967+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exam-sessions/join",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 23,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:14.907+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": null,
+        "correctCount": null,
+        "percentage": null,
+        "revision": 0,
+        "answers": {},
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:14.921711+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18",
+    "alias": "UserB",
+    "status": 404,
+    "elapsedMs": 18,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "İmtahan tapılmadı."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.035589+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/exam-sessions/KBR-EC8914F79CC155AB/dashboard",
+    "alias": "VIPB",
+    "status": 404,
+    "elapsedMs": 5,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Sessiya tapılmadı."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.137400+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exam-sessions/join",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 4,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:15.223+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": null,
+        "correctCount": null,
+        "percentage": null,
+        "revision": 0,
+        "answers": {},
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.224516+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/answer",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 13,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:15.333+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": null,
+        "correctCount": null,
+        "percentage": null,
+        "revision": 1,
+        "answers": {
+          "1445a86bc7ed4bdb8a61e8b00fac01cc": "B"
+        },
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.334428+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/answer",
+    "alias": "UserB",
+    "status": 404,
+    "elapsedMs": 6,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "İmtahan tapılmadı."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.430909+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/answer",
+    "alias": "UserA",
+    "status": 409,
+    "elapsedMs": 4,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "İmtahan başqa pəncərədə dəyişib. Yeniləyib cavabı təkrar seçin."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.554719+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/answer",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 4,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:15.647+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": null,
+        "correctCount": null,
+        "percentage": null,
+        "revision": 2,
+        "answers": {
+          "1445a86bc7ed4bdb8a61e8b00fac01cc": "B",
+          "eb110ee295964284995adf6eb535ecec": "A"
+        },
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.648116+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/answer",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 3,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:15.733+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": null,
+        "correctCount": null,
+        "percentage": null,
+        "revision": 3,
+        "answers": {
+          "1445a86bc7ed4bdb8a61e8b00fac01cc": "B",
+          "eb110ee295964284995adf6eb535ecec": "A",
+          "77ff6e88c32e4b7fb2a6491e5f9cf64d": "A"
+        },
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.734530+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/answer",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 24,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:15.844+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": null,
+        "correctCount": null,
+        "percentage": null,
+        "revision": 4,
+        "answers": {
+          "1445a86bc7ed4bdb8a61e8b00fac01cc": "B",
+          "eb110ee295964284995adf6eb535ecec": "A",
+          "77ff6e88c32e4b7fb2a6491e5f9cf64d": "A",
+          "c05a2daa16224c22bf4996e2ee56e115": "A"
+        },
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.846179+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/submit",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 8,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:15.936+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": "2026-09-17T09:30:15.936+00:00",
+        "correctCount": 2,
+        "percentage": 50,
+        "revision": 5,
+        "answers": {
+          "1445a86bc7ed4bdb8a61e8b00fac01cc": "B",
+          "eb110ee295964284995adf6eb535ecec": "A",
+          "77ff6e88c32e4b7fb2a6491e5f9cf64d": "A",
+          "c05a2daa16224c22bf4996e2ee56e115": "A"
+        },
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:15.940170+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/exam-sessions/attempts/650c83b0073c4370b042d547e8767a18/submit",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 3,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "650c83b0073c4370b042d547e8767a18",
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "serverNow": "2026-09-17T09:30:16.042+00:00",
+        "expiresAt": "2026-09-17T09:35:14.907+00:00",
+        "submittedAt": "2026-09-17T09:30:15.936+00:00",
+        "correctCount": 2,
+        "percentage": 50,
+        "revision": 5,
+        "answers": {
+          "1445a86bc7ed4bdb8a61e8b00fac01cc": "B",
+          "eb110ee295964284995adf6eb535ecec": "A",
+          "77ff6e88c32e4b7fb2a6491e5f9cf64d": "A",
+          "c05a2daa16224c22bf4996e2ee56e115": "A"
+        },
+        "questions": [
+          {
+            "id": "1445a86bc7ed4bdb8a61e8b00fac01cc",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 2",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "eb110ee295964284995adf6eb535ecec",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 1",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "77ff6e88c32e4b7fb2a6491e5f9cf64d",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 3",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          },
+          {
+            "id": "c05a2daa16224c22bf4996e2ee56e115",
+            "category": "QA Qapalı İmtahan",
+            "text": "QA qapalı sintetik sual 4",
+            "options": [
+              {
+                "key": "A",
+                "text": "Sintetik variant A"
+              },
+              {
+                "key": "B",
+                "text": "Sintetik variant B"
+              },
+              {
+                "key": "C",
+                "text": "Sintetik variant C"
+              },
+              {
+                "key": "D",
+                "text": "Sintetik variant D"
+              }
+            ]
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.042931+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/exam-sessions/KBR-EC8914F79CC155AB/dashboard",
+    "alias": "VIPA",
+    "status": 200,
+    "elapsedMs": 13,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "session": {
+          "id": "76fde567a83a4beeaf21f480bba83f61",
+          "code": "KBR-EC8914F79CC155AB",
+          "title": "QA 20260917T-predeploy-132107",
+          "teacherName": "qavipa",
+          "durationMinutes": 5,
+          "questionCount": 4,
+          "createdAt": "2026-09-17T09:30:14.794+00:00",
+          "isClosed": false
+        },
+        "participants": [
+          {
+            "id": "650c83b0073c4370b042d547e8767a18",
+            "name": "qausera",
+            "startedAt": "2026-09-17T09:30:14.907+00:00",
+            "submittedAt": "2026-09-17T09:30:15.936+00:00",
+            "answeredCount": 4,
+            "correctCount": 2,
+            "percentage": 50
+          }
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.153117+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/Course",
+    "alias": "VIPA",
+    "status": 200,
+    "elapsedMs": 30,
+    "body": {
+      "success": true,
+      "message": "Təliminiz qeydə alındı. Admin təsdiqlədikdən sonra 30 gün ərzində saytda görünəcək.",
+      "data": {
+        "id": 1,
+        "instructorName": "QA Müəllim",
+        "instructorInitials": "QM",
+        "instructorRole": "Təlimçi",
+        "instructorCompany": null,
+        "instructorPhotoUrl": null,
+        "linkedInUrl": null,
+        "gitHubUrl": null,
+        "contactEmail": "[REDACTED]",
+        "contactPhone": null,
+        "courseTitle": "QA 20260917T-predeploy-132107",
+        "kicker": null,
+        "description": "Yalnız audit üçün sintetik təlim açıqlamasıdır.",
+        "duration": "4 həftə",
+        "level": "Başlanğıc",
+        "language": "Azərbaycan dili",
+        "syllabusTopics": [
+          "QA mövzusu"
+        ],
+        "syllabusFileUrl": null,
+        "accentColor": "--brand-primary",
+        "createdAt": "2026-09-17T09:30:16.2658738Z"
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.273509+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/users",
+    "alias": "AdminA",
+    "status": 200,
+    "elapsedMs": 14,
+    "body": {
+      "success": true,
+      "message": "",
+      "data": [
+        {
+          "id": "4d3b64bb-0099-416f-9dd8-9846a1d3c41d",
+          "nickname": "qateachera",
+          "firstName": "Sınaq",
+          "lastName": "TeacherA",
+          "email": "[REDACTED]",
+          "roles": [
+            "Teacher"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "4deb2196-de9c-448a-b82c-886cf352c492",
+          "nickname": "qateacherb",
+          "firstName": "Sınaq",
+          "lastName": "TeacherB",
+          "email": "[REDACTED]",
+          "roles": [
+            "Teacher"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "6a1677e6-2294-4e41-9b6e-4bb7566a4f4d",
+          "nickname": "qavipa",
+          "firstName": "Sınaq",
+          "lastName": "VIPA",
+          "email": "[REDACTED]",
+          "roles": [
+            "VIP"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": "2026-10-17T09:27:29.995Z",
+          "vipCoursesRemaining": 0
+        },
+        {
+          "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+          "nickname": "qausera",
+          "firstName": "Sınaq",
+          "lastName": "UserA",
+          "email": "[REDACTED]",
+          "roles": [
+            "User"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "773ff157-10f7-4692-ab66-f30d73c4d20d",
+          "nickname": "qamoderatora",
+          "firstName": "Sınaq",
+          "lastName": "ModeratorA",
+          "email": "[REDACTED]",
+          "roles": [
+            "Moderator"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "8585492b-bdf4-4b27-836b-64f1d182300e",
+          "nickname": "qamoderatorb",
+          "firstName": "Sınaq",
+          "lastName": "ModeratorB",
+          "email": "[REDACTED]",
+          "roles": [
+            "Moderator"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "8d39373c-742f-4bf9-a0d0-82b525aa5605",
+          "nickname": "qaunconfirmed",
+          "firstName": "Sınaq",
+          "lastName": "Unconfirmed",
+          "email": "[REDACTED]",
+          "roles": [
+            "User"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "9a6374c4-370c-461c-9ddd-a653eef7e21e",
+          "nickname": "qavipb",
+          "firstName": "Sınaq",
+          "lastName": "VIPB",
+          "email": "[REDACTED]",
+          "roles": [
+            "VIP"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": "2026-10-17T09:27:29.995Z",
+          "vipCoursesRemaining": 1
+        },
+        {
+          "id": "dea4a132-cf7c-414e-a7ce-43482dabc3bb",
+          "nickname": "qauserb",
+          "firstName": "Sınaq",
+          "lastName": "UserB",
+          "email": "[REDACTED]",
+          "roles": [
+            "User"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": false,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        },
+        {
+          "id": "e5edeb9c-4ab1-45f8-9583-30df62c82681",
+          "nickname": "qablocked",
+          "firstName": "Sınaq",
+          "lastName": "Blocked",
+          "email": "[REDACTED]",
+          "roles": [
+            "User"
+          ],
+          "isEmailConfirmed": "[REDACTED]",
+          "isBlocked": true,
+          "isTemporarilyLocked": false,
+          "joinDate": "2026-09-17",
+          "vipTermEndsAt": null,
+          "vipCoursesRemaining": null
+        }
+      ],
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.381054+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "alias": "Guest",
+    "status": 200,
+    "elapsedMs": 22,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": [
+        {
+          "rank": 1,
+          "name": "qausera",
+          "username": "1 cavab · 0% dəqiqlik",
+          "score": 0,
+          "badge": "gold",
+          "avatar": "QA",
+          "category": "—",
+          "change": "same",
+          "changeValue": 0
+        }
+      ],
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.502844+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/profile",
+    "alias": "UserB",
+    "status": 200,
+    "elapsedMs": 9,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "dea4a132-cf7c-414e-a7ce-43482dabc3bb",
+        "nickname": "qauserb",
+        "firstName": "Sınaq",
+        "lastName": "UserB",
+        "email": "[REDACTED]",
+        "gender": 1,
+        "joinDate": "2026-09-17T09:27:29.995Z",
+        "roles": [
+          "User"
+        ],
+        "profileImageUrl": null
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.598126+00:00"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/User/profile",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 16,
+    "body": {
+      "success": true,
+      "message": "Profil uğurla yeniləndi.",
+      "data": {
+        "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+        "nickname": "qausera",
+        "firstName": "QA Yoxlama",
+        "lastName": "Sintetik",
+        "email": "[REDACTED]",
+        "gender": 1,
+        "joinDate": "2026-09-17T09:27:29.995Z",
+        "roles": [
+          "User"
+        ],
+        "profileImageUrl": null
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.703972+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/User/profile",
+    "alias": "UserB",
+    "status": 200,
+    "elapsedMs": 5,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "id": "dea4a132-cf7c-414e-a7ce-43482dabc3bb",
+        "nickname": "qauserb",
+        "firstName": "Sınaq",
+        "lastName": "UserB",
+        "email": "[REDACTED]",
+        "gender": 1,
+        "joinDate": "2026-09-17T09:27:29.995Z",
+        "roles": [
+          "User"
+        ],
+        "profileImageUrl": null
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.796440+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "UserA",
+    "status": 200,
+    "elapsedMs": 2,
+    "body": {
+      "success": true,
+      "message": "Əməliyyat uğurla tamamlandı.",
+      "data": {
+        "userId": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+        "email": "[REDACTED]",
+        "firstName": "Sınaq",
+        "lastName": "UserA",
+        "roles": [
+          "User"
+        ]
+      },
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:16.886819+00:00"
+  },
+  {
+    "method": "OPTIONS",
+    "path": "/api/User/profile",
+    "alias": "Guest",
+    "status": 204,
+    "elapsedMs": 6,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:16.984810+00:00"
+  },
+  {
+    "method": "OPTIONS",
+    "path": "/api/User/profile",
+    "alias": "Guest",
+    "status": 204,
+    "elapsedMs": 3,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:17.079350+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/register",
+    "alias": "Guest",
+    "status": 400,
+    "elapsedMs": 30,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Ad tələb olunur.",
+        "Ad minimum 2 simvol olmalıdır.",
+        "Ad yalnız hərf, boşluq və defis ehtiva edə bilər.",
+        "Soyad tələb olunur.",
+        "Soyad minimum 2 simvol olmalıdır.",
+        "Soyad yalnız hərf, boşluq və defis ehtiva edə bilər.",
+        "E-poçt tələb olunur.",
+        "E-poçt minimum 6 simvol olmalıdır.",
+        "Düzgün e-poçt formatı daxil edin.",
+        "Ləqəb tələb olunur.",
+        "Ləqəb minimum 3 simvol olmalıdır.",
+        "Ləqəbdə yalnız hərf, rəqəm və alt xətt (_) işlənə bilər.",
+        "Düzgün cins seçin.",
+        "Şifrə tələb olunur.",
+        "Şifrə minimum 8 simvol olmalıdır.",
+        "Şifrədə ən azı 1 böyük hərf olmalıdır.",
+        "Şifrədə ən azı 1 rəqəm olmalıdır.",
+        "Şifrə təkrarı tələb olunur."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:17.286249+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/register",
+    "alias": "Guest",
+    "status": 400,
+    "elapsedMs": 4,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Düzgün e-poçt formatı daxil edin.",
+        "Rol istifadəçi və ya müəllim olmalıdır.",
+        "Şifrə minimum 8 simvol olmalıdır.",
+        "Şifrədə ən azı 1 böyük hərf olmalıdır.",
+        "Şifrədə ən azı 1 rəqəm olmalıdır.",
+        "Şifrələr uyğun deyil."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:17.377187+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/Upload/photo",
+    "alias": "UserA",
+    "status": 403,
+    "elapsedMs": 4,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:17.465068+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/Upload/photo",
+    "alias": "VIPA",
+    "status": 400,
+    "elapsedMs": 27,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Fayl məzmunu formatla uyğun gəlmir."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:17.580584+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/Upload/photo",
+    "alias": "VIPA",
+    "status": 200,
+    "elapsedMs": 7,
+    "body": {
+      "success": true,
+      "message": "Müəllim şəkli uğurla yükləndi.",
+      "data": "/uploads/photos/43a8a808bc9e4d0a9662234a13cb4799.png",
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:17.673425+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/uploads/photos/43a8a808bc9e4d0a9662234a13cb4799.png",
+    "alias": "Guest",
+    "status": 401,
+    "elapsedMs": 7,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:17.781635+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "Unconfirmed",
+    "status": 401,
+    "elapsedMs": 74,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Hesabınız hələ təsdiqlənməyib. E-poçtunuza göndərilən təsdiq linkinə daxil olun."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:17.960126+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/login",
+    "alias": "Blocked",
+    "status": 401,
+    "elapsedMs": 66,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Hesabınız bloklanıb. Administratorla əlaqə saxlayın."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:18.136481+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/logout",
+    "alias": "UserB",
+    "status": 200,
+    "elapsedMs": 17,
+    "body": {
+      "success": true,
+      "message": "Çıxış uğurludur.",
+      "data": true,
+      "errors": [],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:18.237371+00:00"
+  },
+  {
+    "method": "GET",
+    "path": "/api/auth/me",
+    "alias": "UserB",
+    "status": 401,
+    "elapsedMs": 6,
+    "body": {
+      "bytes": 0
+    },
+    "timestamp": "2026-09-17T09:30:18.324008+00:00"
+  },
+  {
+    "method": "POST",
+    "path": "/api/auth/refresh",
+    "alias": "UserB",
+    "status": 400,
+    "elapsedMs": 12,
+    "body": {
+      "success": false,
+      "message": "",
+      "data": null,
+      "errors": [
+        "Etibarsız client sorğusu."
+      ],
+      "captchaRequired": false
+    },
+    "timestamp": "2026-09-17T09:30:18.452761+00:00"
+  }
+]

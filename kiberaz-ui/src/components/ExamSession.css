@@ -53,6 +53,18 @@
 .es-summary { display: flex; gap: var(--sp-4); flex-wrap: wrap; padding: var(--sp-3) var(--sp-4); background: var(--bg-surface-2); border-radius: var(--r-md); font-size: var(--text-sm); color: var(--text-2); }
 .es-summary strong { color: var(--text-1); }
 
+/* Günlük kvota göstəricisi (yalnız VIP): "bu gün N / 7", qalan say və yenilənmə vaxtı */
+.es-quota { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); background: var(--bg-surface-2); border: 1px solid var(--border-2); border-radius: var(--r-md); }
+.es-quota__row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); font-size: var(--text-sm); }
+.es-quota__label { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--text-2); }
+.es-quota__label svg { color: var(--brand); }
+.es-quota__value { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.es-quota__value strong { color: var(--text-1); }
+.es-quota__hint { font-size: var(--text-xs); color: var(--text-3); line-height: 1.5; }
+.es-quota--exhausted { border-color: var(--warning-border); background: var(--warning-bg); }
+.es-quota--exhausted .es-quota__label svg { color: var(--warning); }
+.es-quota--exhausted .es-quota__hint { color: var(--warning); }
+
 /* Oyunçu */
 .es-player { display: flex; flex-direction: column; gap: var(--sp-5); }
 .es-player__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }

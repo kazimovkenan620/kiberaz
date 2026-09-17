@@ -56,6 +56,10 @@ public class UserService : IUserService
         if (user is null)
             return ApiResponse<ProfileResponse>.Fail("İstifadəçi tapılmadı.");
 
+        // Nickname yenilənməsi də dərhal yazır; qoruma bütün dəyişikliklərdən əvvəl olmalıdır.
+        if (_protected.IsOwner(user))
+            return ApiResponse<ProfileResponse>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage);
+
         var newNickname = request.Nickname.Trim();
         if (!string.Equals(user.Nickname, newNickname, StringComparison.OrdinalIgnoreCase))
         {
@@ -172,8 +176,7 @@ public class UserService : IUserService
         user.UserName  = user.Nickname;
         user.PendingNewEmail = null;
         user.EmailConfirmed  = false;
-        user.RefreshToken    = null;
-        user.RefreshTokenExpiryTime = null;
+        user.RefreshSessions.Clear();
         user.GoogleLoginCodeHash = null;
         user.GoogleLoginCodeExpiryTime = null;
         user.GoogleLoginCodeSecurityStamp = null;
@@ -461,6 +464,14 @@ public class UserService : IUserService
                     return Task.FromResult(ApiResponse<bool>.Fail("Bu hesab üçün rol keçidi mümkün deyil."));
                 }
 
+                // VIP üzvlük ödənişli dövrə bağlıdır: istifadəçi özü rolu "İstifadəçi/Müəllim"ə keçirsə
+                // ödədiyi dövrü və təlim kreditini itirərdi. VIP rolu yalnız admin panelindən idarə olunur.
+                if (user.Roles.Contains(AppRoles.VIP))
+                {
+                    _db.Database.Rollback();
+                    return Task.FromResult(ApiResponse<bool>.Fail("VIP hesabın rolu kabinetdən dəyişdirilmir. Dəyişiklik üçün administratora müraciət edin."));
+                }
+
                 // Sahib hesabı bu yoldan da dəyişdirilə bilməz. Yuxarıdakı Admin yoxlaması
                 // onu artıq tutur, lakin bootstrap hələ işləməyibsə sahib hesab müvəqqəti
                 // Admin rolsuz ola bilər — bu yoxlama həmin pəncərəni bağlayır.
@@ -481,8 +492,7 @@ public class UserService : IUserService
                     user.Roles.Add(request.NewRole);
                     user.SecurityStamp = Guid.NewGuid().ToString();
                     user.ConcurrencyStamp = Guid.NewGuid().ToString();
-                    user.RefreshToken = null;
-                    user.RefreshTokenExpiryTime = null;
+                    user.RefreshSessions.Clear();
                     user.GoogleLoginCodeHash = null;
                     user.GoogleLoginCodeExpiryTime = null;
                     if (!_db.Users.Update(user)) throw new InvalidOperationException("Hesab yenilənmədi.");

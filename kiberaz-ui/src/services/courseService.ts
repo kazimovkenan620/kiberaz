@@ -3,6 +3,19 @@ import { apiFetch } from './apiClient';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5251/api';
 
+// API mənşəyi (sxem + host + port) — yüklənmiş faylların tam ünvanı bundan qurulur.
+const API_ORIGIN = (() => {
+  try { return new URL(API_URL).origin; } catch { return window.location.origin; }
+})();
+
+// Serverin qaytardığı nisbi upload yolunu (/uploads/photos/<guid>.png) tam ünvana çevirir (audit F11).
+// Yalnız /uploads/ ilə başlayan yollar qəbul edilir — kənar və ya gözlənilməz dəyər heç vaxt linkə çevrilmir;
+// `new URL` sətir birləşməsindən fərqli olaraq yol/port dəyişəndə də düzgün işləyir.
+export function resolveUploadUrl(path: string | null | undefined): string | undefined {
+  if (!path || !path.startsWith('/uploads/')) return undefined;
+  try { return new URL(path, API_ORIGIN).href; } catch { return undefined; }
+}
+
 // ─── Tiplər ───────────────────────────────────────────────────
 
 export interface CreateCourseRequest {
@@ -55,6 +68,41 @@ export interface ApiResponse<T> {
   errors?: string[];
 }
 
+// ─── VIP təlim modeli (kabinet) ───────────────────────────────
+// Server qaydaları: təlimi yalnız VIP + aktiv 30 günlük dövr + qalan kredit paylaşır; hər dəyişiklik
+// admin təsdiqindən keçir; təsdiqlənmiş təlim 30 gün aktiv qalır, sonra "Expired" (passiv) olur.
+// Buradakı bayraqlar (canReactivate, coursesRemaining) yalnız UI üçündür — hüquq serverdə yoxlanılır.
+export type MyCourseStatus = 'Pending' | 'Approved' | 'Rejected' | 'Expired';
+
+export interface CourseRevision extends CreateCourseRequest {
+  submittedAt: string;
+}
+
+export interface MyCourse extends CourseResponse {
+  status: MyCourseStatus;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  daysLeft: number | null;
+  hasPendingRevision: boolean;
+  pendingRevision: CourseRevision | null;
+  canReactivate: boolean;
+}
+
+export interface VipStatus {
+  hasVipRole: boolean;
+  hasActiveTerm: boolean;
+  termStartsAt: string | null;
+  termEndsAt: string | null;
+  termDaysLeft: number | null;
+  courseAllowance: number;
+  coursesUsed: number;
+  coursesRemaining: number;
+  extraCourseRequiresPayment: boolean;
+  termDays: number;
+  coursesPerTerm: number;
+  courseActiveDays: number;
+}
+
 // ─── API Çağırışları ──────────────────────────────────────────
 
 // Yazma endpoint-ləri artıq giriş tələb edir. response.json() birbaşa çağırmaq olmaz:
@@ -68,6 +116,12 @@ async function readWriteResponse<T>(response: Response): Promise<ApiResponse<T>>
 
   if (response.status === 401) {
     return { success: false, message: 'Bu əməliyyat üçün daxil olun.', errors: ['AUTH_REQUIRED'] };
+  }
+  if (response.status === 403) {
+    return { success: false, message: 'Bu əməliyyat yalnız VIP hesablar üçündür.', errors: ['VIP_REQUIRED'] };
+  }
+  if (response.status === 402) {
+    return { success: false, message: 'Bu VIP dövründə təlim krediti bitib. Əlavə təlim əlavə ödəniş tələb edir.', errors: ['PAYMENT_REQUIRED'] };
   }
   if (response.status === 429) {
     const retryAfter = Number(response.headers.get('Retry-After'));
@@ -110,6 +164,31 @@ export async function getCourseById(id: number): Promise<ApiResponse<CourseRespo
   });
 
   return response.json();
+}
+
+/// Cari hesabın VIP vəziyyəti (dövr, qalan kredit) — giriş tələb olunur.
+export async function getVipStatus(): Promise<ApiResponse<VipStatus>> {
+  return readWriteResponse<VipStatus>(await apiFetch('/course/vip-status'));
+}
+
+/// Sahibin öz təlimləri (bütün statuslar) — kabinet.
+export async function getMyCourses(): Promise<ApiResponse<MyCourse[]>> {
+  return readWriteResponse<MyCourse[]>(await apiFetch('/course/mine'));
+}
+
+/// Sahibin redaktəsi — aktiv təlimdə admin təsdiqinə qədər gözləyir, saytdakı versiya dəyişmir.
+export async function updateCourse(id: number, request: CreateCourseRequest): Promise<ApiResponse<MyCourse>> {
+  return readWriteResponse<MyCourse>(await apiFetch(`/course/${id}`, { method: 'PUT', body: JSON.stringify(request) }));
+}
+
+/// Sahibin silməsi (soft delete; kredit geri qaytarılmır).
+export async function deleteMyCourse(id: number): Promise<ApiResponse<boolean>> {
+  return readWriteResponse<boolean>(await apiFetch(`/course/${id}`, { method: 'DELETE' }));
+}
+
+/// Passiv təlimi yenidən moderasiyaya göndərir (aktiv VIP dövrünün 1 krediti).
+export async function reactivateCourse(id: number): Promise<ApiResponse<MyCourse>> {
+  return readWriteResponse<MyCourse>(await apiFetch(`/course/${id}/reactivate`, { method: 'POST' }));
 }
 
 // UploadController artıq [Authorize]-dır: anonim istifadəçinin serverin diskinə fayl

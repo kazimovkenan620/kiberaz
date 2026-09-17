@@ -59,10 +59,13 @@ public class AppUser
     // Saytda görünən unikal ləqəb — e-poçt gizli qalır, yalnız bu ad ictimaiyyətə açıqdır.
     public string Nickname { get; set; } = string.Empty;
 
-    // Refresh token orijinal halda yox, SHA-256 hash-i olaraq saxlanır.
-    // Baza sızdıqda oğrulunan hash-lə giriş mümkün olmur — bu token-at-rest qorumasıdır.
-    public string? RefreshToken { get; set; }
-    public DateTime? RefreshTokenExpiryTime { get; set; }
+    // Hər cihaz/brauzer üçün ayrıca refresh sessiyası (token ailəsi). Tokenlər SHA-256 hash-i kimi saxlanır —
+    // baza sızdıqda hash ilə giriş mümkün olmur. Bir hesabda ən çox SessionPolicy.MaxSessionsPerUser sessiya qalır.
+    public List<RefreshSession> RefreshSessions { get; set; } = new();
+
+    // Admin bloku brute-force kilidindən (LockoutEnd) ayrıca izlənir: 5 dəqiqəlik müvəqqəti kilid
+    // "bloklanıb" kimi görünməsin və "blokdan çıxar" səhvən əks nəticə verməsin.
+    public DateTime? BlockedByAdminAt { get; set; }
 
     // E-poçt təsdiq linki son dəfə nə vaxt göndərildiyini saxlayır — spam qarşısı üçün.
     public DateTime? LastConfirmationEmailSentAt { get; set; }

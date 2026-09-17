@@ -105,9 +105,9 @@ Filter DI-da `IValidator<T>` tapmadıqda arqumenti **yoxlamadan buraxır**. Vali
 | `ConfirmEmailChangeRequest` | `POST /api/user/confirm-email-change` | ❌ uzunluq limiti yoxdur |
 | `CreateTeacherClassRequest` | `POST /api/user/teacher/classes` | ✅ servisdə (ad ≤ 80) |
 | `AddStudentToClassRequest` | `.../students` | ⚠️ yalnız boşluq yoxlanır |
-| `CreateExamRequest` | `POST /api/exam-sessions` | ✅ servisdə (tam hüdudlar) |
-| `JoinExamRequest` | `POST /api/exam-sessions/join` | ✅ servisdə (format) |
-| `SaveExamAnswerRequest` | `PUT .../answer` | ✅ servisdə |
+| `CreateExamRequest` | `POST /api/exam-sessions` | ✅ validator (`ExamValidators.cs`) + servisdə (tam hüdudlar, VIP rolu, günlük 7 sessiya limiti) |
+| `JoinExamRequest` | `POST /api/exam-sessions/join` | ✅ validator + servisdə (format) |
+| `SaveExamAnswerRequest` | `PUT .../answer` | ✅ validator + servisdə |
 
 İlk üçündə istənilən uzunluqda sətir birbaşa Identity token yoxlamasına və LiteDB axtarışına düşür. Kritik deyil (Identity token-i etibarsız sayacaq), amma hüdudsuz giriş qayda ilə ziddiyyətdədir və CPU-nu boş yerə yandırır.
 

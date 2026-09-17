@@ -37,6 +37,41 @@ public interface IQuizService
     /// <summary>Kateqoriyanı silir — soft delete (Admin panel üçün)</summary>
     Task<bool> DeleteCategoryAsync(int categoryId);
 
+    // ─── Admin paneli: kateqoriya + sual bankı ───────────────
+
+    /// <summary>Kateqoriyalar + ictimai/məxfi sual sayları və iştirakçı sayı (yalnız Admin).</summary>
+    /// <param name="deleted">true → yalnız silinmiş (bərpa edilə bilən) kateqoriyalar.</param>
+    Task<List<AdminQuizCategoryResponse>> GetAdminCategoriesAsync(bool deleted = false);
+
+    /// <summary>
+    /// Silinmiş kateqoriyanı geri qaytarır. Onunla BİRLİKDƏ (eyni anda, kaskadla) silinmiş suallar da
+    /// qayıdır; əvvəl ayrıca silinmiş suallar silinmiş qalır.
+    /// </summary>
+    Task<int> RestoreCategoryAsync(int categoryId);
+
+    /// <summary>
+    /// Silinmiş sualı geri qaytarır. Kateqoriyası silinmişdirsə əvvəlcə o bərpa edilməlidir;
+    /// əks bankda eyni mətn yaranıbsa bərpa rədd edilir (yaratma qaydası ilə eyni).
+    /// </summary>
+    Task<AdminQuizQuestionResponse> RestoreQuestionAsync(int questionId);
+
+    /// <summary>Kateqoriyanın məlumatlarını yeniləyir (Admin panel üçün)</summary>
+    Task<QuizCategoryResponse> UpdateCategoryAsync(int categoryId, UpdateQuizCategoryRequest request);
+
+    /// <summary>
+    /// Admin sual siyahısı — düzgün açar və izahlarla, səhifələnmiş.
+    /// Bu proyeksiya Admin rolundan kənara heç vaxt verilmir.
+    /// </summary>
+    /// <param name="deleted">true → yalnız silinmiş suallar (bərpa siyahısı).</param>
+    Task<AdminQuestionPageResponse> GetAdminQuestionsAsync(int? categoryId, string? search, string? difficulty,
+        bool? examOnly, bool deleted, int skip, int take);
+
+    /// <summary>
+    /// Sualın məzmununu yeniləyir. Bank (ictimai ⇄ məxfi) dəyişmir — səbəb
+    /// <see cref="UpdateQuizQuestionRequest"/> sənədində izah olunub.
+    /// </summary>
+    Task<AdminQuizQuestionResponse> UpdateQuestionAsync(int questionId, UpdateQuizQuestionRequest request);
+
     /// <summary>
     /// Liderlik lövhəsi — QuizResults üzərindən canlı hesablanır.
     /// </summary>

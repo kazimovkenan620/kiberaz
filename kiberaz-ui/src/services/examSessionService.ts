@@ -18,7 +18,10 @@ export type ExamAttemptSummary = {
   id: string; session: ExamSessionInfo; startedAt: string; submittedAt: string | null;
   correctCount: number | null; percentage: number | null;
 };
-export type ExamOverview = { sessions: ExamSessionInfo[]; attempts: ExamAttemptSummary[] };
+// Günlük kvota yalnız VIP hesablar üçün gəlir (digərləri üçün null). Məlumat məqsədlidir —
+// həqiqi limit serverdə, yaratma anında yoxlanılır; UI yalnız sayğacı və izahı göstərir.
+export type ExamQuota = { dailyLimit: number; usedToday: number; remaining: number; resetsAt: string };
+export type ExamOverview = { sessions: ExamSessionInfo[]; attempts: ExamAttemptSummary[]; quota?: ExamQuota | null };
 export type ExamParticipant = {
   id: string; name: string; startedAt: string; submittedAt: string | null;
   answeredCount: number; correctCount: number | null; percentage: number | null;
@@ -28,7 +31,17 @@ export type ExamDashboard = { session: ExamSessionInfo; participants: ExamPartic
 async function read<T>(response: Response): Promise<ApiResponse<T>> {
   const contentType = response.headers.get('content-type') ?? '';
   const body: unknown = contentType.includes('application/json') ? await response.json() : null;
-  if (body && typeof body === 'object') return body as ApiResponse<T>;
+  if (body && typeof body === 'object') {
+    const parsed = body as ApiResponse<T>;
+    // Qlobal rate-limiter 429 cavabında errors=['RATE_LIMIT'] və oxunaqlı `message` göndərir —
+    // istifadəçiyə texniki kodu deyil, mesajı göstəririk. Günlük sessiya limiti (servis 429) isə
+    // mətnini birbaşa errors[0]-da daşıyır və olduğu kimi keçir.
+    if (response.status === 429 && parsed.errors?.[0] === 'RATE_LIMIT') {
+      return { ...parsed, errors: [parsed.message || 'Çox sayda sorğu göndərildi. Bir az sonra yenidən cəhd edin.'] };
+    }
+    return parsed;
+  }
+  if (response.status === 429) return { success: false, message: 'Çox sayda sorğu göndərildi. Bir az sonra yenidən cəhd edin.' };
   return { success: false, message: response.ok ? 'Boş server cavabı alındı.' : 'Sorğu icra edilmədi.' };
 }
 

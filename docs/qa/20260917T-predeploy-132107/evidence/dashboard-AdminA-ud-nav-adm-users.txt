@@ -1,0 +1,218 @@
+Əsas məzmuna keç
+KIBERAZ.AZ
+// TƏHSİL PLATFORMASI
+Ana Səhifə
+Təlimlər
+Biliklər
+İmtahan
+Liderlik
+QA
+qaadmina
+Admin
+QA
+qaadmina
+Admin
+İDARƏETMƏ PANELİ
+İcmal
+İstifadəçilər
+Təlimlər
+İmtahan sessiyaları
+Kateqoriyalar + suallar
+Ana səhifə
+Çıxış
+
+Daha güclü gələcək üçün birlikdə öyrənək.
+
+İDARƏETMƏ PANELİ
+İstifadəçilərin idarə edilməsi
+
+Platformadakı istifadəçilərə baxın, rollarını dəyişin və hesabları bloklayın.
+
+İstifadəçilər
+(11)
+İSTİFADƏÇİ	E-POÇT	ROL	E-POÇT TƏSDİQİ	STATUS	QEYDİYYAT	
+ƏMƏLİYYAT
+
+
+ƏŞ
+Əli Şükürov
+@qa_ui_132107
+	[EMAIL REDACTED]	
+qa_ui_132107 üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Gözləyir	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+ST
+Sınaq TeacherA
+@qateachera
+	[EMAIL REDACTED]	
+qateachera üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+ST
+Sınaq TeacherB
+@qateacherb
+	[EMAIL REDACTED]	
+qateacherb üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SV
+Sınaq VIPA
+@qavipa
+	[EMAIL REDACTED]	
+qavipa üçün rol
+Moderator
+Teacher
+VIP
+User
+2026 M10 17 tarixinədək · 0 təlim krediti
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+QS
+QA Yoxlama Sintetik
+@qausera
+	[EMAIL REDACTED]	
+qausera üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SM
+Sınaq ModeratorA
+@qamoderatora
+	[EMAIL REDACTED]	
+qamoderatora üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SM
+Sınaq ModeratorB
+@qamoderatorb
+	[EMAIL REDACTED]	
+qamoderatorb üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SU
+Sınaq Unconfirmed
+@qaunconfirmed
+	[EMAIL REDACTED]	
+qaunconfirmed üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SV
+Sınaq VIPB
+@qavipb
+	[EMAIL REDACTED]	
+qavipb üçün rol
+Moderator
+Teacher
+VIP
+User
+2026 M10 17 tarixinədək · 1 təlim krediti
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SU
+Sınaq UserB
+@qauserb
+	[EMAIL REDACTED]	
+qauserb üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	Aktiv	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Blokla
+
+
+SB
+Sınaq Blocked
+@qablocked
+	[EMAIL REDACTED]	
+qablocked üçün rol
+Moderator
+Teacher
+VIP
+User
+	
+Təsdiqlənib	
+Bloklanıb	2026-09-17	
+Bax
+VIP dövrü (30 gün)
+Bloku aç
+
+Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik. Məxfilik Siyasəti
+
+Rədd et
+Qəbul et

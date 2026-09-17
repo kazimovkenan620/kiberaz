@@ -1,0 +1,2 @@
+
+ROBOCOPY_EXIT=3 (0..7 success)

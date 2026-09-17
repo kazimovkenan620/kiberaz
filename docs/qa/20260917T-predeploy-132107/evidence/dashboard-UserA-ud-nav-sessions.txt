@@ -1,0 +1,37 @@
+Əsas məzmuna keç
+KIBERAZ.AZ
+// TƏHSİL PLATFORMASI
+Ana Səhifə
+Təlimlər
+Biliklər
+İmtahan
+Liderlik
+QA
+qausera
+İstifadəçi
+QA
+qausera
+İstifadəçi
+KABİNET
+Ümumi Baxış
+İrəliləyiş
+İmtahanlarım
+Profil
+Ana səhifə
+Çıxış
+
+Daha güclü gələcək üçün birlikdə öyrənək.
+
+İMTAHANLARIM
+İmtahan sessiyalarım
+
+Keçirilən bütün sessiyaların nəticələri.
+
+SESSİYA	TARİX	SUAL SAYI	XAL	STATUS
+QA Açıq Praktika	2026 M09 17	1	0/1 0%	
+Tamamlandı
+
+Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik. Məxfilik Siyasəti
+
+Rədd et
+Qəbul et

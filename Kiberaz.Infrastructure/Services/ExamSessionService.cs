@@ -7,6 +7,10 @@ using Kiberaz.Infrastructure.Data;
 
 namespace Kiberaz.Infrastructure.Services;
 
+// Sessiya yaratmaq, canlı panel və bağlama yalnız VIP rolu üçündür; qoşulub cavab yazmaq
+// bütün adi hesablar üçün açıqdır. Admin/sahib hesab imtahan fəaliyyətində iştirak etmir.
+// Entity-dəki `TeacherId`/`TeacherName` sahələri tarixi adlardır — sessiyanın sahibi (host) deməkdir;
+// mövcud bazadakı sənədlərin oxunmasını pozmamaq üçün adlar dəyişdirilməyib.
 public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSessionService
 {
     private long Now => clock.GetUtcNow().ToUnixTimeMilliseconds();
@@ -26,7 +30,7 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
     // Açıq bankda görünən sual mətnləri bir dəfə hesablanır və bütün kateqoriyalar üçün
     // təkrar istifadə olunur. Əvvəl `Available` hər kateqoriya üçün ayrıca tam skan + Unicode
     // normalizasiya edirdi, üstəlik bunların hamısı `ExamSyncRoot` kilidi altında baş verirdi —
-    // yəni müəllim bu siyahını açdıqca tələbələrin cavab yazıları gözləyirdi.
+    // yəni sahib bu siyahını açdıqca tələbələrin cavab yazıları gözləyirdi.
     public List<ExamCategoryResponse> GetCategories() => Atomic(() =>
     {
         var exposed = ExposedQuestionTexts();
@@ -38,19 +42,29 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
 
     public ExamSessionResponse Create(string userId, CreateExamRequest request) => Atomic(() =>
     {
-        var teacher = Teacher(userId);
-        if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Length > 120 ||
-            request.DurationMinutes is < 1 or > 180 || request.Categories is null ||
-            request.Categories.Count is < 1 or > 30 || request.Categories.Any(c => c is null || c.Count is < 1 or > 50) ||
-            request.Categories.Sum(c => c.Count) > 50 ||
+        var host = Host(userId, requireActiveTerm: true);
+        // Validator eyni qaydaları controller-dən əvvəl yoxlayır; burada təkrar yoxlama
+        // "defence in depth"-dir — servis birbaşa çağırıldıqda da (test, gələcək endpoint) invariant pozulmur.
+        if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > ExamPolicy.MaxTitleLength ||
+            request.DurationMinutes is < ExamPolicy.MinDurationMinutes or > ExamPolicy.MaxDurationMinutes ||
+            request.Categories is null || request.Categories.Count is < 1 or > ExamPolicy.MaxCategoriesPerSession ||
+            request.Categories.Any(c => c is null || c.Count is < 1 or > ExamPolicy.MaxQuestionsPerSession) ||
+            request.Categories.Sum(c => c.Count) > ExamPolicy.MaxQuestionsPerSession ||
             request.Categories.Select(c => c.CategoryId).Distinct().Count() != request.Categories.Count)
-            throw Error(400, "Ad, 1–180 dəqiqə və kateqoriyalar üzrə cəmi 1–50 sual seçin.");
-        if (db.ExamSessions.Count(s => s.TeacherId == userId && s.ClosedAt == null && s.QuestionSecurityVersion == 1) >= 50)
-            throw Error(409, "Əvvəlcə açıq sessiyalardan birini bağlayın (maksimum 50).");
+            throw Error(400, $"Ad, {ExamPolicy.MinDurationMinutes}–{ExamPolicy.MaxDurationMinutes} dəqiqə və kateqoriyalar üzrə cəmi 1–{ExamPolicy.MaxQuestionsPerSession} sual seçin.");
+
+        // GÜNLÜK LİMİT: hər VIP hesab bir UTC günündə ən çox 7 sessiya yarada bilər.
+        // Sayğac kilid altında, yazıdan dərhal əvvəl oxunur — paralel iki sorğu limiti keçə bilməz.
+        // Bağlanmış sessiyalar da sayılır: limit "yaradılan" sessiyaların sayıdır, "açıq" olanların yox.
+        var quota = Quota(userId);
+        if (quota.Remaining <= 0)
+            throw Error(429, $"Günlük limit dolub: bir VIP hesab gündə ən çox {ExamPolicy.DailySessionsPerHost} sessiya yarada bilər. Limit UTC 00:00-da yenilənir.");
+        if (db.ExamSessions.Count(s => s.TeacherId == userId && s.ClosedAt == null && s.QuestionSecurityVersion == 1) >= ExamPolicy.MaxOpenSessionsPerHost)
+            throw Error(409, $"Əvvəlcə açıq sessiyalardan birini bağlayın (maksimum {ExamPolicy.MaxOpenSessionsPerHost}).");
 
         var session = new ExamSession
         {
-            Title = request.Title.Trim(), TeacherId = userId, TeacherName = teacher.Nickname,
+            Title = request.Title.Trim(), TeacherId = userId, TeacherName = host.Nickname,
             DurationMinutes = request.DurationMinutes, CreatedAt = Now, QuestionSecurityVersion = 1
         };
         var exposedTexts = ExposedQuestionTexts();
@@ -69,7 +83,7 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
             }));
         }
         Shuffle(session.Questions);
-        do { session.Code = "KBR-" + Convert.ToHexString(RandomNumberGenerator.GetBytes(8)); }
+        do { session.Code = ExamPolicy.CodePrefix + Convert.ToHexString(RandomNumberGenerator.GetBytes(8)); }
         while (db.ExamSessions.Exists(s => s.Code == session.Code));
         db.ExamSessions.Insert(session);
         return SessionView(session);
@@ -78,8 +92,10 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
     public ExamOverviewResponse GetOverview(string userId) => Atomic(() =>
     {
         var user = User(userId);
-        if (user.Roles.Contains(AppRoles.Admin))
-            return new ExamOverviewResponse([], []);
+        if (ProtectedAccountPolicy.IsHiddenAccount(user))
+            return new ExamOverviewResponse([], [], null);
+        // Kvota yalnız sessiya yarada bilən hesablara göstərilir — başqa rollar üçün mənasız rəqəmdir.
+        var quota = user.Roles.Contains(AppRoles.VIP) ? Quota(userId) : null;
         var sessions = db.ExamSessions.Find(s => s.TeacherId == userId).OrderByDescending(s => s.CreatedAt)
             .Take(100).Select(SessionView).ToList();
         var attempts = new List<ExamAttemptSummary>();
@@ -91,7 +107,7 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
             attempts.Add(new(attempt.Id, SessionView(session), Date(attempt.StartedAt), NullableDate(attempt.SubmittedAt),
                 attempt.CorrectCount, Percentage(attempt, session)));
         }
-        return new ExamOverviewResponse(sessions, attempts);
+        return new ExamOverviewResponse(sessions, attempts, quota);
     });
 
     public ExamAttemptResponse Join(string userId, string code) => Atomic(() =>
@@ -104,8 +120,9 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
         var existing = db.ExamAttempts.FindOne(a => a.ParticipationKey == key);
         if (existing is not null) { Expire(existing, session); return AttemptView(existing, session); }
         if (session.ClosedAt is not null) throw Error(409, "Bu sessiya artıq bağlanıb.");
-        if (session.TeacherId == userId) throw Error(400, "Öz sessiyanıza tələbə kimi qoşula bilməzsiniz.");
-        if (db.ExamAttempts.Count(a => a.SessionId == session.Id) >= 500) throw Error(409, "Sessiyanın iştirakçı limiti dolub.");
+        if (session.TeacherId == userId) throw Error(400, "Öz sessiyanıza iştirakçı kimi qoşula bilməzsiniz.");
+        if (db.ExamAttempts.Count(a => a.SessionId == session.Id) >= ExamPolicy.MaxParticipantsPerSession)
+            throw Error(409, "Sessiyanın iştirakçı limiti dolub.");
         var attempt = new ExamAttempt
         {
             ParticipationKey = key, SessionId = session.Id, StudentId = userId, StudentName = user.Nickname,
@@ -148,14 +165,12 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
     public ExamDashboardResponse GetDashboard(string userId, string code) => Atomic(() =>
     {
         var session = OwnedSession(userId, code);
-        var adminIds = db.Users.FindAll()
-            .Where(u => u.Roles.Contains(AppRoles.Admin))
-            .Select(u => u.Id)
-            .ToHashSet(StringComparer.Ordinal);
         var participants = new List<ExamParticipantResponse>();
-        foreach (var attempt in db.ExamAttempts.Find(a => a.SessionId == session.Id)
-                     .Where(a => !adminIds.Contains(a.StudentId)).OrderBy(a => a.StartedAt))
+        foreach (var attempt in db.ExamAttempts.Find(a => a.SessionId == session.Id).OrderBy(a => a.StartedAt))
         {
+            // Gizli (sahib/Admin) hesab heç bir iştirakçı siyahısında görünmür — serverdə, serializasiyadan əvvəl süzülür.
+            // Əvvəl bütün Users kolleksiyası hər 10 saniyəlik panel sorğusunda tam oxunurdu; indi yalnız iştirakçılar yoxlanılır.
+            if (ProtectedAccountPolicy.IsHiddenAccount(db.Users.FindById(attempt.StudentId))) continue;
             Expire(attempt, session);
             participants.Add(new(attempt.Id, attempt.StudentName, Date(attempt.StartedAt), NullableDate(attempt.SubmittedAt),
                 attempt.Answers.Count, attempt.CorrectCount, Percentage(attempt, session)));
@@ -175,6 +190,21 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
         }
         return SessionView(session);
     });
+
+    /// <summary>
+    /// Cari UTC günü üçün sahibin kvotası. Yalnız ExamSyncRoot altında çağırılır (Atomic içindən),
+    /// ona görə Create-dəki "oxu → müqayisə → yaz" ardıcıllığı atomikdir.
+    /// Sorğu `TeacherId` indeksi ilə işləyir; günə görə süzgəc həmin hesabın sessiyaları üzərində aparılır.
+    /// </summary>
+    private ExamQuotaResponse Quota(string userId)
+    {
+        var now = clock.GetUtcNow();
+        var dayStart = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero);
+        var dayStartMs = dayStart.ToUnixTimeMilliseconds();
+        var used = db.ExamSessions.Count(s => s.TeacherId == userId && s.CreatedAt >= dayStartMs);
+        return new ExamQuotaResponse(ExamPolicy.DailySessionsPerHost, used,
+            Math.Max(0, ExamPolicy.DailySessionsPerHost - used), dayStart.AddDays(1));
+    }
 
     /// <summary>Açıq (ictimai) bankda görünən sual mətnləri — imtahan bankından çıxarılmalı olanlar.</summary>
     private HashSet<string> ExposedQuestionTexts() => db.QuizQuestions
@@ -197,35 +227,45 @@ public class ExamSessionService(LiteDbContext db, TimeProvider clock) : IExamSes
     private static void RequirePrivateBank(ExamSession session)
     {
         if (session.QuestionSecurityVersion != 1)
-            throw Error(409, "Bu sessiya açıq sual bankından yaradılıb. Müəllim məxfi suallarla yeni sessiya yaratmalıdır.");
+            throw Error(409, "Bu sessiya açıq sual bankından yaradılıb. Sessiya sahibi məxfi suallarla yeni sessiya yaratmalıdır.");
     }
 
     private AppUser User(string id) => db.Users.FindById(id) ?? throw Error(401, "Hesab tapılmadı. Yenidən daxil olun.");
-    private AppUser Teacher(string id)
+
+    /// <summary>
+    /// Sessiya sahibi ola biləcək hesab: yalnız VIP. Rol JWT-dən deyil, bazadakı cari dəyərdən oxunur —
+    /// controller-dəki [Authorize(Roles = VIP)] birinci sədd, bu isə ikinci sədddir (rol dəqiqə əvvəl alınmış ola bilər).
+    /// </summary>
+    private AppUser Host(string id, bool requireActiveTerm = false)
     {
         var user = User(id);
         RejectAdminActivity(user);
-        // Read current roles from DB as well as controller JWT authorization.
-        if (!user.Roles.Contains(AppRoles.Teacher))
-            throw Error(403, "Bu əməliyyat üçün müəllim hesabı lazımdır.");
+        if (!user.Roles.Contains(AppRoles.VIP))
+            throw Error(403, "İmtahan sessiyası yaratmaq yalnız VIP hesablar üçün açıqdır.");
+        // Yeni sessiya üçün VIP dövrü aktiv olmalıdır; mövcud sessiyaların paneli/bağlanması rol ilə kifayətlənir
+        // (dövr bitəndə sahib öz nəticələrinə çatmağa davam edir, amma yeni sessiya aça bilmir — audit L11).
+        if (requireActiveTerm && VipEntitlements.ActiveTerm(db, user.Id, clock.GetUtcNow().UtcDateTime) is null)
+            throw Error(403, "Aktiv VIP dövrünüz yoxdur. Yeni imtahan sessiyası üçün VIP üzvlüyü yeniləyin.");
         return user;
     }
     private static void RejectAdminActivity(AppUser user)
     {
-        if (user.Roles.Contains(AppRoles.Admin))
+        if (ProtectedAccountPolicy.IsHiddenAccount(user))
             throw Error(403, "Admin hesabı imtahan fəaliyyətində iştirak etmir.");
     }
     private ExamSession Session(string? code)
     {
         var normalized = code?.Trim().ToUpperInvariant() ?? "";
-        if (normalized.Length != 20 || !normalized.StartsWith("KBR-") || normalized[4..].Any(c => !Uri.IsHexDigit(c)))
+        if (normalized.Length != ExamPolicy.CodeLength || !normalized.StartsWith(ExamPolicy.CodePrefix, StringComparison.Ordinal) ||
+            normalized[ExamPolicy.CodePrefix.Length..].Any(c => !Uri.IsHexDigit(c)))
             throw Error(400, "Kodu KBR-1234567890ABCDEF formatında daxil edin.");
         return db.ExamSessions.FindOne(s => s.Code == normalized) ?? throw Error(404, "Sessiya tapılmadı. Kodu yoxlayın.");
     }
     private ExamSession OwnedSession(string userId, string code)
     {
-        Teacher(userId);
+        Host(userId);
         var session = Session(code);
+        // Başqasının sessiyası 403 deyil, 404 qaytarır — kodun mövcudluğu sızdırılmır.
         if (session.TeacherId != userId) throw Error(404, "Sessiya tapılmadı.");
         return session;
     }

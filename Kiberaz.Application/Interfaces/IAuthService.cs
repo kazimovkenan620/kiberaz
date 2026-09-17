@@ -27,7 +27,15 @@ public interface IAuthService
     /// <summary>
     /// Çıxış — Refresh token-ı ləğv edir.
     /// </summary>
-    Task<ApiResponse<bool>> LogoutAsync(string userId);
+
+    /// <summary>
+    /// Cari cihazdan çıxış: access token (jti) dərhal qara siyahıya düşür, yalnız bu cihazın refresh sessiyası silinir.
+    /// Refresh token tanınmırsa (cookie yoxdur) təhlükəsiz tərəfdə qalıb hər yerdən çıxılır.
+    /// </summary>
+    Task<ApiResponse<bool>> LogoutAsync(string userId, string? refreshToken, string? accessTokenId, DateTime? accessTokenExpiresAt);
+
+    /// <summary>Bütün cihazlardan çıxış: SecurityStamp yenilənir, bütün refresh sessiyaları silinir.</summary>
+    Task<ApiResponse<bool>> LogoutAllAsync(string userId);
 
     /// <summary>
     /// Access Token bitdikdə Refresh Token vasitəsilə yeni token alır.

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "FIX-003-memory-reload-newtab",
+    "startedUtc": "2026-09-17T12:06:36.751Z",
+    "status": "PASS",
+    "actual": "Access token storage-da yoxdur; reload və yeni tab cookie ilə bərpa oldu"
+  },
+  {
+    "id": "FIX-004-resend-real-api",
+    "startedUtc": "2026-09-17T12:06:45.592Z",
+    "status": "FAIL",
+    "actual": "locator.waitFor: Error: strict mode violation: getByRole('status') resolved to 4 elements:"
+  },
+  {
+    "id": "FIX-006-modal-focus",
+    "startedUtc": "2026-09-17T12:06:47.466Z",
+    "status": "PASS",
+    "actual": "Tab trap və Escape-dən sonra trigger focus PASS"
+  },
+  {
+    "id": "FIX-005-protected-profile",
+    "startedUtc": "2026-09-17T12:06:49.563Z",
+    "status": "PASS",
+    "actual": "Owner ad/nickname rədd və readback dəyişməz; Teacher control 200"
+  },
+  {
+    "id": "FIX-001-live-timer-deadline-scoring",
+    "startedUtc": "2026-09-17T12:06:50.590Z",
+    "status": "PASS",
+    "actual": "Taymer 60→53; deadline-da tək auto-submit; 2/4=50%"
+  },
+  {
+    "id": "FIX-003-logout-revocation",
+    "startedUtc": "2026-09-17T12:08:00.379Z",
+    "status": "PASS",
+    "actual": "Logout/reload guest və storage boşdur"
+  }
+]

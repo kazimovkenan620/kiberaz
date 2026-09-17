@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight, ClipboardList, Clock, Copy, FileText,
+  AlertTriangle, ArrowLeft, Check, ChevronLeft, ChevronRight, ClipboardList, Clock, Copy, Crown, FileText,
   Flag, LogIn, Minus, Plus, RefreshCw, Shield, Users, XCircle, KeyRound, ListChecks, Lock,
 } from 'lucide-react';
 import { getStoredUserRoles, getToken } from '../services/authService';
 import {
   closeExamSession, createExamSession, getExamAttempt, getExamCategories, getExamDashboard,
   getExamOverview, joinExamSession, saveExamAnswer, submitExamAttempt,
-  type ExamAttempt, type ExamCategory, type ExamDashboard, type ExamOverview, type ExamSessionInfo,
+  type ExamAttempt, type ExamCategory, type ExamDashboard, type ExamOverview, type ExamQuota, type ExamSessionInfo,
 } from '../services/examSessionService';
 import { requestAuth } from '../utils/authUi';
 import { Badge, Button, Card, CardHead, ConfirmDialog, EmptyState, FormField, IconButton, LoadingState, Modal, ProgressBar, StatCard } from './ui';
@@ -16,11 +16,36 @@ import './ExamSession.css';
 // ─── İmtahan sessiyaları ──────────────────────────────────────
 // Vaxt: server `serverNow`/`expiresAt` verir; client yalnız fərqi göstərir və
 // vaxt bitəndə serverə submit göndərir. Nəticə yalnız serverdən gəlir.
+// Rol: sessiya yaratmaq/panel/bağlama yalnız VIP hesablar üçündür — buradakı rol
+// yoxlaması yalnız təqdimat üçündür (düymə/izah), həqiqi icazə server tərəfindədir
+// ([Authorize(Roles = VIP)] + servisdəki bazaya əsaslanan yoxlama).
+// Günlük limit: hər VIP gündə ən çox 7 sessiya yaradır; sayğac `overview.quota`
+// ilə serverdən gəlir, limit dolduqda server 429 qaytarır və UI həmin mesajı göstərir.
 
 const errorText = (result: { message: string; errors?: string[] }) => result.errors?.[0] || result.message;
 const formatDate = (value: string) => new Intl.DateTimeFormat('az-AZ', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
 }).format(new Date(value));
+const formatTime = (value: string) => new Intl.DateTimeFormat('az-AZ', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+
+// Günlük kvota göstəricisi: "bu gün 3 / 7", qalan say və yenilənmə vaxtı (server UTC 00:00 → lokal saat).
+function QuotaMeter({ quota }: { quota: ExamQuota }) {
+  const exhausted = quota.remaining <= 0;
+  return (
+    <div className={`es-quota${exhausted ? ' es-quota--exhausted' : ''}`} role="status" aria-live="polite">
+      <div className="es-quota__row">
+        <span className="es-quota__label"><Crown size={14} /> Günlük limit</span>
+        <span className="es-quota__value"><strong>{quota.usedToday}</strong> / {quota.dailyLimit} sessiya</span>
+      </div>
+      <ProgressBar value={quota.dailyLimit ? (quota.usedToday / quota.dailyLimit) * 100 : 0} label={`Bu gün ${quota.usedToday} / ${quota.dailyLimit} sessiya yaradılıb`} size="sm" tone={exhausted ? 'warning' : 'brand'} />
+      <span className="es-quota__hint">
+        {exhausted
+          ? `Bu günün limiti dolub — sayğac ${formatTime(quota.resetsAt)}-da yenilənir.`
+          : `Bu gün daha ${quota.remaining} sessiya yarada bilərsiniz · yenilənmə ${formatTime(quota.resetsAt)}`}
+      </span>
+    </div>
+  );
+}
 
 // Sessiya kodu: kopyalama düyməsi ilə (kod məxfi deyil — tələbələrə paylaşılır).
 function SessionCode({ code, compact }: { code: string; compact?: boolean }) {
@@ -38,8 +63,8 @@ function SessionCode({ code, compact }: { code: string; compact?: boolean }) {
   );
 }
 
-function CreateSessionModal({ onClose, onCreated }: {
-  onClose: () => void; onCreated: (session: ExamSessionInfo) => void;
+function CreateSessionModal({ quota, onClose, onCreated }: {
+  quota: ExamQuota | null; onClose: () => void; onCreated: (session: ExamSessionInfo) => void;
 }) {
   const [categories, setCategories] = useState<ExamCategory[]>([]);
   const [counts, setCounts] = useState<Record<number, number>>({});
@@ -134,13 +159,14 @@ function CreateSessionModal({ onClose, onCreated }: {
             <span><strong>{total}</strong> sual</span>
             <span><strong>{duration}</strong> dəqiqə</span>
             <span><strong>{total ? Math.floor(duration * 60 / total) : 0}</strong> san/sual</span>
+            {quota && <span><strong>{quota.remaining}</strong> / {quota.dailyLimit} bu gün qalıb</span>}
           </div>
           {total > 50 && <div className="notice notice--warning" role="alert"><AlertTriangle size={16} /><span>Bir sessiyada maksimum 50 sual seçilə bilər.</span></div>}
           {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
 
           <div className="modal__actions">
             <Button variant="outline" onClick={onClose}>Ləğv et</Button>
-            <Button type="submit" variant="primary" loading={loading && categories.length > 0} disabled={loading || !title.trim() || total < 1 || total > 50}>
+            <Button type="submit" variant="primary" loading={loading && categories.length > 0} disabled={loading || !title.trim() || total < 1 || total > 50 || (quota !== null && quota.remaining <= 0)}>
               <Plus size={16} /> Sessiyanı yarat
             </Button>
           </div>
@@ -153,44 +179,82 @@ function CreateSessionModal({ onClose, onCreated }: {
 function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => void }) {
   const [attempt, setAttempt] = useState(initial);
   const [index, setIndex] = useState(0);
-  const [remaining, setRemaining] = useState(0);
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((Date.parse(initial.expiresAt) - Date.parse(initial.serverNow)) / 1000)));
+  const [initialDeadline] = useState(() => performance.now() + Date.parse(initial.expiresAt) - Date.parse(initial.serverNow));
+  const deadline = useRef(initialDeadline);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [confirmFinish, setConfirmFinish] = useState(false);
   const submitting = useRef(false);
+  const autoSubmitted = useRef(false);
+  const answerInFlight = useRef<Promise<void> | null>(null);
 
-  const submit = async () => {
+  const receiveAttempt = useCallback((next: ExamAttempt) => {
+    // Yeni server snapshot gec gəlsə belə görünən vaxt geriyə artmır.
+    deadline.current = Math.min(deadline.current, performance.now() + Date.parse(next.expiresAt) - Date.parse(next.serverNow));
+    setAttempt(current => current.submittedAt ? current : next);
+  }, []);
+
+  const submit = useCallback(async () => {
     if (submitting.current || attempt.submittedAt) return;
     submitting.current = true; setSaving(true); setError('');
-    try { const result = await submitExamAttempt(attempt.id); if (result.success && result.data) setAttempt(result.data); else setError(errorText(result)); }
+    try {
+      // Son seçim üçün qısa möhlət var; ilişmiş şəbəkə deadline göndərişini saxlamır.
+      if (answerInFlight.current) {
+        let timeout: number | undefined;
+        try {
+          await Promise.race([answerInFlight.current, new Promise<void>(resolve => {
+            timeout = window.setTimeout(resolve, 2000);
+          })]);
+        } finally { window.clearTimeout(timeout); }
+      }
+      const result = await submitExamAttempt(attempt.id);
+      if (result.success && result.data) receiveAttempt(result.data);
+      else setError(errorText(result));
+    }
     catch { setError('Nəticə serverə göndərilə bilmədi.'); }
     finally { submitting.current = false; setSaving(false); setConfirmFinish(false); }
-  };
+  }, [attempt.id, attempt.submittedAt, receiveAttempt]);
 
-  // Server vaxtı ilə lokal saat arasındakı fərq bir dəfə hesablanır; geri sayım
-  // həmin fərqlə aparılır. Vaxt bitəndə cavablar serverə göndərilir.
+  // Sabit monoton deadline render və StrictMode effekt təkrarından asılı deyil.
   useEffect(() => {
-    const serverOffset = new Date(attempt.serverNow).getTime() - Date.now();
+    if (attempt.submittedAt) return;
+    let active = true;
     const tick = () => {
-      const value = Math.max(0, Math.ceil((new Date(attempt.expiresAt).getTime() - (Date.now() + serverOffset)) / 1000));
+      if (!active) return;
+      const value = Math.max(0, Math.ceil((deadline.current - performance.now()) / 1000));
       setRemaining(value);
-      if (value === 0 && !attempt.submittedAt) void submit();
+      if (value === 0 && !autoSubmitted.current) {
+        autoSubmitted.current = true;
+        void submit();
+      }
     };
     const timer = window.setInterval(tick, 1000);
     void Promise.resolve().then(tick);
-    return () => window.clearInterval(timer);
-  });
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('pageshow', tick);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('pageshow', tick);
+    };
+  }, [attempt.submittedAt, submit]);
 
-  const choose = async (questionId: string, optionKey: string) => {
-    if (saving || attempt.submittedAt) return;
+  const choose = useCallback((questionId: string, optionKey: string) => {
+    if (saving || submitting.current || answerInFlight.current || attempt.submittedAt || performance.now() >= deadline.current) return;
     setSaving(true); setError('');
-    try {
-      const result = await saveExamAnswer(attempt.id, questionId, optionKey, attempt.revision);
-      if (result.success && result.data) setAttempt(result.data);
-      else { setError(errorText(result)); const fresh = await getExamAttempt(attempt.id); if (fresh.success && fresh.data) setAttempt(fresh.data); }
-    } catch { setError('Cavab saxlanmadı. İnternet bağlantısını yoxlayın.'); }
-    finally { setSaving(false); }
-  };
+    const pending = (async () => {
+      try {
+        const result = await saveExamAnswer(attempt.id, questionId, optionKey, attempt.revision);
+        if (result.success && result.data) receiveAttempt(result.data);
+        else { setError(errorText(result)); const fresh = await getExamAttempt(attempt.id); if (fresh.success && fresh.data) receiveAttempt(fresh.data); }
+      } catch { setError('Cavab saxlanmadı. İnternet bağlantısını yoxlayın.'); }
+      finally { answerInFlight.current = null; if (!submitting.current) setSaving(false); }
+    })();
+    answerInFlight.current = pending;
+    return pending;
+  }, [saving, attempt.id, attempt.submittedAt, attempt.revision, receiveAttempt]);
 
   const totalQ = attempt.questions.length;
   const answeredCount = Object.keys(attempt.answers).length;
@@ -250,7 +314,7 @@ function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => v
                   className={`es-option${chosen ? ' is-selected' : ''}`}
                   aria-pressed={chosen}
                   onClick={() => void choose(question.id, option.key)}
-                  disabled={saving}
+                  disabled={saving || remaining === 0}
                 >
                   <span className="es-option__key" aria-hidden="true">{option.key}</span>
                   <span className="es-option__text">{option.text}</span>
@@ -260,7 +324,9 @@ function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => v
             })}
           </div>
 
-          {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
+          {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span>
+            {remaining === 0 && <Button variant="outline" size="sm" onClick={() => void submit()} disabled={saving}>Yenidən göndər</Button>}
+          </div>}
 
           <div className="es-player__actions">
             <Button variant="outline" onClick={() => setIndex(value => Math.max(0, value - 1))} disabled={index === 0}><ChevronLeft size={16} /> Əvvəlki</Button>
@@ -353,7 +419,7 @@ function TeacherDashboard({ code, onBack, onClosed }: { code: string; onBack: ()
     <div className="es-dashboard">
       <div className="es-dashboard__head">
         <div className="es-player__title">
-          <span className="kicker">Müəllim paneli</span>
+          <span className="kicker">Sessiya paneli</span>
           <h2>{dashboard.session.title}</h2>
           <div className="es-dashboard__meta">
             <Badge tone={closed ? 'neutral' : 'success'} dot>{closed ? 'Bağlı' : 'Aktiv'}</Badge>
@@ -437,7 +503,8 @@ export default function ExamSession() {
   const loggedIn = Boolean(getToken());
   const roles = getStoredUserRoles().map(role => role.toLowerCase());
   const admin = roles.includes('admin');
-  const teacher = !admin && roles.includes('teacher');
+  // Yalnız VIP sessiya yarada bilər (müəllim rolu daxil, başqa heç bir rol yox). Server son sözü deyir.
+  const vip = !admin && roles.includes('vip');
   const [overview, setOverview] = useState<ExamOverview | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
@@ -456,7 +523,7 @@ export default function ExamSession() {
       <div>
         <div className="kicker">İmtahan sistemi</div>
         <h2 id="exam-section-title">İmtahan sessiyaları</h2>
-        <p>Müəllim real sual bankından sessiya yaradır, tələbə kodla qoşulur və nəticə serverdə avtomatik hesablanır.</p>
+        <p>VIP istifadəçi məxfi sual bankından sessiya yaradır (gündə ən çox 7), iştirakçılar kodla qoşulur və nəticə serverdə avtomatik hesablanır.</p>
       </div>
     </div>
   );
@@ -475,7 +542,7 @@ export default function ExamSession() {
     return (
       <section id="exam-session" className="exam page-section" aria-labelledby="exam-section-title">
         <div className="container">
-          <h2 id="exam-section-title" className="visually-hidden">Müəllim paneli</h2>
+          <h2 id="exam-section-title" className="visually-hidden">Sessiya paneli</h2>
           <TeacherDashboard code={dashboardCode} onBack={() => setDashboardCode(null)} onClosed={() => void loadOverview()} />
         </div>
       </section>
@@ -483,6 +550,8 @@ export default function ExamSession() {
   }
 
   const recentSession = overview?.sessions[0];
+  const quota = vip ? overview?.quota ?? null : null;
+  const quotaExhausted = quota !== null && quota.remaining <= 0;
 
   return (
     <>
@@ -515,13 +584,15 @@ export default function ExamSession() {
               <Card className="exam__action">
                 <CardHead icon={<Plus size={16} />} title="Sessiya yarat" />
                 <p className="exam__action-desc">Mövcud kateqoriyalardan sual seçin, vaxt təyin edin və unikal kodu tələbələrlə paylaşın.</p>
-                <Button variant="primary" disabled={!loggedIn || !teacher} onClick={() => setShowCreate(true)}><Plus size={16} /> Sessiya yarat</Button>
-                {loggedIn && !teacher && !admin && <span className="field__hint">Bu funksiya müəllim hesabları üçündür.</span>}
+                {quota && <QuotaMeter quota={quota} />}
+                <Button variant="primary" disabled={!loggedIn || !vip || quotaExhausted} onClick={() => setShowCreate(true)}><Plus size={16} /> Sessiya yarat</Button>
+                {loggedIn && !vip && !admin && <span className="field__hint">Bu funksiya yalnız VIP hesablar üçündür.</span>}
+                {loggedIn && quota && quotaExhausted && <span className="field__hint">Günlük limit ({quota.dailyLimit} sessiya) dolub — sabah yenidən yarada bilərsiniz.</span>}
               </Card>
 
               <Card className="exam__action">
                 <CardHead icon={<KeyRound size={16} />} title="Sessiyaya qoşul" />
-                <p className="exam__action-desc">Müəllimdən aldığınız KBR-XXXXXXXXXXXXXXXX kodunu daxil edin.</p>
+                <p className="exam__action-desc">Sessiya sahibindən aldığınız KBR-XXXXXXXXXXXXXXXX kodunu daxil edin.</p>
                 {/* Kod "KBR-" prefiksi + 16 hex simvoldan ibarətdir; giriş yalnız böyük hərf/rəqəm/defisə normallaşdırılır
                     (əvvəlki [^A-F0-9-] filtri "K" və "R" hərflərini silirdi və kod heç vaxt keçərli olmurdu). */}
                 <form className="exam__join" onSubmit={join}>
@@ -536,7 +607,7 @@ export default function ExamSession() {
             </div>
 
             <div className="exam__right">
-              {teacher && recentSession && (
+              {vip && recentSession && (
                 <Card tone="brand" className="exam__recent">
                   <CardHead icon={<ClipboardList size={16} />} title="Son sessiyanız" action={<Badge tone={recentSession.isClosed ? 'neutral' : 'success'} dot>{recentSession.isClosed ? 'Bağlı' : 'Aktiv'}</Badge>} />
                   <div className="exam__recent-title">{recentSession.title}</div>
@@ -552,10 +623,10 @@ export default function ExamSession() {
               {!admin && (
                 <Card padded={false}>
                   <div className="es-table-head">
-                    <h3 className="card__title" style={{ marginBottom: 0 }}><ClipboardList size={15} /> {teacher ? 'Sessiyalarım' : 'İmtahan tarixçəm'}</h3>
+                    <h3 className="card__title" style={{ marginBottom: 0 }}><ClipboardList size={15} /> {vip ? 'Sessiyalarım' : 'İmtahan tarixçəm'}</h3>
                   </div>
                   <div className="list">
-                    {teacher ? overview?.sessions.map(session => (
+                    {vip ? overview?.sessions.map(session => (
                       <button type="button" className="list__row exam__item" key={session.id} onClick={() => setDashboardCode(session.code)}>
                         <Badge tone={session.isClosed ? 'neutral' : 'success'} dot>{session.isClosed ? 'Bağlı' : 'Aktiv'}</Badge>
                         <span className="list__main">
@@ -577,8 +648,8 @@ export default function ExamSession() {
                       </button>
                     ))}
                     {!loggedIn && <EmptyState compact icon={<Lock size={18} />} title="Giriş tələb olunur" text="Sessiyalar və nəticələr hesabla daxil olduqdan sonra görünür." />}
-                    {loggedIn && ((teacher && !overview?.sessions.length) || (!teacher && !overview?.attempts.length)) && (
-                      <EmptyState compact icon={<ClipboardList size={18} />} title="Hələ heç bir qeyd yoxdur" text={teacher ? 'İlk sessiyanı yaratdıqda burada görünəcək.' : 'Kodla qoşulduğunuz imtahanlar burada görünəcək.'} />
+                    {loggedIn && ((vip && !overview?.sessions.length) || (!vip && !overview?.attempts.length)) && (
+                      <EmptyState compact icon={<ClipboardList size={18} />} title="Hələ heç bir qeyd yoxdur" text={vip ? 'İlk sessiyanı yaratdıqda burada görünəcək.' : 'Kodla qoşulduğunuz imtahanlar burada görünəcək.'} />
                     )}
                   </div>
                 </Card>
@@ -587,7 +658,7 @@ export default function ExamSession() {
           </div>
         </div>
       </section>
-      {showCreate && <CreateSessionModal onClose={() => setShowCreate(false)} onCreated={() => void loadOverview()} />}
+      {showCreate && <CreateSessionModal quota={quota} onClose={() => setShowCreate(false)} onCreated={() => void loadOverview()} />}
     </>
   );
 }

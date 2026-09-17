@@ -2,9 +2,11 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Kiberaz.Application.DTOs.Admin;
 using Kiberaz.Application.DTOs.Common;
 using Kiberaz.Application.DTOs.Quiz;
 using Kiberaz.Application.Interfaces;
+using Kiberaz.Domain.Common;
 
 namespace Kiberaz.Api.Controllers;
 
@@ -24,10 +26,20 @@ public class QuizController : ControllerBase
     // IQuizService interfeysi vasitəsilə işləyirik — konkret QuizService sinifini deyil, onun müqaviləsini tanıyırıq.
     // Bu sayədə gələcəkdə servisi dəyişdirmək lazım olsa, controller kodu dəyişməz qalır.
     private readonly IQuizService _quizService;
+    private readonly IAuditLog _audit;
 
-    public QuizController(IQuizService quizService)
+    public QuizController(IQuizService quizService, IAuditLog audit)
     {
         _quizService = quizService;
+        _audit = audit;
+    }
+
+    // Admin dəyişikliklərinin izi. Aktor yalnız JWT-dən; IP ForwardedHeaders-dan sonrakı real ünvandır.
+    private Task AuditAsync(string action, string targetType, string? targetId, string summary)
+    {
+        var actorId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? string.Empty;
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        return _audit.RecordAsync(new AuditRecord(actorId, action, targetType, targetId, summary, ip));
     }
 
     /// <summary>
@@ -132,7 +144,7 @@ public class QuizController : ControllerBase
     /// Yalnız Admin roluna icazə verilir.
     /// </summary>
     [HttpPost("categories")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
     [ProducesResponseType(typeof(ApiResponse<QuizCategoryResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateCategory([FromBody] CreateQuizCategoryRequest request)
@@ -140,8 +152,127 @@ public class QuizController : ControllerBase
         try
         {
             QuizCategoryResponse result = await _quizService.CreateCategoryAsync(request);
+            await AuditAsync("category.create", "QuizCategory", result.Id.ToString(), $"«{result.Title}» yaradıldı.");
             return StatusCode(StatusCodes.Status201Created,
                 ApiResponse<QuizCategoryResponse>.Ok(result, "Kateqoriya uğurla yaradıldı."));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Admin paneli üçün kateqoriya siyahısı — ictimai/məxfi sual sayları və iştirakçı sayı ilə.
+    /// İctimai <c>GET categories</c>-dən fərqi: məxfi (imtahan) bankın həcmini açır, ona görə yalnız Admin.
+    /// </summary>
+    [HttpGet("admin/categories")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(ApiResponse<List<AdminQuizCategoryResponse>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAdminCategories([FromQuery] bool deleted = false)
+        => Ok(ApiResponse<List<AdminQuizCategoryResponse>>.Ok(await _quizService.GetAdminCategoriesAsync(deleted)));
+
+    /// <summary>Silinmiş kateqoriyanı (və onunla birlikdə silinmiş sualları) bərpa edir. Yalnız Admin.</summary>
+    [HttpPost("categories/{id:int}/restore")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [EnableRateLimiting("sensitive")]
+    [ProducesResponseType(typeof(ApiResponse<int>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RestoreCategory(int id)
+    {
+        try
+        {
+            var restored = await _quizService.RestoreCategoryAsync(id);
+            var message = restored > 0 ? $"Kateqoriya və {restored} sualı bərpa edildi." : "Kateqoriya bərpa edildi.";
+            await AuditAsync("category.restore", "QuizCategory", id.ToString(), message);
+            return Ok(ApiResponse<int>.Ok(restored, message));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
+    }
+
+    /// <summary>Kateqoriyanın məlumatlarını yeniləyir. Yalnız Admin.</summary>
+    [HttpPut("categories/{id:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [Consumes("application/json")]
+    [EnableRateLimiting("sensitive")]
+    [ProducesResponseType(typeof(ApiResponse<QuizCategoryResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateCategory(int id, [FromBody] UpdateQuizCategoryRequest request)
+    {
+        try
+        {
+            var result = await _quizService.UpdateCategoryAsync(id, request);
+            await AuditAsync("category.update", "QuizCategory", id.ToString(), $"«{result.Title}» yeniləndi.");
+            return Ok(ApiResponse<QuizCategoryResponse>.Ok(result, "Kateqoriya yeniləndi."));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Admin sual siyahısı — düzgün açar və izahlarla, səhifələnmiş.
+    /// BU CAVAB SUAL BANKININ AÇARLARINI DAŞIYIR: yalnız Admin rolu, keşsiz.
+    /// </summary>
+    [HttpGet("admin/questions")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    [ProducesResponseType(typeof(ApiResponse<AdminQuestionPageResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAdminQuestions(
+        [FromQuery] int? categoryId = null,
+        [FromQuery] string? search = null,
+        [FromQuery] string? difficulty = null,
+        [FromQuery] bool? examOnly = null,
+        [FromQuery] bool deleted = false,
+        [FromQuery] int skip = 0,
+        [FromQuery] int take = 25)
+    {
+        var page = await _quizService.GetAdminQuestionsAsync(categoryId, search, difficulty, examOnly, deleted, skip, take);
+        return Ok(ApiResponse<AdminQuestionPageResponse>.Ok(page));
+    }
+
+    /// <summary>
+    /// Sualın məzmununu yeniləyir. Bank (ictimai ⇄ məxfi) qəsdən dəyişmir —
+    /// ictimai bankda görünmüş sual məxfi imtahan bankına keçirilə bilməz. Yalnız Admin.
+    /// </summary>
+    [HttpPut("questions/{id:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [Consumes("application/json")]
+    [EnableRateLimiting("sensitive")]
+    [ProducesResponseType(typeof(ApiResponse<AdminQuizQuestionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> UpdateQuestion(int id, [FromBody] UpdateQuizQuestionRequest request)
+    {
+        try
+        {
+            var result = await _quizService.UpdateQuestionAsync(id, request);
+            await AuditAsync("question.update", "QuizQuestion", id.ToString(), "Sual məzmunu yeniləndi.");
+            return Ok(ApiResponse<AdminQuizQuestionResponse>.Ok(result, "Sual yeniləndi."));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ApiResponse<object>.Fail(ex.Message));
+        }
+    }
+
+    /// <summary>Silinmiş sualı bərpa edir (kateqoriyası aktiv olmalıdır). Yalnız Admin.</summary>
+    [HttpPost("questions/{id:int}/restore")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [EnableRateLimiting("sensitive")]
+    [ProducesResponseType(typeof(ApiResponse<AdminQuizQuestionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> RestoreQuestion(int id)
+    {
+        try
+        {
+            var result = await _quizService.RestoreQuestionAsync(id);
+            await AuditAsync("question.restore", "QuizQuestion", id.ToString(), "Sual bərpa edildi.");
+            return Ok(ApiResponse<AdminQuizQuestionResponse>.Ok(result, "Sual bərpa edildi."));
         }
         catch (ArgumentException ex)
         {
@@ -154,7 +285,8 @@ public class QuizController : ControllerBase
     /// Yalnız Admin roluna icazə verilir.
     /// </summary>
     [HttpDelete("categories/{id:int}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [EnableRateLimiting("sensitive")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteCategory(int id)
@@ -164,6 +296,7 @@ public class QuizController : ControllerBase
         if (!deleted)
             return NotFound(ApiResponse<object>.Fail($"Kateqoriya tapılmadı: {id}"));
 
+        await AuditAsync("category.delete", "QuizCategory", id.ToString(), "Kateqoriya və sualları silindi (kaskad).");
         return Ok(ApiResponse<object>.Ok(null!, "Kateqoriya uğurla silindi."));
     }
 
@@ -172,7 +305,7 @@ public class QuizController : ControllerBase
     /// Yalnız Admin roluna icazə verilir.
     /// </summary>
     [HttpPost("questions")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
     [ProducesResponseType(typeof(ApiResponse<QuizQuestionResponse>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -182,6 +315,7 @@ public class QuizController : ControllerBase
         try
         {
             QuizQuestionResponse result = await _quizService.CreateQuestionAsync(request);
+            await AuditAsync("question.create", "QuizQuestion", result.Id.ToString(), result.IsExamOnly ? "Məxfi sual yaradıldı." : "Açıq sual yaradıldı.");
             return StatusCode(StatusCodes.Status201Created,
                 ApiResponse<QuizQuestionResponse>.Ok(result, "Sual uğurla yaradıldı."));
         }
@@ -197,7 +331,8 @@ public class QuizController : ControllerBase
     /// </summary>
     /// <param name="id">Silinəcək sualın ID-si</param>
     [HttpDelete("questions/{id:int}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = AppRoles.Admin)]
+    [EnableRateLimiting("sensitive")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -209,6 +344,7 @@ public class QuizController : ControllerBase
         if (!deleted)
             return NotFound(ApiResponse<object>.Fail($"Sual tapılmadı: {id}"));
 
+        await AuditAsync("question.delete", "QuizQuestion", id.ToString(), "Sual silindi.");
         return Ok(ApiResponse<object>.Ok(null!, "Sual uğurla silindi."));
     }
 }

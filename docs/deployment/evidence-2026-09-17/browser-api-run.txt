@@ -1,0 +1,6 @@
+FIX-003-memory-reload-newtab PASS Access token storage-da yoxdur; reload və yeni tab cookie ilə bərpa oldu
+FIX-004-resend-real-api PASS Təsdiqsiz login → resend CTA → endpoint 200; SMTP çatdırılması ayrıca gate-dir
+FIX-006-modal-focus PASS Tab trap və Escape-dən sonra trigger focus PASS
+FIX-005-protected-profile PASS Owner ad/nickname rədd və readback dəyişməz; Teacher control 200
+FIX-001-live-timer-deadline-scoring PASS Taymer 60→54; deadline-da tək auto-submit; 2/4=50%
+FIX-003-logout-revocation PASS Logout/reload guest və storage boşdur

@@ -29,30 +29,19 @@
   <meta name="twitter:description" content="Azərbaycanda aparıcı kibertəhlükəsizlik təhsil platforması." />
 
   <!-- Brauzer xrom rəngi — aktiv mövzuya görə (useTheme yeniləyir) -->
-  <meta name="theme-color" content="#FAFBFC" />
+  <meta name="theme-color" content="#060C14" />
 
-  <!-- Mövzu ilk boyamadan ƏVVƏL tətbiq olunur ki, səhv mövzu "işartısı" olmasın.
-       Yalnız mövzu seçimi localStorage-da saxlanılır; heç bir token/sessiya məlumatı burada yoxdur. -->
-  <script>
-    (function () {
-      try {
-        var stored = localStorage.getItem('kiberaz-theme');
-        var theme = stored === 'light' || stored === 'dark'
-          ? stored
-          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.setAttribute('data-theme', theme);
-      } catch (e) {
-        document.documentElement.setAttribute('data-theme', 'light');
-      }
-    })();
-  </script>
+  <!-- Content-Security-Policy — XSS-in əsas müdafiə qatı. SPA API-dən ayrı hostda yerləşdiyi
+       üçün başlıq burada, meta ilə verilir (statik host əlavə olaraq eyni siyasəti HTTP başlığı
+       kimi də göndərməlidir — meta `frame-ancestors`-u dəstəkləmir).
+       %API_ORIGIN%, %CSP_DEV% (yalnız dev: Vite/HMR inline skripti üçün nonce) və %CSP_UPGRADE%
+       dəyərlərini vite.config.ts doldurur. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; form-action 'self'; script-src 'self' %CSP_DEV% https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; style-src-elem 'self' %CSP_STYLE_DEV%; style-src-attr 'unsafe-inline'; font-src 'self'; img-src 'self' data: %API_ORIGIN%; connect-src 'self' %API_ORIGIN% https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; %CSP_UPGRADE%" />
 
-  <!-- Şriftlər: Inter (əsas) + JetBrains Mono (texniki məzmun). Hər ikisi Azərbaycan hərflərini tam dəstəkləyir. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
-    rel="stylesheet" />
+  <!-- Mövzu ilk boyamadan ƏVVƏL tətbiq olunur (public/theme-init.js) — CSP inline skriptə icazə vermir. -->
+  <script src="/theme-init.js"></script>
+
+  <!-- Şriftlər (Inter, JetBrains Mono) src/fonts.ts ilə özümüzdən verilir — kənar Google Fonts sorğusu yoxdur. -->
 </head>
 
 <body>

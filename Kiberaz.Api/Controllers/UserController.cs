@@ -107,18 +107,8 @@ public class UserController : ControllerBase
 
     // Data Protection tokeni istehlak edən bütün endpoint-lər "sensitive" (5/dəq) altındadır —
     // bu ikisi sinif səviyyəli "general" (60/dəq) limitində qalmışdı.
-    [HttpGet("confirm-email-change")]
-    [AllowAnonymous]
-    [EnableRateLimiting("sensitive")]
-    public async Task<IActionResult> ConfirmEmailChange([FromQuery] string userId, [FromQuery] string newEmail, [FromQuery] string token)
-    {
-        var result = await _userService.ConfirmEmailChangeAsync(userId, newEmail, token);
-        // E-poçtdakı link bu GET endpoint-inə yönləndirir — təsdiq tamamlandıqdan sonra istifadəçi frontend-ə redirect edilir.
-        // Bu axın sayəsində istifadəçi brauzer xəbərdarı görmür; login səhifəsi query parametri ilə uğur/uğursuzluq haqqında məlumat alır.
-        var frontendUrl = HttpContext.RequestServices.GetRequiredService<IConfiguration>()["FrontendUrl"] ?? "http://localhost:5173";
-        return Redirect($"{frontendUrl}/login?emailChanged={(result.Success ? "true" : "false")}");
-    }
 
+    // Qeyd: GET /confirm-email-change silindi — token query string-də loglara düşürdü; SPA POST işlədir (audit L1).
     [HttpPost("confirm-email-change")]
     [AllowAnonymous]
     [EnableRateLimiting("sensitive")]

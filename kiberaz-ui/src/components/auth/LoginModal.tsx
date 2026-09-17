@@ -8,7 +8,7 @@ import GoogleButton from './GoogleButton';
 // ─── Giriş ────────────────────────────────────────────────────
 // Məntiq Navbar-dakı köhnə sətiriçi formadan köçürülüb, dəyişməyib:
 //  - CAPTCHA yalnız server `captchaRequired` qaytarandan sonra tələb olunur;
-//  - "aktiv" sözü olan xəta halında təsdiq linkini yenidən göndərmək təklif edilir;
+//  - təsdiq linkinin yenidən göndərilməsi hesabın vəziyyətindən asılı olmayaraq əlçatandır;
 //  - xəta mesajları serverin qəsdən ümumi mətnidir (istifadəçi sadalanması yoxdur).
 
 export interface LoggedInUser { nickname: string; roles: string[]; }
@@ -34,8 +34,6 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
   const [resendOk, setResendOk] = useState(true);
   const [resending, setResending] = useState(false);
   const [captchaToken, setCaptchaToken] = useState('');
-
-  const canResendConfirmation = loginError.toLowerCase().includes('aktiv') && email.includes('@');
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,15 +66,15 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
   };
 
   const handleResendConfirmation = async () => {
-    if (!email.includes('@')) return;
+    if (resending || !email.trim().includes('@')) return;
     setResending(true);
     setResendMessage('');
     try {
-      const response = await resendConfirmationEmail(email);
+      const response = await resendConfirmationEmail(email.trim());
       // success bayrağı nəzərə alınır: uğursuz cavab yaşıl görünməsin.
       setResendOk(response.success);
       setResendMessage(response.message || (response.success
-        ? 'Təsdiq linki e-poçtunuza göndərildi.'
+        ? 'Hesab təsdiq gözləyirsə, təsdiq linki göndərildi.'
         : 'Təsdiq linki göndərilə bilmədi.'));
     } catch {
       setResendOk(false);
@@ -100,7 +98,7 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
         <FormField id="login-password" label="Şifrə" icon={<Lock size={13} />} required>
           <div className="input-wrap">
             <input id="login-password" className="input" type={showPass ? 'text' : 'password'} placeholder="Şifrəniz" value={password}
-              onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+              onChange={e => setPassword(e.target.value)} autoComplete="current-password" maxLength={128} />
             <button type="button" className="input-wrap__action" onClick={() => setShowPass(p => !p)} aria-label={showPass ? 'Şifrəni gizlət' : 'Şifrəni göstər'}>
               {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
             </button>
@@ -114,11 +112,6 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
             <AlertTriangle size={16} />
             <div className="notice__body">
               <span>{loginError}</span>
-              {canResendConfirmation && (
-                <button type="button" className="link-btn" onClick={handleResendConfirmation} disabled={resending}>
-                  {resending ? 'Göndərilir...' : 'Təsdiq linkini yenidən göndər'}
-                </button>
-              )}
             </div>
           </div>
         )}
@@ -134,6 +127,9 @@ export default function LoginModal({ onClose, onLoggedIn, onForgot, onSwitchToRe
         </Button>
 
         <div className="auth-form__links">
+          <button type="button" className="link-btn" onClick={handleResendConfirmation} disabled={resending || loading || !email.trim().includes('@')}>
+            {resending ? 'Göndərilir...' : 'Təsdiq linkini yenidən göndər'}
+          </button>
           <button type="button" className="link-btn" onClick={() => onForgot(email)}>Şifrəni unutdum</button>
           <button type="button" className="link-btn" onClick={onSwitchToRegister}>Hesabınız yoxdur? Qeydiyyat</button>
         </div>

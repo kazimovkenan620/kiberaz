@@ -44,7 +44,9 @@ public class CaptchaService : ICaptchaService
         var isTestKey = !string.IsNullOrWhiteSpace(secretKey) &&
                         TestSecretKeys.Contains(secretKey, StringComparer.Ordinal);
 
-        if (!env.IsProduction())
+        // Development xaricindəki HƏR mühit (Production, Staging…) real açar tələb edir — Program.cs-dəki
+        // HTTPS/HSTS/CSP/cookie qaydaları da eyni "!IsDevelopment()" şərti ilə işləyir (audit L4).
+        if (env.IsDevelopment())
         {
             if (isTestKey)
                 logger.LogWarning(

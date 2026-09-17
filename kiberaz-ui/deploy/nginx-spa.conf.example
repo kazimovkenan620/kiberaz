@@ -1,0 +1,84 @@
+# Nginx nümunəsi — kiberaz.az SPA (dist/). Başlıqlar public/_headers ilə eynidir.
+# index.html-dəki meta CSP frame-ancestors-u dəstəkləmir; klik-oğurluğu qorunması buradan gəlir (audit F12).
+#
+# ⚠️ Nginx qaydası: `location` blokunda BİR dənə də add_header varsa, server səviyyəsindəki
+# add_header-lərin HEÇ BİRİ o bloka miras qalmır. Ona görə təhlükəsizlik başlıqları ayrıca
+# snippet-dədir və hər location-da `include` ilə təkrar verilir.
+#
+# Quraşdırma: əvvəl HTTP-only ACME konfiqi ilə sertifikat alın (yeni başlayanlar roadmap-i).
+#   sudo cp deploy/nginx-spa.conf.example /etc/nginx/sites-available/kiberaz.az
+#   sudo ln -s /etc/nginx/sites-available/kiberaz.az /etc/nginx/sites-enabled/
+#   sudo mkdir -p /etc/nginx/snippets && sudo tee /etc/nginx/snippets/kiberaz-security-headers.conf <<'EOF'
+#   add_header X-Frame-Options "DENY" always;
+#   add_header Content-Security-Policy "frame-ancestors 'none'" always;
+#   add_header X-Content-Type-Options "nosniff" always;
+#   add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+#   add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+#   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+#   add_header Cross-Origin-Opener-Policy "same-origin" always;
+#   EOF
+#   sudo nginx -t && sudo systemctl reload nginx
+# Sertifikat: sudo certbot certonly --webroot -w /var/www/letsencrypt --cert-name kiberaz.az -d kiberaz.az -d www.kiberaz.az
+
+# E-poçt təsdiq/sıfırlama tokenləri query string-də gələ bilər; $request/$http_referer loga düşmür.
+log_format kiberaz_spa '$remote_addr [$time_local] "$request_method $uri $server_protocol" $status $body_bytes_sent';
+
+# HTTP → HTTPS
+server {
+    listen 80;
+    listen [::]:80;
+    server_name kiberaz.az www.kiberaz.az;
+    access_log /var/log/nginx/kiberaz.az.access.log kiberaz_spa;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        try_files $uri =404;
+    }
+    location / {
+        return 301 https://kiberaz.az$request_uri;
+    }
+}
+
+# www → apex (CORS siyahısında www da var, amma tək kanonik host daha təmizdir)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name www.kiberaz.az;
+    ssl_certificate     /etc/letsencrypt/live/kiberaz.az/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/kiberaz.az/privkey.pem;
+    access_log /var/log/nginx/kiberaz.az.access.log kiberaz_spa;
+    return 301 https://kiberaz.az$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name kiberaz.az;
+
+    ssl_certificate     /etc/letsencrypt/live/kiberaz.az/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/kiberaz.az/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    root /var/www/kiberaz/dist;
+    index index.html;
+    access_log /var/log/nginx/kiberaz.az.access.log kiberaz_spa;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    include /etc/nginx/snippets/kiberaz-security-headers.conf;
+
+    # Hash-li build faylları — 1 il keş
+    location /assets/ {
+        include /etc/nginx/snippets/kiberaz-security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # SPA fallback: /reset-password, /confirm-email, /confirm-email-change və s. index.html-ə düşür
+    location / {
+        include /etc/nginx/snippets/kiberaz-security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

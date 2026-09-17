@@ -1,0 +1,6 @@
+Checked 29 privileged routes for anonymous and four non-admin roles.
+Checking remediation attack paths and legitimate controls.
+Security regression tests: 525/528 passed.
+FAIL: qorunan sahibin profil dəyişikliyi rədd edilir: expected 400, got 200
+FAIL: qorunan sahibin bütün profil sahələri və normalizasiya dəyişməz qalır
+FAIL: qorunan sahibin bütün profil sahələri və normalizasiya dəyişməz qalır

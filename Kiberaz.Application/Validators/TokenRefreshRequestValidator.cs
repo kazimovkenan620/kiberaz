@@ -7,9 +7,10 @@ public class TokenRefreshRequestValidator : AbstractValidator<TokenRefreshReques
 {
     public TokenRefreshRequestValidator()
     {
+        // AccessToken məcburi deyil (audit F6): yeni tab-da sessionStorage boşdur, sessiya cookie hash-i ilə tapılır.
         RuleFor(x => x.AccessToken)
-            .NotEmpty().WithMessage("Access token boş ola bilməz.")
-            .MaximumLength(2048).WithMessage("Access token çox uzundur.");
+            .MaximumLength(2048).WithMessage("Access token çox uzundur.")
+            .When(x => !string.IsNullOrWhiteSpace(x.AccessToken));
 
         // DİQQƏT: RefreshToken burada MƏCBURİ DEYİL — və bu qəsdəndir.
         //

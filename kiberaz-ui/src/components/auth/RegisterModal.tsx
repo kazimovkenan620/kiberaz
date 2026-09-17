@@ -159,7 +159,7 @@ export default function RegisterModal({ onClose, onSwitchToLogin }: Props) {
             <div className="input-wrap">
               <input id="reg-pass" className="input" type={showPass ? 'text' : 'password'} placeholder="Minimum 8 simvol"
                 value={form.password} onChange={e => set('password', e.target.value)}
-                aria-invalid={!!errors.password} aria-describedby={describedBy('reg-pass', true, !!errors.password)} autoComplete="new-password" />
+                aria-invalid={!!errors.password} aria-describedby={describedBy('reg-pass', true, !!errors.password)} autoComplete="new-password" maxLength={128} />
               <button type="button" className="input-wrap__action" onClick={() => setShowPass(p => !p)} aria-label={showPass ? 'Şifrəni gizlət' : 'Şifrəni göstər'}>
                 {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
@@ -177,7 +177,7 @@ export default function RegisterModal({ onClose, onSwitchToLogin }: Props) {
             <div className="input-wrap">
               <input id="reg-confirm" className="input" type={showConf ? 'text' : 'password'} placeholder="Şifrəni təkrar daxil edin"
                 value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)}
-                aria-invalid={!!errors.confirmPassword} aria-describedby={describedBy('reg-confirm', false, !!errors.confirmPassword)} autoComplete="new-password" />
+                aria-invalid={!!errors.confirmPassword} aria-describedby={describedBy('reg-confirm', false, !!errors.confirmPassword)} autoComplete="new-password" maxLength={128} />
               <button type="button" className="input-wrap__action" onClick={() => setShowConf(p => !p)} aria-label={showConf ? 'Gizlət' : 'Göstər'}>
                 {showConf ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>

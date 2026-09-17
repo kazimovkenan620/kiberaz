@@ -1,0 +1,38 @@
+[
+  {
+    "id": "FIX-003-memory-reload-newtab",
+    "startedUtc": "2026-09-17T12:16:11.248Z",
+    "status": "PASS",
+    "actual": "Access token storage-da yoxdur; reload və yeni tab cookie ilə bərpa oldu"
+  },
+  {
+    "id": "FIX-004-resend-real-api",
+    "startedUtc": "2026-09-17T12:16:14.972Z",
+    "status": "PASS",
+    "actual": "Təsdiqsiz login → resend CTA → endpoint 200; SMTP çatdırılması ayrıca gate-dir"
+  },
+  {
+    "id": "FIX-006-modal-focus",
+    "startedUtc": "2026-09-17T12:16:16.976Z",
+    "status": "PASS",
+    "actual": "Tab trap və Escape-dən sonra trigger focus PASS"
+  },
+  {
+    "id": "FIX-005-protected-profile",
+    "startedUtc": "2026-09-17T12:16:18.107Z",
+    "status": "PASS",
+    "actual": "Owner ad/nickname rədd və readback dəyişməz; Teacher control 200"
+  },
+  {
+    "id": "FIX-001-live-timer-deadline-scoring",
+    "startedUtc": "2026-09-17T12:16:18.573Z",
+    "status": "PASS",
+    "actual": "Taymer 60→54; deadline-da tək auto-submit; 2/4=50%"
+  },
+  {
+    "id": "FIX-003-logout-revocation",
+    "startedUtc": "2026-09-17T12:17:21.547Z",
+    "status": "PASS",
+    "actual": "Logout/reload guest və storage boşdur"
+  }
+]

@@ -1,0 +1,15 @@
+PASS BUG003 token yalnız yaddaşda və köhnə açarlar təmizlənir
+PASS BUG003 StrictMode reload/new-tab bərpası tək refresh edir
+PASS BUG003 çıxışdan sonra gecikmiş refresh sessiyanı bərpa etmir
+PASS BUG003 paralel 401 tək refresh edir və logout yaddaşı təmizləyir
+PASS BUG003 gecikmiş login və Google exchange çıxışı ləğv etmir
+PASS BUG003 köhnə API refresh yeni giriş sessiyasını silmir və sorğunu təkrarlamır
+PASS BUG003 yeni sessiyanın refresh-i köhnə sorğu ilə paylaşılmır
+PASS BUG003 müvəqqəti refresh xətası cookie bərpa işarəsini silmir
+PASS BUG003 etibarsız cookie üçün faktiki 400 bərpa işarəsini silir
+PASS BUG003 Google callback köhnə hint ilə paralel bootstrap refresh etmir
+PASS BUG004 resend mesaj mətnindən asılı deyil və 429 göstərilir
+PASS BUG006 autoFocus, klaviatura və auth keçidində fokus qayıdır
+PASS BUG006 iç modal yalnız özünü bağlayır və itmiş trigger ehtiyat fokusu alır
+PASS BUG001 monoton taymer, köhnə cavab snapshot-ı, deadline və retry
+PASS BUG001 gecikmiş cavab deadline göndərişini bloklamır və nəticəni geri çevirmir

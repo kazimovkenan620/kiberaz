@@ -1,0 +1,37 @@
+[
+  {
+    "name": "production-ignores-local",
+    "passed": true,
+    "exitCode": -532462766,
+    "diagnosticMatched": true,
+    "timedOut": false
+  },
+  {
+    "name": "staging-ignores-local",
+    "passed": true,
+    "exitCode": -532462766,
+    "diagnosticMatched": true,
+    "timedOut": false
+  },
+  {
+    "name": "development-reads-local",
+    "passed": true,
+    "exitCode": -532462766,
+    "diagnosticMatched": true,
+    "timedOut": false
+  },
+  {
+    "name": "production-missing-captcha",
+    "passed": true,
+    "exitCode": -532462766,
+    "diagnosticMatched": true,
+    "timedOut": false
+  },
+  {
+    "name": "production-bypass-rejected",
+    "passed": true,
+    "exitCode": -532462766,
+    "diagnosticMatched": true,
+    "timedOut": false
+  }
+]

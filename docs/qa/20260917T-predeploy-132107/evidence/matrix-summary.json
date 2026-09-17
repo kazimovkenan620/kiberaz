@@ -1,0 +1,38 @@
+{
+  "generatedUtc": "2026-09-17T09:53:17.495716+00:00",
+  "totalRows": 273,
+  "totals": {
+    "PASS": 62,
+    "FAIL": 7,
+    "N/A": 4,
+    "NOT_RUN": 191,
+    "BLOCKED": 9
+  },
+  "byEvidenceType": {
+    "API_RUNTIME": {
+      "PASS": 37,
+      "FAIL": 1,
+      "NOT_RUN": 79
+    },
+    "BROWSER_E2E": {
+      "PASS": 11,
+      "FAIL": 5,
+      "NOT_RUN": 109,
+      "BLOCKED": 4,
+      "N/A": 1
+    },
+    "INTEGRATION": {
+      "PASS": 5,
+      "BLOCKED": 5,
+      "NOT_RUN": 3,
+      "N/A": 1
+    },
+    "STATIC_ONLY": {
+      "PASS": 9,
+      "FAIL": 1
+    },
+    "UNIT": {
+      "N/A": 2
+    }
+  }
+}

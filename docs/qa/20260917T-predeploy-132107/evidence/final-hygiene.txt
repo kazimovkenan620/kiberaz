@@ -1,0 +1,4 @@
+Tracked file hash differences: 0
+git diff --check EXIT=0
+?? docs/qa/
+?? tools/PreDeployQa/

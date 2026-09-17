@@ -52,9 +52,30 @@ public class LiteDbUserStore :
 
     public Task<IdentityResult> CreateAsync(AppUser user, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(user);
         user.Id ??= Guid.NewGuid().ToString();
         user.ConcurrencyStamp = Guid.NewGuid().ToString();
-        _db.Users.Insert(user);
+
+        // UserManager əvvəlcə FindByEmail/FindByName yoxlayır, amma iki eyni qeydiyyat sorğusu o pəncərədə
+        // yarışa bilər: unikal indeks LiteException atır və sorğu 500 ilə bitirdi. Yazı qapısı + təkrar yoxlama →
+        // eyni "DuplicateEmail/DuplicateUserName" nəticəsi (audit L8).
+        lock (_db.UsersSyncRoot)
+        {
+            var describer = new AzIdentityErrorDescriber();
+            if (!string.IsNullOrEmpty(user.NormalizedEmail) && _db.Users.Exists(u => u.NormalizedEmail == user.NormalizedEmail))
+                return Task.FromResult(IdentityResult.Failed(describer.DuplicateEmail(user.Email ?? string.Empty)));
+            if (!string.IsNullOrEmpty(user.NormalizedUserName) && _db.Users.Exists(u => u.NormalizedUserName == user.NormalizedUserName))
+                return Task.FromResult(IdentityResult.Failed(describer.DuplicateUserName(user.UserName ?? string.Empty)));
+            try
+            {
+                _db.Users.Insert(user);
+            }
+            catch (LiteException ex) when (ex.ErrorCode == LiteException.INDEX_DUPLICATE_KEY)
+            {
+                return Task.FromResult(IdentityResult.Failed(describer.DuplicateEmail(user.Email ?? string.Empty)));
+            }
+        }
         return Task.FromResult(IdentityResult.Success);
     }
 

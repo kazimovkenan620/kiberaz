@@ -1,0 +1,9 @@
+{
+  "textFilesChecked": 58,
+  "knownSensitiveValueMatches": [],
+  "releasePath": "artifacts\\releases\\20260917-161219-647464fc",
+  "manifestEntries": 108,
+  "manifestMismatches": [],
+  "frontendDependencyManifestsUnchanged": true,
+  "limitations": "Yalnız məlum məxfi dəyərlər və mətn faylları; screenshot-lar ayrıca vizual yoxlanır."
+}

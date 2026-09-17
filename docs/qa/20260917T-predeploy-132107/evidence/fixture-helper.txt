@@ -1,0 +1,7 @@
+Fixture init: exit 0; 11 users, 2 categories, 8 questions, 2 active VIP terms.
+Initial helper compile: failed CS0104 JsonSerializer ambiguity; System.Text.Json alias added in test helper, then init passed.
+Guard wrong-root exit: 2
+Yalnız init/inspect və bu audit üçün ayrılmış müvəqqəti runtime yolu qəbul edilir.
+Guard existing-runtime exit: 2
+Mövcud runtime məzmunu qorunur; yenidən init qadağandır.
+TimestampUtc: 2026-09-17T09:28:10.0501555+00:00

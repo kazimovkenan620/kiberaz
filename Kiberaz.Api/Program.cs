@@ -21,6 +21,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.DataProtection;
 
 
 
@@ -33,8 +34,10 @@ if (args is ["--sanitize-pdf"])
 }
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
-// Deployment secrets and explicit command-line settings take precedence over local files.
+// Lokal sirlər yalnız developer mühitində oxunur, server mühitlərinə daşınmır.
+if (builder.Environment.IsDevelopment())
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+// Environment və açıq command-line parametrləri lokal fayldan üstün qalır.
 builder.Configuration.AddEnvironmentVariables().AddCommandLine(args);
 
 // ─── 1. LİTEDB ────────────────────────────────────────────────
@@ -116,10 +119,22 @@ builder.Services.AddAuthentication(options =>
     {
         OnTokenValidated = async context =>
         {
+            var services = context.HttpContext.RequestServices;
+            var securityLog = services.GetRequiredService<ILoggerFactory>().CreateLogger("SecurityEvents");
+            var ip = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+            // Rədd səbəbi və hesab ID-si (PII yox) loglanır — token oğurluğu/bütövlük pozuntusu retrospektiv izlənə bilsin (A09).
+            void Reject(string reason, string? userId, string message)
+            {
+                securityLog.LogWarning("Token rədd edildi: səbəb {Reason}, hesab {UserId}, IP {Ip}, yol {Path}",
+                    reason, userId ?? "-", ip, context.HttpContext.Request.Path.Value);
+                context.Fail(message);
+            }
+
             var principal = context.Principal;
             if (principal is null)
             {
-                context.Fail("Token etibarsızdır.");
+                Reject("no-principal", null, "Token etibarsızdır.");
                 return;
             }
 
@@ -128,18 +143,25 @@ builder.Services.AddAuthentication(options =>
 
             if (string.IsNullOrEmpty(userId))
             {
-                context.Fail("Token etibarsızdır.");
+                Reject("no-subject", null, "Token etibarsızdır.");
                 return;
             }
 
-            var userManager = context.HttpContext.RequestServices
-                .GetRequiredService<UserManager<AppUser>>();
+            // Tək cihazdan çıxış: jti qara siyahıdadırsa token ömrü bitməmiş belə keçmir.
+            var tokenId = principal.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti);
+            if (string.IsNullOrWhiteSpace(tokenId) || services.GetRequiredService<ITokenDenylist>().IsRevoked(tokenId))
+            {
+                Reject("revoked-jti", userId, "Sessiya bağlanıb. Yenidən daxil olun.");
+                return;
+            }
+
+            var userManager = services.GetRequiredService<UserManager<AppUser>>();
 
             var user = await userManager.FindByIdAsync(userId);
             if (user is null || !user.EmailConfirmed || user.LockoutEnd > DateTimeOffset.UtcNow)
             {
-                // İstifadəçi silinib, amma token hələ ömrünü başa vurmayıb.
-                context.Fail("Token etibarsızdır.");
+                // İstifadəçi silinib/bloklanıb, amma token hələ ömrünü başa vurmayıb.
+                Reject("account-state", userId, "Token etibarsızdır.");
                 return;
             }
 
@@ -149,7 +171,7 @@ builder.Services.AddAuthentication(options =>
             if (string.IsNullOrWhiteSpace(storedStamp) || string.IsNullOrWhiteSpace(tokenStamp) ||
                 !string.Equals(storedStamp, tokenStamp, StringComparison.Ordinal))
             {
-                context.Fail("Sessiya etibarsızdır. Yenidən daxil olun.");
+                Reject("stamp-mismatch", userId, "Sessiya etibarsızdır. Yenidən daxil olun.");
                 return;
             }
 
@@ -158,18 +180,17 @@ builder.Services.AddAuthentication(options =>
             var tokenRoles = principal.FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet(StringComparer.Ordinal);
             if (!liveRoles.SetEquals(tokenRoles))
             {
-                context.Fail("Hesabın səlahiyyətləri dəyişib. Yenidən daxil olun.");
+                Reject("role-mismatch", userId, "Hesabın səlahiyyətləri dəyişib. Yenidən daxil olun.");
                 return;
             }
 
             // Admin claim-i yalnız kodda sabitlənmiş sistem hesabı üçün etibarlıdır.
             // LiteDB əl ilə dəyişdirilsə və ya köhnə Admin tokeni qalsa belə sorğu keçmir.
-            var protectedAccount = context.HttpContext.RequestServices
-                .GetRequiredService<ProtectedAccountPolicy>();
+            var protectedAccount = services.GetRequiredService<ProtectedAccountPolicy>();
             var isOwner = protectedAccount.IsOwner(user);
             if ((liveRoles.Contains(AppRoles.Admin) && !isOwner) ||
                 (isOwner && !liveRoles.SetEquals([AppRoles.Admin])))
-                context.Fail("Admin hesabının bütövlüyü pozulub.");
+                Reject("admin-invariant", userId, "Admin hesabının bütövlüyü pozulub.");
         }
     };
 });
@@ -339,7 +360,42 @@ builder.Services.AddRateLimiter(options =>
             Window      = TimeSpan.FromMinutes(1),
             QueueLimit  = 0
         }));
+
+    // Refresh: sorğu anında access token vaxtı keçdiyi üçün User boşdur — açar IP olsaydı NAT arxasındakı
+    // onlarla istifadəçi bir bucket-a düşərdi (məktəb/ofis/CGNAT → kütləvi 429 + məcburi çıxış).
+    // Açar cookie-dəki refresh tokenin hash-idir (token özü açar kimi saxlanmır); token yoxdursa IP-yə düşür.
+    options.AddPolicy("refresh", context =>
+    {
+        var key = context.Request.Cookies.TryGetValue("refresh_token", out var cookie) && !string.IsNullOrWhiteSpace(cookie)
+            ? "rt:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(cookie)))[..32]
+            : "ip:" + ClientIp(context);
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: key,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = isDevEnv ? 1000 : 10,
+                Window      = TimeSpan.FromMinutes(1),
+                QueueLimit  = 0
+            });
+    });
+
+    // Download: anonim PDF endirmə — hər sorğu disk oxusudur (köhnə fayl üçün bir dəfə sanitizasiya prosesi).
+    options.AddPolicy("download", context => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: RateLimitIdentity(context),
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = isDevEnv ? 1000 : 20,
+            Window      = TimeSpan.FromMinutes(1),
+            QueueLimit  = 0
+        }));
 });
+
+// ─── 3e. REQUEST BODY LİMİTİ ──────────────────────────────────
+// JSON endpoint-lər üçün Kestrel/IIS default 30 MB-dır: validator işləməzdən əvvəl bütün body yaddaşa oxunur.
+// 64 KB hər DTO üçün kifayətdir; yükləmə action-ları öz [RequestSizeLimit] atributu ilə bunu genişləndirir.
+const long JsonBodyLimitBytes = 64 * 1024;
+builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = JsonBodyLimitBytes);
+builder.Services.Configure<Microsoft.AspNetCore.Builder.IISServerOptions>(iis => iis.MaxRequestBodySize = JsonBodyLimitBytes);
 
 // ─── 3d. FORWARDED HEADERS (reverse proxy) ────────────────────
 // Nginx / IIS ARR / Cloudflare arxasında tətbiq hər sorğunu proxy-nin IP-si ilə görür.
@@ -377,6 +433,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         foreach (var ip in parsedProxies)
             options.KnownProxies.Add(ip);
     }
+});
+
+// HSTS: default 30 gün əvəzinə 1 il, alt domenlər daxil (www). preload bilərəkdən yoxdur — geri dönməz siyahıdır.
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = true;
 });
 
 // ─── 4. CORS ──────────────────────────────────────────────────
@@ -431,6 +494,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICourseService, CourseService>();
+// VIP təlimlərinin 30 günlük müddəti bitəndə avtomatik passivə keçirən fon işi (15 dəq).
+builder.Services.AddHostedService<Kiberaz.Api.Services.CourseExpirySweeper>();
 builder.Services.AddScoped<IUploadService, UploadService>();
 builder.Services.AddSingleton(new PdfProcessSanitizer(System.Reflection.Assembly.GetExecutingAssembly().Location));
 // Liderlər lövhəsinin snapshot keşi — Singleton olmalıdır ki, bütün sorğular eyni nüsxəni görsün.
@@ -444,13 +509,49 @@ builder.Services.AddScoped<ICaptchaService, CaptchaService>();
 // AdminService və UserService bu siyasətə əsaslanaraq qorunan hesaba müdaxiləni rədd edir.
 builder.Services.AddSingleton<ProtectedAccountPolicy>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+// Admin əməliyyat jurnalı — hər dəyişdirici admin sorğusu controller-dən buraya yazılır.
+builder.Services.AddScoped<IAuditLog, AuditLog>();
 // LiteDbAttemptTracker Singleton-dur: uğursuz giriş cəhdlərini sayır, bu sayğac bütün sorğular arasında ortaq olmalıdır.
 // Yaddaş versiyasından (InMemoryAttemptTracker) fərqli olaraq sayğaclar restart-dan sonra da qalır.
 // TokenService də Singleton-dur — token imzalama açarını yenidən yükləməmək üçün bir dəfə yaradılır.
 builder.Services.AddSingleton<IAttemptTracker, LiteDbAttemptTracker>();
+// Çıxış edilmiş access tokenlərin (jti) qara siyahısı — Singleton, restart-dan sağ çıxır.
+builder.Services.AddSingleton<ITokenDenylist, LiteDbTokenDenylist>();
 builder.Services.AddSingleton<TokenService>();
-builder.Services.AddHttpClient("captcha");
+// Turnstile cavabı 5 saniyədə gəlməlidir — Cloudflare ləngiyəndə login/register thread-ləri asılı qalmasın (fail-closed qalır).
+builder.Services.AddHttpClient("captcha", client => client.Timeout = TimeSpan.FromSeconds(5));
+// E-poçt növbəsi: sorğu SMTP-ni gözləmir (gecikmə oracle-ı + asılan thread-lər); göndərişi EmailDispatcher edir.
+builder.Services.AddSingleton<EmailQueue>();
+builder.Services.AddSingleton<SmtpSender>();
+builder.Services.AddHostedService<Kiberaz.Api.Services.EmailDispatcher>();
+// Sahibsiz yüklənmiş faylların süpürgəsi (UploadPolicy.OrphanTtl).
+builder.Services.AddHostedService<Kiberaz.Api.Services.UploadSweeper>();
 builder.Services.AddHttpContextAccessor();
+
+// ─── 5a. DATA PROTECTION AÇARLARI ─────────────────────────────
+// E-poçt təsdiqi / şifrə sıfırlama tokenləri (AddDefaultTokenProviders) və Google girişinin
+// correlation cookie-si Data Protection açarları ilə şifrələnir. Linux-da açarlar default olaraq
+// $HOME/.aspnet/DataProtection-Keys-ə düşür; systemd altında HOME yoxdursa açar EFEMER olur —
+// hər restart-da göndərilmiş bütün təsdiq/sıfırlama linkləri ölür və logda yalnız xəbərdarlıq qalır.
+// Production-da DataProtection:KeysPath (env: DataProtection__KeysPath) ilə sabit qovluq verilir;
+// Development-də dəyişən yoxdursa default davranış qalır.
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    // Nisbi yol LiteDbContext ilə eyni qaydada ContentRootPath-a görə həll olunur.
+    if (!Path.IsPathRooted(dataProtectionKeysPath))
+        dataProtectionKeysPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, dataProtectionKeysPath));
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .SetApplicationName("kiberaz")
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
+else if (!builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "DataProtection:KeysPath production-da təyin edilməyib (env: DataProtection__KeysPath=/var/kiberaz/keys). " +
+        "Onsuz e-poçt təsdiq/şifrə sıfırlama linkləri hər restart-da etibarsız ola bilər.");
+}
 
 
 // ─── 6. FLUENTVALIDATION ─────────────────────────────────────
@@ -523,6 +624,12 @@ using (var scope = app.Services.CreateScope())
     // İdempotentdir — düzəldiləcək sənəd yoxdursa heç nə etmir.
     var migrationLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("SchemaMigration");
     DbInitializer.BackfillQuizQuestionFlags(liteDbContext, migrationLogger);
+    DbInitializer.BackfillAdminBlocks(liteDbContext, migrationLogger);
+
+    // Yüklənmiş fayl qeydləri (UploadedFiles) — mövcud təlimlərin faylları bir dəfə qeydə alınıb bağlanır.
+    var uploadsRoot = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "uploads");
+    UploadLedger.Backfill(liteDbContext, uploadsRoot, TimeProvider.System.GetUtcNow().UtcDateTime,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("UploadLedger"));
 
     // CAPTCHA konfiqurasiyası sorğu qəbulundan ƏVVƏL yoxlanılır.
     // Production-da test açarı və ya development bypass aşkarlansa tətbiq QALXMIR —
@@ -553,12 +660,22 @@ app.UseMiddleware<ExceptionMiddleware>();
 // ─── SECURITY HEADERS ─────────────────────────────────────────
 // Bu başlıqlar brauzerə saytın necə davranması barədə təlimat verir — XSS, clickjacking kimi hücumlara qarşı əlavə müdafiə qatı.
 // Məsələn X-Frame-Options: DENY saytın iframe içinə yerləşdirilməsini tamamilə qadağan edir.
+var apiCsp = app.Environment.IsDevelopment()
+    // Development-də Swagger UI öz inline skriptləri ilə işləyir — sərt CSP onu sındırar.
+    ? null
+    // API sənəd (HTML) qaytarmır: cavab JSON və ya wwwroot-dakı şəkillərdir. Sərt siyasət onunçündür ki,
+    // API mənşəyində göstərilə bilən HƏR şey (məs. yüklənmiş fayl) skript işlədə, çərçivəyə alına
+    // və ya başqa yerə sorğu ata bilməsin. SPA-nın öz CSP-si kiberaz-ui/index.html-dədir.
+    : "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
 app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
     context.Response.Headers.Append("X-Frame-Options", "DENY");
     context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
     context.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    if (apiCsp is not null)
+        context.Response.Headers.Append("Content-Security-Policy", apiCsp);
     await next();
 });
 
@@ -588,7 +705,7 @@ app.UseWhen(context => !context.Request.Path.Value!.EndsWith(".pdf", StringCompa
 if (!app.Environment.IsDevelopment())
 {
     // HSTS brauzərə bu sayta növbəti dəfə yalnız HTTPS ilə müraciət etməsini tövsiyə edir — HTTP-i avtomatik bloklayır.
-    app.UseHsts();
+    app.UseHsts(); // 1 il + alt domenlər (aşağıda konfiqurasiya edilib)
 }
 
 app.UseRouting();
@@ -608,5 +725,11 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// ─── HEALTH CHECK ─────────────────────────────────────────────
+// Uptime monitorinqi / nginx / deploy skripti üçün anonim, bazaya toxunmayan yüngül endpoint.
+// FallbackPolicy hər endpoint-i autentifikasiyalı tələb etdiyi üçün AllowAnonymous açıq yazılır;
+// qlobal rate limit (IP başına 600/dəq) burada da işləyir — monitorinq intervalı ona sığır.
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
 app.Run();

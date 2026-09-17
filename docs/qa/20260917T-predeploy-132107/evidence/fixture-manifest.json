@@ -1,0 +1,138 @@
+{
+  "run": "20260917T-predeploy-132107",
+  "createdUtc": "2026-09-17T09:27:29.9958279Z",
+  "environment": "Development",
+  "api": "http://localhost:5259",
+  "frontend": "http://localhost:5189",
+  "database": "qa.db",
+  "accounts": [
+    {
+      "label": "UserA",
+      "id": "6c3ca10a-24b7-492f-91b9-aee9eada11b0",
+      "nickname": "qausera",
+      "role": "User"
+    },
+    {
+      "label": "UserB",
+      "id": "dea4a132-cf7c-414e-a7ce-43482dabc3bb",
+      "nickname": "qauserb",
+      "role": "User"
+    },
+    {
+      "label": "TeacherA",
+      "id": "4d3b64bb-0099-416f-9dd8-9846a1d3c41d",
+      "nickname": "qateachera",
+      "role": "Teacher"
+    },
+    {
+      "label": "TeacherB",
+      "id": "4deb2196-de9c-448a-b82c-886cf352c492",
+      "nickname": "qateacherb",
+      "role": "Teacher"
+    },
+    {
+      "label": "VIPA",
+      "id": "6a1677e6-2294-4e41-9b6e-4bb7566a4f4d",
+      "nickname": "qavipa",
+      "role": "VIP"
+    },
+    {
+      "label": "VIPB",
+      "id": "9a6374c4-370c-461c-9ddd-a653eef7e21e",
+      "nickname": "qavipb",
+      "role": "VIP"
+    },
+    {
+      "label": "ModeratorA",
+      "id": "773ff157-10f7-4692-ab66-f30d73c4d20d",
+      "nickname": "qamoderatora",
+      "role": "Moderator"
+    },
+    {
+      "label": "ModeratorB",
+      "id": "8585492b-bdf4-4b27-836b-64f1d182300e",
+      "nickname": "qamoderatorb",
+      "role": "Moderator"
+    },
+    {
+      "label": "AdminA",
+      "id": "4df68517-d757-48c5-8ec6-1661973fc748",
+      "nickname": "qaadmina",
+      "role": "Admin"
+    },
+    {
+      "label": "Unconfirmed",
+      "id": "8d39373c-742f-4bf9-a0d0-82b525aa5605",
+      "nickname": "qaunconfirmed",
+      "role": "User"
+    },
+    {
+      "label": "Blocked",
+      "id": "e5edeb9c-4ab1-45f8-9583-30df62c82681",
+      "nickname": "qablocked",
+      "role": "User"
+    }
+  ],
+  "categories": [
+    {
+      "id": 1,
+      "title": "QA A\u00E7\u0131q Praktika",
+      "isExamOnly": false
+    },
+    {
+      "id": 2,
+      "title": "QA Qapal\u0131 \u0130mtahan",
+      "isExamOnly": true
+    }
+  ],
+  "questions": [
+    {
+      "id": 1,
+      "categoryId": 1,
+      "isExamOnly": false,
+      "sequence": 1
+    },
+    {
+      "id": 2,
+      "categoryId": 1,
+      "isExamOnly": false,
+      "sequence": 2
+    },
+    {
+      "id": 3,
+      "categoryId": 1,
+      "isExamOnly": false,
+      "sequence": 3
+    },
+    {
+      "id": 4,
+      "categoryId": 1,
+      "isExamOnly": false,
+      "sequence": 4
+    },
+    {
+      "id": 5,
+      "categoryId": 2,
+      "isExamOnly": true,
+      "sequence": 1
+    },
+    {
+      "id": 6,
+      "categoryId": 2,
+      "isExamOnly": true,
+      "sequence": 2
+    },
+    {
+      "id": 7,
+      "categoryId": 2,
+      "isExamOnly": true,
+      "sequence": 3
+    },
+    {
+      "id": 8,
+      "categoryId": 2,
+      "isExamOnly": true,
+      "sequence": 4
+    }
+  ]
+}

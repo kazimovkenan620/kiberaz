@@ -1,71 +1,50 @@
 import { useEffect, useState } from 'react';
-import { ArrowRight, BookOpen, Briefcase, ClipboardList, Clock, Globe, Layers, Megaphone, Trophy, Unlock, Users } from 'lucide-react';
+import { ArrowRight, BookOpen, Globe, GraduationCap, Layers, ListChecks, Users } from 'lucide-react';
 import { fetchQuizCategories } from '../services/quizService';
+import { getApprovedCourses } from '../services/courseService';
 import { Button, StatCard } from './ui';
-import TechIllustration from './layout/TechIllustration';
+import PlatformShowcase from './PlatformShowcase';
 import './AboutSection.css';
 
-// ─── Ana səhifə: missiya, real göstəricilər, platforma modulları ──
-// Sual və sahə sayı kateqoriya API-sindən hesablanır — sabit "595+" yoxdur.
-// "Pulsuz" və "24/7" məhsul faktıdır, rəqəm deyil.
-
-const modules = [
-  {
-    icon: <Megaphone size={18} />,
-    href: '#home',
-    title: 'Peşəkar təlimlərin reklamı',
-    desc: 'Mütəxəssislər təlimlərini sillabus, müddət və əlaqə məlumatı ilə təqdim edir; sillabus PDF kimi yüklənir.',
-  },
-  {
-    icon: <BookOpen size={18} />,
-    href: '#knowledge',
-    title: 'Pulsuz nəzəri biliklər',
-    desc: 'Network Security, Web Security, Active Directory, SOC, Code Review üzrə izahlı suallar — qeydiyyatsız oxu.',
-  },
-  {
-    icon: <Briefcase size={18} />,
-    href: '#knowledge',
-    title: 'Müsahibəyə hazırlıq',
-    desc: 'Junior, Middle və Senior səviyyələr üzrə real şirkət müsahibə sualları və izahlı cavablar.',
-  },
-  {
-    icon: <ClipboardList size={18} />,
-    href: '#exam-session',
-    title: 'İmtahan sessiyaları',
-    desc: 'Müəllim sessiya yaradır, tələbə kodla qoşulur, nəticə serverdə avtomatik hesablanır.',
-  },
-  {
-    icon: <Trophy size={18} />,
-    href: '#leaderboard',
-    title: 'Liderlik lövhəsi',
-    desc: 'Həftəlik, aylıq və ümumi reytinqlər, kateqoriya üzrə liderlər — yalnız ləqəblə.',
-  },
-];
+// ─── Ana səhifə: missiya, real göstəricilər və platforma haqqında ──
+// DÖRD göstəricinin hamısı canlı API-dən hesablanır, heç biri sabit rəqəm deyil:
+//   sual və sahə sayı  → /api/quiz/categories
+//   mövzu sayı         → həmin kateqoriyaların `topics` massivlərinin cəmi
+//   aktiv təlim        → /api/course (yalnız admin təsdiqlədikləri qayıdır)
+// Sorğu alınmasa dəyər "—" qalır — sıfır göstərmək "məlumat yoxdur" ilə
+// "həqiqətən sıfırdır" arasındakı fərqi itirərdi.
 
 interface Props {
   onNavigate?: (href: string) => void;
 }
 
 export default function AboutSection({ onNavigate }: Props) {
-  const [totals, setTotals] = useState<{ questions: number; areas: number } | null>(null);
+  const [totals, setTotals] = useState<{ questions: number; areas: number; topics: number } | null>(null);
+  const [courseCount, setCourseCount] = useState<number | null>(null);
+  const [showPlatform, setShowPlatform] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
     fetchQuizCategories().then(cats => {
       if (cancelled || cats.length === 0) return;
       setTotals({
         questions: cats.reduce((sum, c) => sum + (Number.isFinite(c.questionCount) ? c.questionCount : 0), 0),
         areas: cats.length,
+        topics: cats.reduce((sum, c) => sum + (Array.isArray(c.topics) ? c.topics.length : 0), 0),
       });
     });
+
+    // Təsdiqlənmiş təlimlər ictimai endpoint-dir, giriş tələb etmir.
+    getApprovedCourses()
+      .then(res => { if (!cancelled && res.success && res.data) setCourseCount(res.data.length); })
+      .catch(() => { /* şəbəkə xətası — kart "—" qalır */ });
+
     return () => { cancelled = true; };
   }, []);
 
-  const go = (href: string) => (e: React.MouseEvent) => {
-    if (!onNavigate) return;
-    e.preventDefault();
-    onNavigate(href);
-  };
+  const num = (value: number | null | undefined) =>
+    typeof value === 'number' ? value.toLocaleString('az-AZ') : '—';
 
   return (
     <section id="about" className="home" aria-labelledby="home-heading">
@@ -84,72 +63,63 @@ export default function AboutSection({ onNavigate }: Props) {
               birlikdə addımlayaq!
             </p>
             <div className="home__cta">
-              <Button variant="primary" size="lg" onClick={() => onNavigate?.('#home')}>
+              {/* Əsas CTA quiz bölməsinə (Biliklər) aparır — istifadəçi oradan
+                  kateqoriya seçib dərhal sual həll etməyə başlayır. */}
+              <Button variant="primary" size="lg" onClick={() => onNavigate?.('#knowledge')}>
                 Təlimlərə başla <ArrowRight size={16} />
               </Button>
-              <a href="#platform" className="btn btn--outline btn--lg" onClick={go('#platform')}>
+              <Button variant="outline" size="lg" onClick={() => setShowPlatform(true)}>
                 <Layers size={16} /> Platforma haqqında
-              </a>
+              </Button>
             </div>
           </div>
-          <TechIllustration variant="shield" caption="Daha təhlükəsiz Azərbaycan üçün" />
+          <div className="home__hero-visual">
+            <img
+              src="/kiberaz-cyber-hero.png"
+              alt="Azərbaycan xəritəsi, qalxan və qıfıldan ibarət kibertəhlükəsizlik illüstrasiyası"
+            />
+          </div>
         </div>
 
         {/* ── Real göstəricilər ── */}
         <div className="home__stats stat-grid" aria-label="Platforma göstəriciləri">
           <StatCard icon={<BookOpen size={18} />} tone="brand"
-            value={totals ? totals.questions.toLocaleString('az-AZ') : '—'} label="Nəzəri sual" />
+            value={num(totals?.questions)} label="Nəzəri sual" />
           <StatCard icon={<Layers size={18} />} tone="info"
-            value={totals ? totals.areas : '—'} label="Bilik sahəsi" />
-          <StatCard icon={<Unlock size={18} />} tone="success" value="Pulsuz" label="Bütün nəzəri material" />
-          <StatCard icon={<Clock size={18} />} tone="warning" value="24/7" label="Əlçatanlıq" />
-        </div>
-
-        {/* ── Modullar ── */}
-        <div id="platform" className="home__modules">
-          <div className="section-heading">
-            <div>
-              <h2>Platforma modulları</h2>
-              <p>Kibertəhlükəsizlik sahəsində bilik və bacarıqları inkişaf etdirmək üçün hazırlanmış əsas istiqamətlər.</p>
-            </div>
-            <a href="#home" className="card__link" onClick={go('#home')}>Hamısını gör <ArrowRight size={13} /></a>
-          </div>
-          <div className="home__module-grid">
-            {modules.map(m => (
-              <a key={m.title} href={m.href} className="module-card" onClick={go(m.href)}>
-                <span className="module-card__icon" aria-hidden="true">{m.icon}</span>
-                <span className="module-card__body">
-                  <span className="module-card__title">{m.title}</span>
-                  <span className="module-card__desc">{m.desc}</span>
-                </span>
-                <ArrowRight size={14} className="module-card__arrow" aria-hidden="true" />
-              </a>
-            ))}
-          </div>
+            value={num(totals?.areas)} label="Bilik sahəsi" />
+          <StatCard icon={<ListChecks size={18} />} tone="success"
+            value={num(totals?.topics)} label="Mövzu" />
+          <StatCard icon={<GraduationCap size={18} />} tone="warning"
+            value={num(courseCount)} label="Aktiv təlim" />
         </div>
 
         {/* ── Platforma haqqında ── */}
-        <div className="home__about">
+        <div id="platform" className="home__about">
           <div className="home__about-col">
             <h3><Users size={16} /> Kimlər üçündür</h3>
             <p>
-              Biz inanırıq ki, rəqəmsal təhlükəsizlik yalnız böyük şirkətlərin deyil, bütün cəmiyyətin əsas
-              prioritetlərindən biri olmalıdır. <strong>Kiberaz.az</strong> platforması peşəkar müəllimlərə biliklərini
-              paylaşmaq və təlimlərini tanıtmaq imkanı yaradır, tələbələrə isə pulsuz nəzəri materiallar,
-              müsahibəyə hazırlıq resursları və imtahan sistemi təqdim edir.
+              <strong>Kiberaz.az</strong> kibertəhlükəsizliyə yeni başlayan tələbələr, biliklərini sistemləşdirmək
+              istəyən mütəxəssislər və tədris prosesini rəqəmsal idarə edən müəllimlər üçün yaradılıb. Platforma
+              nəzəri bilik bazasını, praktiki testləri, müsahibə hazırlığını, təlim elanlarını və imtahan
+              sessiyalarını vahid öyrənmə mühitində birləşdirir.
             </p>
           </div>
           <div className="home__about-col">
             <h3><Globe size={16} /> Məqsədimiz</h3>
             <p>
-              Ölkədə ixtisaslı kiber mütəxəssislərin sayını artırmaq, bu sahəyə marağı gücləndirmək və keyfiyyətli
-              tədris resurslarına çıxışı hər kəs üçün daha əlçatan etməkdir. Bütün bu imkanlar qeydiyyat maneəsi
-              olmadan, sadə və rahat şəkildə açıqdır — məqsəd Azərbaycanda güclü kiber icmanın formalaşmasına
-              töhfə verməkdir.
+              Məqsədimiz Azərbaycan dilində etibarlı, praktik və davamlı kibertəhlükəsizlik təhsil ekosistemi
+              qurmaqdır. Kateqoriyalara və nəzəri məzmuna açıq baxış mümkündür; cavabların yoxlanılması,
+              nəticələrin saxlanması, liderlik reytinqi və imtahan imkanları üçün istifadəçi hesabına giriş
+              tələb olunur.
             </p>
           </div>
         </div>
       </div>
+      <PlatformShowcase
+        open={showPlatform}
+        onClose={() => setShowPlatform(false)}
+        onNavigate={onNavigate}
+      />
     </section>
   );
 }

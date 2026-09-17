@@ -11,7 +11,7 @@ import Footer from './components/Footer';
 import QuizView from './components/QuizView';
 import BrandLogo from './components/layout/BrandLogo';
 import { Button, ButtonLink, FormField, ThemeToggle } from './components/ui';
-import { confirmEmail, confirmEmailChange, exchangeGoogleLoginCode, getToken, logout, resetPassword, setStoredUserNickname, setStoredUserRoles, setTokens } from './services/authService';
+import { confirmEmail, confirmEmailChange, exchangeGoogleLoginCode, getToken, hasSessionHint, logoutOnServer, refreshTokens, resetPassword, setStoredUserNickname, setStoredUserRoles, setTokens } from './services/authService';
 import './index.css';
 import './App.css';
 
@@ -121,7 +121,13 @@ function AuthPageShell({ title, kicker, children }: { title: string; kicker: str
 // URL-dəki hash və ya query string-dən userId və token parametrləri oxunur;
 // bu parametrlər e-poçt linkindən gəlir, ona görə hər iki format dəstəklənir.
 function ResetPasswordPage() {
-  const params = new URLSearchParams((window.location.hash || window.location.search).replace(/^[#?]/, ''));
+  // Token yalnız fragment-dən (#) oxunur — query formatı serverə/loglara gedərdi. Parametrlər bir dəfə oxunub
+  // dərhal ünvan sətrindən silinir ki, tarixçədə/ekran görüntüsündə qalmasın (audit F2).
+  const [params] = useState(() => {
+    const read = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    window.history.replaceState(null, '', window.location.pathname);
+    return read;
+  });
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -163,11 +169,11 @@ function ResetPasswordPage() {
         <p className="text-2 text-sm">Yeni şifrə ən azı 8 simvol olmalı, 1 böyük hərf və 1 rəqəm ehtiva etməlidir.</p>
         <FormField id="reset-pass" label="Yeni şifrə" icon={<Lock size={13} />} required>
           <input id="reset-pass" className="input" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-            autoComplete="new-password" maxLength={30} disabled={locked} />
+            autoComplete="new-password" maxLength={128} disabled={locked} />
         </FormField>
         <FormField id="reset-confirm" label="Şifrənin təkrarı" icon={<Lock size={13} />} required>
           <input id="reset-confirm" className="input" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-            autoComplete="new-password" maxLength={30} disabled={locked} />
+            autoComplete="new-password" maxLength={128} disabled={locked} />
         </FormField>
         {message && <div className="notice notice--success" role="status"><CheckCircle size={16} /><span>{message}</span></div>}
         {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
@@ -201,7 +207,8 @@ function ConfirmActionPage({ type }: { type: 'email' | 'email-change' }) {
     if (startedRef.current) return;
     startedRef.current = true;
 
-    const params = new URLSearchParams((window.location.hash || window.location.search).replace(/^[#?]/, ''));
+    // Yalnız fragment (#) — e-poçt linkləri belə göndərilir; query formatı serverə/loglara düşərdi.
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
 
     // Parametrlər sorğudan ƏVVƏL URL-dən silinir. Əvvəl bu, cavab gəldikdən sonra
     // edilirdi — yəni səhifə yeniləndikdə link ikinci dəfə işlənə bilirdi.
@@ -327,8 +334,19 @@ export default function App() {
     setShowDashboard(true);
   }, []);
 
+  // Səssiz giriş bərpası: yeni tab/səhifə yenilənməsində yaddaşda token yoxdur, amma HttpOnly refresh
+  // cookie brauzerdədir — access tokensiz refresh ilə sessiya bərpa olunur, yenidən giriş və yeni server sessiyası lazım gəlmir.
+  useEffect(() => {
+    if (isLoggedIn || isGoogleLoginCallbackPage || !hasSessionHint()) return;
+    let cancelled = false;
+    refreshTokens().then(ok => { if (ok && !cancelled) setIsLoggedIn(true); });
+    return () => { cancelled = true; };
+    // yalnız ilk render-də — sonrakı isLoggedIn dəyişiklikləri giriş/çıxış ilə idarə olunur
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogout = () => {
-    logout();
+    void logoutOnServer();
     setIsLoggedIn(false);
     setShowDashboard(false);
   };

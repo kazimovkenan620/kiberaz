@@ -18,6 +18,14 @@
     <ProjectReference Include="..\Kiberaz.Infrastructure\Kiberaz.Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- Standart publish də təhlükəsiz olmalıdır; sonradan silən skriptə güvənmirik. -->
+  <ItemGroup>
+    <Content Update="appsettings.Local.json;appsettings.*.Local.json;appsettings.Development.json;appsettings.*.example.json"
+             CopyToPublishDirectory="Never" />
+    <Content Remove="**\*.db;**\*.db-journal;**\*.db-wal;App_Data\**;wwwroot\uploads\**" />
+    <None Remove="**\*.db;**\*.db-journal;**\*.db-wal;App_Data\**;wwwroot\uploads\**" />
+  </ItemGroup>
+
   <!-- Quiz seed faylları repo kökündədir (layihə qovluğundan kənarda).
        Bu olmadan `dotnet publish` onları kopyalamır və serverdə QuizSeeder heç nə tapmır —
        nəticədə production bazası 0 sualla açılır.

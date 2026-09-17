@@ -1,0 +1,21 @@
+[
+  {
+    "TestId": "BE-011",
+    "Feature": "Deadline auto-submit",
+    "FeatureState": "IMPLEMENTED",
+    "EvidenceType": "BROWSER_E2E",
+    "Account": "UserB",
+    "Priority": "P1",
+    "Precondition": "Chrome; production frontend build; local Development API; ayrı browser context",
+    "TestData": "20260917T-predeploy-132107",
+    "Steps": "API fixture 1-minute exam; UI join; observe 65 seconds",
+    "Expected": "Automatic submit/results by deadline",
+    "Actual": "65 saniyə sonra taymer aktivdir və avtomatik submit göndərilməyib",
+    "Status": "FAIL",
+    "Evidence": "evidence/browser-results.json",
+    "BugId": "",
+    "Timestamp": "2026-09-17T09:41:55.137Z",
+    "RunId": "20260917T-predeploy-132107",
+    "Commit": "2a3f32f4e131fda77d668215c4ea83af20a6f8b5"
+  }
+]

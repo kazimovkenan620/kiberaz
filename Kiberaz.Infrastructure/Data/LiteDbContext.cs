@@ -53,6 +53,10 @@ public class LiteDbContext : IDisposable
         mapper.Entity<LoginAttempt>().Id(a => a.Id);
         mapper.Entity<ExamSession>().Id(s => s.Id);
         mapper.Entity<ExamAttempt>().Id(a => a.Id);
+        mapper.Entity<VipTerm>().Id(t => t.Id, autoId: true);
+        mapper.Entity<AdminAuditEntry>().Id(a => a.Id, autoId: true);
+        mapper.Entity<UploadedFile>().Id(f => f.Id, autoId: true);
+        mapper.Entity<RevokedToken>().Id(t => t.Id);
 
         // Enum-lar string kimi saxlanır — oxunaqlıdır və migration asanlaşır
         // Belə ki, DB-də "Beginner" yazısı görünür, rəqəm deyil — debug zamanı rahatdır.
@@ -134,6 +138,25 @@ public class LiteDbContext : IDisposable
     public ILiteCollection<BsonDocument> QuizScoreClaims
         => _db.GetCollection<BsonDocument>("QuizScoreClaims");
 
+    /// <summary>
+    /// VIP üzvlük dövrləri — hər dövr 30 gün + təlim krediti. Kreditin "oxu → müqayisə → yaz"
+    /// ardıcıllığı <see cref="VipSyncRoot"/> altında aparılır (Courses + VipTerms birlikdə).
+    /// </summary>
+    public ILiteCollection<VipTerm> VipTerms
+        => _db.GetCollection<VipTerm>("VipTerms");
+
+    /// <summary>Admin əməliyyat jurnalı — append-only, yalnız Admin oxuyur.</summary>
+    public ILiteCollection<AdminAuditEntry> AdminAudit
+        => _db.GetCollection<AdminAuditEntry>("AdminAudit");
+
+    // Yüklənmiş faylların sahib/kvota/istifadə qeydləri (UploadService, UploadSweeper, UploadLedger).
+    public ILiteCollection<UploadedFile> UploadedFiles
+        => _db.GetCollection<UploadedFile>("UploadedFiles");
+
+    // Çıxış edilmiş access tokenlərin jti qara siyahısı (LiteDbTokenDenylist).
+    public ILiteCollection<RevokedToken> RevokedTokens
+        => _db.GetCollection<RevokedToken>("RevokedTokens");
+
     public ILiteDatabase Database => _db;
 
     // Identity compare-and-write operations must use the same gate across scoped stores.
@@ -145,6 +168,9 @@ public class LiteDbContext : IDisposable
     // Shared by all scoped exam services. No await is allowed inside an exam transaction.
     public object ExamSyncRoot { get; } = new();
     public object QuizSyncRoot { get; } = new();
+    // Təlim krediti və təlim statusu dəyişiklikləri (yaratma, yenidən aktivləşdirmə, təsdiq, müddət bitmə).
+    // No await is allowed inside this gate.
+    public object VipSyncRoot { get; } = new();
 
     // Tez-tez istifadə olunan sahələrə indeks qurur — böyük data olduqda sorğular daha sürətli işləyir.
     // Unique indekslər eyni e-poçt və ya istifadəçi adının iki dəfə yazılmasının qarşısını alır.
@@ -161,6 +187,21 @@ public class LiteDbContext : IDisposable
         QuizQuestions.EnsureIndex(q => q.IsDeleted);
 
         Courses.EnsureIndex(c => c.IsDeleted);
+        // Sahibin kabineti (SubmittedByUserId) və müddət bitmə süpürgəsi (Status + ExpiresAt) üçün.
+        Courses.EnsureIndex(c => c.SubmittedByUserId);
+        Courses.EnsureIndex(c => c.Status);
+        Courses.EnsureIndex(c => c.ExpiresAt);
+
+        VipTerms.EnsureIndex(t => t.UserId);
+
+        // Jurnal həmişə ən yenidən köhnəyə oxunur.
+        AdminAudit.EnsureIndex(a => a.At);
+        AdminAudit.EnsureIndex(a => a.ActorId);
+        UploadedFiles.EnsureIndex(f => f.Path, unique: true);
+        UploadedFiles.EnsureIndex(f => f.OwnerId);
+        UploadedFiles.EnsureIndex(f => f.ClaimedByCourseId);
+        UploadedFiles.EnsureIndex(f => f.CreatedAt);
+        RevokedTokens.EnsureIndex(t => t.ExpiresAt);
 
         TeacherClasses.EnsureIndex(t => t.TeacherId);
 

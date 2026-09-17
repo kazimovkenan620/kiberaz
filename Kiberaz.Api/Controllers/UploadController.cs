@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Claims;
 using Kiberaz.Application.DTOs.Common;
 using Kiberaz.Application.Interfaces;
+using Kiberaz.Domain.Common;
 using Kiberaz.Infrastructure.Services;
 
 namespace Kiberaz.Api.Controllers;
@@ -22,7 +24,9 @@ namespace Kiberaz.Api.Controllers;
 ///
 /// İSTİSNA: DownloadPdf anonim qalır — sillabus public təlim səhifəsində göstərilir.
 /// </summary>
-[Authorize]
+// Yalnız təlim paylaşa bilən rollar yükləyir: adi hesab üçün yükləmə səthi bağlıdır (disk doldurma vektoru).
+// Admin panel təlim redaktəsində eyni formanı işlətdiyi üçün Admin də daxildir.
+[Authorize(Roles = AppRoles.VIP + "," + AppRoles.Admin)]
 [ApiController]
 [Route("api/[controller]")]
 [EnableRateLimiting("upload")]
@@ -31,7 +35,7 @@ public class UploadController : ControllerBase
     // Kestrel-in default request limiti 30 MB-dır — endpoint özü 2/10 MB qəbul etsə də,
     // bu limit olmadan server 30 MB-lıq gövdəni tam oxuyandan sonra rədd edir.
     // Aşağıdakı sabitlərlə sorğu HƏLƏ DİSKƏ YAZILMADAN, oxunma mərhələsində kəsilir.
-    private const long PhotoRequestLimitBytes    = 3L  * 1024 * 1024;  // 2 MB fayl + multipart overhead
+    private const long PhotoRequestLimitBytes = 3L * 1024 * 1024;  // 2 MB fayl + multipart overhead
     private const long SyllabusRequestLimitBytes = 12L * 1024 * 1024;  // 10 MB fayl + multipart overhead
 
     private readonly IUploadService _uploadService;
@@ -41,10 +45,18 @@ public class UploadController : ControllerBase
         _uploadService = uploadService;
     }
 
+    private string? OwnerId => User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    private IActionResult QuotaExceeded(UploadQuotaException ex)
+    {
+        Response.Headers.RetryAfter = "3600";
+        return StatusCode(StatusCodes.Status429TooManyRequests, ApiResponse<object>.Fail(ex.Message));
+    }
+
     // Public oxu: təlim sillabusu sayta girən hər kəsə göstərilir.
     [HttpGet("/uploads/syllabus/{fileName}")]
-    [AllowAnonymous]
-    [EnableRateLimiting("general")]
+    [AllowAnonymous] // Sillabus ictimai təlim kartından açılır; fayl yalnız təmizlənmiş halda verilir.
+    [EnableRateLimiting("download")]
     public async Task<IActionResult> DownloadPdf(string fileName)
     {
         try
@@ -68,6 +80,8 @@ public class UploadController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = PhotoRequestLimitBytes)]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<string>))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests, Type = typeof(ApiResponse<object>))]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable, Type = typeof(ApiResponse<object>))]
     public async Task<IActionResult> UploadPhoto(IFormFile file)
     {
         if (file == null || file.Length == 0)
@@ -80,12 +94,17 @@ public class UploadController : ControllerBase
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp" };
             long maxSizeBytes = 2 * 1024 * 1024; // 2 MB
 
+            var ownerId = OwnerId;
+            if (string.IsNullOrEmpty(ownerId))
+                return Unauthorized(ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
+
             using var stream = file.OpenReadStream();
-            var fileUrl = await _uploadService.UploadFileAsync(stream, file.FileName, "photos", allowedExtensions, maxSizeBytes);
-            
+            var fileUrl = await _uploadService.UploadFileAsync(stream, file.FileName, "photos", allowedExtensions, maxSizeBytes, ownerId);
+
             return Ok(ApiResponse<string>.Ok(fileUrl, "Müəllim şəkli uğurla yükləndi."));
         }
         catch (UploadCapacityException ex) { return StatusCode(503, ApiResponse<object>.Fail(ex.Message)); }
+        catch (UploadQuotaException ex) { return QuotaExceeded(ex); }
         catch (ArgumentException ex)
         {
             return BadRequest(ApiResponse<object>.Fail(ex.Message));
@@ -106,6 +125,8 @@ public class UploadController : ControllerBase
     [RequestFormLimits(MultipartBodyLengthLimit = SyllabusRequestLimitBytes)]
     [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(ApiResponse<string>))]
     [ProducesResponseType(StatusCodes.Status400BadRequest, Type = typeof(ApiResponse<object>))]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests, Type = typeof(ApiResponse<object>))]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable, Type = typeof(ApiResponse<object>))]
     public async Task<IActionResult> UploadSyllabus(IFormFile file)
     {
         if (file == null || file.Length == 0)
@@ -118,12 +139,17 @@ public class UploadController : ControllerBase
             var allowedExtensions = new[] { ".pdf" };
             long maxSizeBytes = 10 * 1024 * 1024; // 10 MB
 
+            var ownerId = OwnerId;
+            if (string.IsNullOrEmpty(ownerId))
+                return Unauthorized(ApiResponse<object>.Fail("Sessiya etibarsızdır. Yenidən daxil olun."));
+
             using var stream = file.OpenReadStream();
-            var fileUrl = await _uploadService.UploadFileAsync(stream, file.FileName, "syllabus", allowedExtensions, maxSizeBytes);
-            
+            var fileUrl = await _uploadService.UploadFileAsync(stream, file.FileName, "syllabus", allowedExtensions, maxSizeBytes, ownerId);
+
             return Ok(ApiResponse<string>.Ok(fileUrl, "Təlim sillabusu uğurla yükləndi."));
         }
         catch (UploadCapacityException ex) { return StatusCode(503, ApiResponse<object>.Fail(ex.Message)); }
+        catch (UploadQuotaException ex) { return QuotaExceeded(ex); }
         catch (ArgumentException ex)
         {
             return BadRequest(ApiResponse<object>.Fail(ex.Message));

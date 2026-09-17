@@ -1,0 +1,8 @@
+{
+  "engine": "Chromium",
+  "channel": "installed Chrome",
+  "version": "153.0.8010.47",
+  "automation": "Playwright 1.58.2",
+  "run": "20260917T-predeploy-132107",
+  "timestamp": "2026-09-17T09:45:40.636Z"
+}

@@ -1,79 +1,116 @@
 #!/usr/bin/env bash
-# Serverdə deploy (Ubuntu 22.04/24.04). Əvvəlcədən lokalda deploy/predeploy-check.ps1 yaşıl bitməlidir.
-#
-# Fərz olunur:
-#   • publish/ və dist/ serverə /var/kiberaz/incoming/{publish,dist} kimi kopyalanıb
-#     (Windows-dan: scp -r publish kiberaz-ui/dist user@server:/var/kiberaz/incoming/)
-#   • deploy/kiberaz-api.service quraşdırılıb, /etc/kiberaz/api.env doldurulub
-#   • nginx konfiqləri (deploy/nginx-api.conf.example, kiberaz-ui/deploy/nginx-spa.conf.example) aktivdir
-#
-# İstifadə: sudo bash deploy.sh          (ilk dəfə və hər yeniləmədə eynidir)
-#           sudo bash deploy.sh rollback (əvvəlki release-ə qayıt)
+# Ubuntu 24.04 / x86_64 / bir server. common.sh eyni qovluqda olmalıdır.
+# Giriş: /var/kiberaz/incoming/{publish,dist}; lokal predeploy-check.ps1 əvvəlcə uğurlu olmalıdır.
+# sudo bash /var/kiberaz/deploy/deploy.sh [rollback]
+# Rollback yalnız kodu dəyişir; verilənlər bazasını avtomatik köhnə nüsxəyə qaytarmır.
 set -euo pipefail
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+[[ $# -eq 0 || ( $# -eq 1 && "$1" == rollback ) ]] || die 'İstifadə: deploy.sh [rollback]'
+initialize
+for directory in "$RELEASES" "$INCOMING" "$WWW"; do real_directory "$directory"; done
+chmod 0755 "$RELEASES" "$WWW"
+chown root:root "$RELEASES" "$WWW"
 
-BASE=/var/kiberaz
-APP=$BASE/app
-RELEASES=$BASE/releases
-INCOMING=$BASE/incoming
-WWW=/var/www/kiberaz
-STAMP=$(date +%Y%m%d-%H%M%S)
-
-if [[ "${1:-}" == "rollback" ]]; then
-  PREV=$(ls -1dt "$RELEASES"/api-* | sed -n 2p)
-  [[ -n "$PREV" ]] || { echo "Əvvəlki release yoxdur"; exit 1; }
-  echo "Rollback → $PREV"
-  systemctl stop kiberaz-api
-  ln -sfn "$PREV" "$APP"
-  PREVDIST=$(ls -1dt "$RELEASES"/dist-* | sed -n 2p)
-  [[ -n "$PREVDIST" ]] && ln -sfn "$PREVDIST" "$WWW/dist"
-  systemctl start kiberaz-api
-  systemctl reload nginx
-  exit 0
-fi
-
-[[ -d $INCOMING/publish && -d $INCOMING/dist ]] || { echo "$INCOMING/publish və $INCOMING/dist lazımdır"; exit 1; }
-[[ -f $INCOMING/publish/Kiberaz.Api.dll ]] || { echo "publish/Kiberaz.Api.dll yoxdur"; exit 1; }
-[[ -f $INCOMING/publish/seed-data/quiz-questions.json ]] || { echo "publish/seed-data yoxdur"; exit 1; }
-[[ ! -f $INCOMING/publish/appsettings.Development.json ]] || { echo "appsettings.Development.json publish-də qalıb — sil"; exit 1; }
-[[ ! -f $INCOMING/publish/appsettings.Local.json ]] || { echo "appsettings.Local.json publish-də qalıb — sil"; exit 1; }
-
-echo "== 1. Backup (DB + uploads + keys)"
-mkdir -p "$BASE/backup"
-tar -czf "$BASE/backup/pre-deploy-$STAMP.tgz" -C "$BASE" data uploads keys 2>/dev/null || true
-
-echo "== 2. Yeni release"
-mkdir -p "$RELEASES" "$WWW"
-cp -r "$INCOMING/publish" "$RELEASES/api-$STAMP"
-cp -r "$INCOMING/dist"    "$RELEASES/dist-$STAMP"
-# wwwroot/uploads → daimi qovluğa symlink (redeploy silməsin)
-mkdir -p "$BASE/uploads/photos" "$BASE/uploads/syllabus" "$RELEASES/api-$STAMP/wwwroot"
-rm -rf "$RELEASES/api-$STAMP/wwwroot/uploads"
-ln -sfn "$BASE/uploads" "$RELEASES/api-$STAMP/wwwroot/uploads"
-chown -R kiberaz:kiberaz "$RELEASES/api-$STAMP" "$BASE/uploads" "$BASE/data" "$BASE/keys"
-
-echo "== 3. API keçidi"
-systemctl stop kiberaz-api || true
-ln -sfn "$RELEASES/api-$STAMP" "$APP"
-systemctl start kiberaz-api
-
-echo "== 4. Sağlamlıq yoxlaması (30 s)"
-ok=0
-for i in $(seq 1 30); do
-  if curl -fsS -H 'Host: api.kiberaz.az' http://127.0.0.1:5000/health >/dev/null 2>&1; then ok=1; break; fi
-  sleep 1
+# Köhnə təlimatın yaratdığı yalnız BOŞ app/dist qovluğunu təhlükəsiz düzəldir.
+for destination in "$APP" "$WWW/dist"; do
+  if [[ -e "$destination" && ! -L "$destination" ]]; then
+    [[ -d "$destination" ]] && rmdir -- "$destination" || die "Dolu və ya uyğun olmayan yol qorundu: $destination"
+  fi
 done
-if [[ $ok -ne 1 ]]; then
-  echo "API qalxmadı — loglar:"; journalctl -u kiberaz-api -n 40 --no-pager
-  echo "Rollback: sudo bash deploy.sh rollback"; exit 1
+
+OLD_RELEASE=
+if [[ -L "$APP" || -L "$WWW/dist" ]]; then
+  [[ -L "$APP" && -L "$WWW/dist" ]] || die 'Cari API və SPA keçidləri cüt deyil.'
+  old_api=$(readlink -f -- "$APP")
+  OLD_RELEASE=${old_api#"$RELEASES/api-"}
+  validate_pair "$OLD_RELEASE"
+  [[ "$old_api" == "$RELEASES/api-$OLD_RELEASE" && $(readlink -f -- "$WWW/dist") == "$RELEASES/dist-$OLD_RELEASE" ]] || die 'Cari API və SPA eyni release-ə aid deyil.'
+elif [[ "$ORIGINAL_STATE" == active ]]; then
+  die 'Aktiv API üçün release keçidi tapılmadı.'
 fi
 
-echo "== 5. SPA keçidi"
-ln -sfn "$RELEASES/dist-$STAMP" "$WWW/dist"
-nginx -t && systemctl reload nginx
+if [[ "${1:-}" == rollback ]]; then
+  [[ -n "$OLD_RELEASE" && -f "$BASE/previous-release" && ! -L "$BASE/previous-release" ]] || die 'Saxlanmış əvvəlki release yoxdur.'
+  TARGET=$(cat "$BASE/previous-release")
+  validate_pair "$TARGET"
+  [[ "$TARGET" != "$OLD_RELEASE" ]] || die 'Əvvəlki release cari release ilə eynidir.'
+else
+  [[ -d "$INCOMING/publish" && -d "$INCOMING/dist" ]] || die 'incoming/publish və incoming/dist lazımdır.'
+  [[ -z $(find "$INCOMING/publish" "$INCOMING/dist" -type l -print -quit) ]] || die 'Incoming daxilində symlink qadağandır.'
+  [[ -f "$INCOMING/publish/Kiberaz.Api.dll" && -f "$INCOMING/publish/Kiberaz.Api.runtimeconfig.json" ]] || die 'Publish natamamdır.'
+  [[ -f "$INCOMING/publish/seed-data/quiz-questions.json" && -f "$INCOMING/dist/index.html" ]] || die 'Seed data və ya SPA index.html yoxdur.'
+  [[ -z $(find "$INCOMING/publish" "$INCOMING/dist" \( -name 'appsettings.Local.json' -o -name 'appsettings.Development.json' -o -name '*.db' -o -name '.env' \) -print -quit) ]] || die 'Artefaktda lokal konfiqurasiya, sirr və ya DB faylı var.'
+  TARGET=$STAMP
+  [[ ! -e "$RELEASES/api-$TARGET" && ! -e "$RELEASES/dist-$TARGET" ]] || die 'Release identifikatoru artıq mövcuddur.'
+  cp -a -- "$INCOMING/publish" "$RELEASES/api-$TARGET"
+  cp -a -- "$INCOMING/dist" "$RELEASES/dist-$TARGET"
+  mkdir -p "$RELEASES/api-$TARGET/wwwroot"
+  real_directory "$BASE/uploads/photos"
+  real_directory "$BASE/uploads/syllabus"
+  # Fayllar varsa silmək əvəzinə dayanır; daimi upload-lar yalnız BASE/uploads-dadır.
+  if [[ -d "$RELEASES/api-$TARGET/wwwroot/uploads" ]]; then
+    find "$RELEASES/api-$TARGET/wwwroot/uploads" -depth -type d -empty -delete
+  fi
+  [[ ! -e "$RELEASES/api-$TARGET/wwwroot/uploads" ]] || die 'Publish upload məlumatı daşıyır; avtomatik silinmədi.'
+  chown -R root:kiberaz "$RELEASES/api-$TARGET"
+  chmod -R u=rwX,g=rX,o= "$RELEASES/api-$TARGET"
+  chown -R root:root "$RELEASES/dist-$TARGET"
+  chmod -R u=rwX,go=rX "$RELEASES/dist-$TARGET"
+  chown kiberaz:kiberaz "$BASE/uploads/photos" "$BASE/uploads/syllabus"
+  chmod 0750 "$BASE/uploads/photos" "$BASE/uploads/syllabus"
+  ln -s -- "$BASE/uploads" "$RELEASES/api-$TARGET/wwwroot/uploads"
+  validate_pair "$TARGET"
+fi
 
-echo "== 6. Köhnə release-lər (son 3 qalır)"
-ls -1dt "$RELEASES"/api-*  | tail -n +4 | xargs -r rm -rf
-ls -1dt "$RELEASES"/dist-* | tail -n +4 | xargs -r rm -rf
-rm -rf "$INCOMING/publish" "$INCOMING/dist"
+# Konfiqurasiya səhvi API-ni dayandırmaz.
+nginx -t
+TOUCHED=0
+SWITCHED=0
+finish() {
+  local result=$? recovered=1
+  trap - EXIT INT TERM
+  set +e
+  cleanup_temporary_files
+  rm -f -- "$APP.next.$$" "$WWW/dist.next.$$" "$BASE/previous-release.next.$$"
+  if [[ "$result" != 0 && "$TOUCHED" == 1 ]]; then
+    printf 'Deploy uğursuzdur; əvvəlki vəziyyət bərpa edilir.\n' >&2
+    systemctl stop "$SERVICE" || recovered=0
+    if [[ "$SWITCHED" == 1 ]]; then
+      if [[ -n "$OLD_RELEASE" ]]; then
+        atomic_link "$RELEASES/api-$OLD_RELEASE" "$APP" || recovered=0
+        atomic_link "$RELEASES/dist-$OLD_RELEASE" "$WWW/dist" || recovered=0
+      else
+        rm -f -- "$APP" "$WWW/dist" || recovered=0
+      fi
+    fi
+    if [[ "$ORIGINAL_STATE" == active ]]; then
+      systemctl start "$SERVICE" && health_check || recovered=0
+    fi
+    if [[ "$recovered" == 1 ]]; then
+      printf 'Əvvəlki API/SPA və servis vəziyyəti bərpa edildi.\n' >&2
+    else
+      printf 'XƏTA: bərpa tam təsdiqlənmədi. journalctl -u kiberaz-api ilə yoxlayın.\n' >&2
+    fi
+  fi
+  exit "$result"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-echo "== OK: api-$STAMP / dist-$STAMP canlıdır. Smoke test: docs/PRODUCTION-ROADMAP.md §5"
+TOUCHED=1
+stop_api
+offline_backup pre-deploy
+SWITCHED=1
+atomic_link "$RELEASES/api-$TARGET" "$APP"
+systemctl start "$SERVICE"
+health_check || die 'API dəqiq 200/status=ok cavabı vermədi.'
+atomic_link "$RELEASES/dist-$TARGET" "$WWW/dist"
+systemctl reload nginx
+if [[ -n "$OLD_RELEASE" ]]; then
+  printf '%s\n' "$OLD_RELEASE" > "$BASE/previous-release.next.$$"
+  mv -Tf -- "$BASE/previous-release.next.$$" "$BASE/previous-release"
+fi
+echo "OK: api-$TARGET / dist-$TARGET canlıdır."
+# Cari/əvvəlki release və uğursuz staging avtomatik silinmir; ayrıca nəzərdən keçirilib təmizlənir.
+# incoming saxlanır; növbəti upload-dan əvvəl operator onu təmiz bir staging qovluğu ilə əvəz edir.

@@ -1,0 +1,18 @@
+COMMAND: npm install --ignore-scripts --package-lock=false --no-audit
+npm warn cleanup Failed to remove some directories [
+npm warn cleanup   [
+npm warn cleanup     'C:\\Users\\User\\Desktop\\kiberaz\\kiberaz-ui\\node_modules\\@rolldown\\.binding-win32-x64-msvc-ZtzKbbjQ',
+npm warn cleanup     [Error: EPERM: operation not permitted, unlink 'C:\Users\User\Desktop\kiberaz\kiberaz-ui\node_modules\@rolldown\.binding-win32-x64-msvc-ZtzKbbjQ\rolldown-binding.win32-x64-msvc.node'] {
+npm warn cleanup       errno: -4048,
+npm warn cleanup       code: 'EPERM',
+npm warn cleanup       syscall: 'unlink',
+npm warn cleanup       path: 'C:\\Users\\User\\Desktop\\kiberaz\\kiberaz-ui\\node_modules\\@rolldown\\.binding-win32-x64-msvc-ZtzKbbjQ\\rolldown-binding.win32-x64-msvc.node'
+npm warn cleanup     }
+npm warn cleanup   ]
+npm warn cleanup ]
+
+added 132 packages, and changed 32 packages in 1m
+
+44 packages are looking for funding
+  run `npm fund` for details
+EXIT=0

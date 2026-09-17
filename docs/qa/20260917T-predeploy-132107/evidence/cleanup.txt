@@ -1,0 +1,11 @@
+Stopped audit PID 31512
+Stopped audit PID 3032
+Offline inspect exit=0
+
+LocalPort OwningProcess
+--------- -------------
+     5251         32080
+     5173         20076
+     5251         32080
+
+

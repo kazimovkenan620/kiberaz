@@ -1,0 +1,11 @@
+{
+  "privateDir": "C:\\Users\\User\\AppData\\Local\\Temp\\20260917T-predeploy-132107",
+  "started": "2026-09-17T13:21:07.1310857+04:00",
+  "reportDir": "C:\\Users\\User\\Desktop\\kiberaz\\docs\\qa\\20260917T-predeploy-132107",
+  "branch": "feat/ui-migration-light-dark",
+  "commit": "2a3f32f4e131fda77d668215c4ea83af20a6f8b5",
+  "runId": "20260917T-predeploy-132107",
+  "finished": "2026-09-17T13:58:45.8623280+04:00",
+  "auditStatus": "INCOMPLETE",
+  "releaseDecision": "NO-GO"
+}

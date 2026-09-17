@@ -1,0 +1,123 @@
+Əsas məzmuna keç
+KIBERAZ.AZ
+// TƏHSİL PLATFORMASI
+Ana Səhifə
+Təlimlər
+Biliklər
+İmtahan
+Liderlik
+QA
+qaadmina
+Admin
+QA
+qaadmina
+Admin
+İDARƏETMƏ PANELİ
+İcmal
+İstifadəçilər
+Təlimlər
+İmtahan sessiyaları
+Kateqoriyalar + suallar
+Ana səhifə
+Çıxış
+
+Daha güclü gələcək üçün birlikdə öyrənək.
+
+İDARƏETMƏ PANELİ
+İcmal
+
+Platformanın ümumi vəziyyəti — canlı serverdən gələn real rəqəmlər.
+
+Yenilə
+11
+İstifadəçi
+bu həftə +11
+1
+Saytda aktiv təlim
+1 ümumi · 0 gözləyən
+2
+İmtahan sessiyası
+2 açıq · 0 bağlı
+9
+Sual bankı
+4 kateqoriya
+Diqqət tələb edir
+2 imtahan sessiyası açıqdır
+Sessiyalara bax
+1 hesab bloklanıb
+İstifadəçilərə bax
+1 hesabın e-poçtu təsdiqlənməyib
+İstifadəçilərə bax
+Rol bölgüsü
+2 aktiv VIP dövrü
+VIP
+2
+Müəllim
+2
+Moderator
+2
+İstifadəçi
+5
+
+Bloklanmış: 1 · e-poçtu təsdiqlənməyən: 1
+
+Təlimlərin vəziyyəti
+Aktiv (saytda)
+1
+Moderasiya gözləyən
+0
+7 gün içində bitir
+0
+Passiv (müddəti bitib)
+0
+Rədd edilmiş
+0
+Sual bankı
+Açıq (quiz) sual
+5
+Məxfi (imtahan) sual
+4
+Kateqoriya
+4
+Fəallıq
+Bu həftə cavab
+1
+Ümumi cavab
+1
+Düzgün cavab nisbəti
+0%
+İmtahan cəhdi
+2 / 2
+Son admin əməliyyatları
+Kateqoriya bərpa edildi
+Kateqoriya və 1 sualı bərpa edildi.
+@qaadmina · 2026 M09 17 13:38 · ::1
+Kateqoriya silindi
+Kateqoriya və sualları silindi (kaskad).
+@qaadmina · 2026 M09 17 13:38 · ::1
+Sual bərpa edildi
+Sual bərpa edildi.
+@qaadmina · 2026 M09 17 13:38 · ::1
+Sual silindi
+Sual silindi.
+@qaadmina · 2026 M09 17 13:38 · ::1
+Sual yaradıldı
+Açıq sual yaradıldı.
+@qaadmina · 2026 M09 17 13:38 · ::1
+Kateqoriya yaradıldı
+«QA CRUD 20260917T-predeploy-132107» yaradıldı.
+@qaadmina · 2026 M09 17 13:38 · ::1
+Kateqoriya yaradıldı
+«QA CRUD 20260917T-predeploy-132107» yaradıldı.
+@qaadmina · 2026 M09 17 13:37 · ::1
+Dəyişiklik təsdiqləndi
+Dəyişiklik təsdiqləndi və saytda yeniləndi.
+@qaadmina · 2026 M09 17 13:37 · ::1
+Təlim təsdiqləndi
+Təlim təsdiqləndi.
+@qaadmina · 2026 M09 17 13:32 · ::1
+
+Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik. Məxfilik Siyasəti
+
+Rədd et
+Qəbul et

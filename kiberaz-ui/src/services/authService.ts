@@ -53,6 +53,7 @@ export interface AuthResponse {
 // credentials: 'include' yazılıb ki, brauzer httpOnly refresh token cookie-ni
 // avtomatik əlavə etsin; bu cookie JavaScript tərəfindən oxuna bilmir, buna görə daha təhlükəsizdir.
 export async function loginUser(request: LoginRequest): Promise<AuthResponse> {
+  const generation = sessionGeneration;
   const response = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -61,7 +62,7 @@ export async function loginUser(request: LoginRequest): Promise<AuthResponse> {
   });
 
   const data: AuthResponse = await response.json();
-  return data;
+  return generation === sessionGeneration ? data : cancelledAuthResponse();
 }
 
 export async function registerUser(request: RegisterRequest): Promise<AuthResponse> {
@@ -146,6 +147,7 @@ export async function confirmEmailChange(data: { userId: string; newEmail: strin
 // credentials: 'include' — Google-dan geri dönəndə servər httpOnly cookie yazdığı üçün
 // bu seçim mütləqdir; onsuz cookie brauzer tərəfindən bloklanır.
 export async function exchangeGoogleLoginCode(code: string): Promise<AuthResponse> {
+    const generation = sessionGeneration;
     const response = await fetch(`${API_URL}/auth/google/exchange`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -153,13 +155,36 @@ export async function exchangeGoogleLoginCode(code: string): Promise<AuthRespons
       body: JSON.stringify({ code }),
     });
 
-    return response.json();
+    const data: AuthResponse = await response.json();
+    return generation === sessionGeneration ? data : cancelledAuthResponse();
 }
 
-// Access token sessionStorage-da saxlanılır: tab bağlandıqda avtomatik silinir,
-// buna görə localStorage-dən daha təhlükəsizdir — oğurlanmış token uzun müddət işlənə bilməz.
+// Access token yalnız bu modulun yaddaşındadır; reload zamanı HttpOnly cookie ilə bərpa edilir.
+let memoryAccessToken: string | null = null;
+let sessionGeneration = 0;
+let refreshInFlight: { generation: number; promise: Promise<boolean> } | null = null;
+
+function cancelledAuthResponse(): AuthResponse {
+    return { success: false, message: 'Giriş sorğusu ləğv edildi. Yenidən cəhd edin.' };
+}
+
+function clearLegacyTokens(): void {
+    for (const name of ['localStorage', 'sessionStorage'] as const) {
+        try {
+            for (const key of ['access_token', 'refresh_token', 'token']) window[name].removeItem(key);
+        } catch { /* Storage bağlı olsa da yaddaş sessiyası işləyir. */ }
+    }
+}
+
+clearLegacyTokens();
+
 export function getToken(): string | null {
-    return sessionStorage.getItem('access_token');
+    return memoryAccessToken;
+}
+
+// Login/logout sessiyanı dəyişir; eyni sessiyanın token rotasiyası bu versiyanı dəyişmir.
+export function getAuthSessionVersion(): number {
+    return sessionGeneration;
 }
 
 const USER_NICKNAME_KEY = 'user_nickname';
@@ -213,17 +238,20 @@ export function getPrimaryRoleLabel(): string {
 // Yalnız access token saxlanılır; refresh token servər tərəfindən httpOnly cookie kimi idarə edilir,
 // ona görə burada JavaScript koduna heç vaxt açılmır.
 export function setTokens(accessToken: string): void {
-    sessionStorage.setItem('access_token', accessToken);
+    sessionGeneration += 1;
+    storeAccessToken(accessToken);
+}
+
+function storeAccessToken(accessToken: string): void {
+    memoryAccessToken = accessToken;
+    clearLegacyTokens();
     try { localStorage.setItem(SESSION_HINT_KEY, '1'); } catch { /* storage yoxdur */ }
-    // Köhnə localStorage açarlarını təmizlə
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('token');
 }
 
 // Serverdə də çıxış: cari access token (jti) qara siyahıya düşür, bu cihazın refresh sessiyası silinir və
 // httpOnly cookie server tərəfindən təmizlənir. Şəbəkə olmasa belə lokal təmizlik hər halda aparılır.
 export async function logoutOnServer(): Promise<void> {
-  const accessToken = sessionStorage.getItem('access_token');
+  const accessToken = getToken();
   logout(); // lokal tokenlər dərhal silinir; server sorğusu ondan sonra gedir
   if (!accessToken) return;
   try {
@@ -238,18 +266,18 @@ export async function logoutOnServer(): Promise<void> {
 }
 
 export function logout() {
+    memoryAccessToken = null;
+    sessionGeneration += 1;
+    clearLegacyTokens();
     try { localStorage.removeItem(SESSION_HINT_KEY); } catch { /* storage yoxdur */ }
-    sessionStorage.removeItem('access_token');
     sessionStorage.removeItem(USER_NICKNAME_KEY);
     sessionStorage.removeItem(USER_ROLES_KEY);
-    localStorage.removeItem('refresh_token'); // köhnə format
-    localStorage.removeItem('token'); // köhnə format
     localStorage.removeItem('user'); // köhnə versiyalardakı geniş profil obyekti
 }
 
 // Servər 401 qaytardıqda bu funksiya köhnə access token-i göndərib yenisini alır.
 // Refresh token httpOnly cookie olaraq brauzer tərəfindən avtomatik əlavə edilir —
-// JavaScript heç vaxt ona birbaşa toxuna bilmir, bu da XSS hücumlarından qoruyur.
+// JavaScript cookie dəyərini birbaşa oxuya bilmir.
 //
 // Access token olmadan da çağırıla bilər (yeni tab, səhifə yenilənməsi): server sessiyanı cookie ilə tapır (audit F6).
 // Anonim ziyarətçi üçün boş yerə sorğu getməsin deyə yalnız "sessiya var" işarəsi (localStorage) olanda sınanır.
@@ -259,8 +287,18 @@ export function hasSessionHint(): boolean {
   try { return localStorage.getItem(SESSION_HINT_KEY) === '1'; } catch { return false; }
 }
 
-export async function refreshTokens(): Promise<boolean> {
-  const accessToken = sessionStorage.getItem('access_token');
+export function refreshTokens(): Promise<boolean> {
+  if (refreshInFlight?.generation === sessionGeneration) return refreshInFlight.promise;
+  const pending = performRefresh().finally(() => {
+    if (refreshInFlight?.promise === pending) refreshInFlight = null;
+  });
+  refreshInFlight = { generation: sessionGeneration, promise: pending };
+  return pending;
+}
+
+async function performRefresh(): Promise<boolean> {
+  const accessToken = getToken();
+  const generation = sessionGeneration;
   if (!accessToken && !hasSessionHint()) return false;
 
   try {
@@ -270,14 +308,18 @@ export async function refreshTokens(): Promise<boolean> {
       credentials: 'include',
       body: JSON.stringify({ accessToken: accessToken ?? undefined }),
     });
+    if (generation !== sessionGeneration) return false;
     if (!response.ok) {
       // Sessiya serverdə yoxdur (çıxış/expired) — işarəni silirik ki, hər açılışda sorğu getməsin.
-      if (!accessToken) { try { localStorage.removeItem(SESSION_HINT_KEY); } catch { /* storage yoxdur */ } }
+      if (!accessToken && [400, 401, 403].includes(response.status)) {
+        try { localStorage.removeItem(SESSION_HINT_KEY); } catch { /* storage yoxdur */ }
+      }
       return false;
     }
     const data: AuthResponse = await response.json();
+    if (generation !== sessionGeneration) return false;
     if (data.success && data.data) {
-      setTokens(data.data.accessToken);
+      storeAccessToken(data.data.accessToken);
 
       // Rollar hər refresh-də yenilənir: admin rolu verildikdə/alındıqda
       // interfeys növbəti refresh-də dərhal doğru vəziyyətə keçir.

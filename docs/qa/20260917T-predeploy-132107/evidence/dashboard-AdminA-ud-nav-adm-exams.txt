@@ -1,0 +1,61 @@
+Əsas məzmuna keç
+KIBERAZ.AZ
+// TƏHSİL PLATFORMASI
+Ana Səhifə
+Təlimlər
+Biliklər
+İmtahan
+Liderlik
+QA
+qaadmina
+Admin
+QA
+qaadmina
+Admin
+İDARƏETMƏ PANELİ
+İcmal
+İstifadəçilər
+Təlimlər
+İmtahan sessiyaları
+Kateqoriyalar + suallar
+Ana səhifə
+Çıxış
+
+Daha güclü gələcək üçün birlikdə öyrənək.
+
+İDARƏETMƏ PANELİ
+İmtahan sessiyaları
+
+VIP hesabların yaratdığı imtahanlar və iştirakçı nəticələri. Nəticələri CSV kimi yükləyib saxlaya bilərsiniz.
+
+2
+Sessiya
+2
+Aktiv sessiya
+2
+İştirakçı
+2
+Tamamlanmış cəhd
+Sessiyalar
+(2)
+SESSİYA	SAHİB	QURULUŞ	İŞTİRAKÇI	ORTA	STATUS	TARİX	
+ƏMƏLİYYAT
+
+
+QA UI 20260917T-predeploy-132107
+KBR-05E18B54F3C2E743
+	
+qavipb	4 sual · 15 dəq	1 / 1	50%	Aktiv	2026 M09 17	
+Nəticələr
+
+
+QA 20260917T-predeploy-132107
+KBR-EC8914F79CC155AB
+	
+qavipa	4 sual · 5 dəq	1 / 1	50%	Aktiv	2026 M09 17	
+Nəticələr
+
+Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik. Məxfilik Siyasəti
+
+Rədd et
+Qəbul et

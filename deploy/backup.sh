@@ -1,22 +1,32 @@
 #!/usr/bin/env bash
-# Gündəlik backup — LiteDB tək fayldır, amma İŞLƏYƏN tətbiqdən düz kopyalanan fayl zədəli ola bilər.
-# LiteDB "Connection=shared" rejimində fayl yalnız əməliyyat anında kilidlənir; ən təhlükəsiz yol
-# `cp --reflink`/rsync deyil, qısa dayanma və ya LiteDB-nin öz checkpoint-idir. Gecə trafiki az olduğu
-# üçün burada 2–3 saniyəlik stop/start istifadə olunur (istifadəçilər yenidən daxil olmur — sessiya DB-dədir).
-#
-# Cron (root): 0 3 * * * /var/kiberaz/deploy/backup.sh >> /var/log/kiberaz/backup.log 2>&1
-# Saxlama: 14 gün lokal; əlavə olaraq serverdən KƏNARA (rclone/scp) kopyalanmalıdır — I1: DB şifrəsizdir,
-# backup şifrəli yerdə saxlanmalıdır (məs. `age`/`gpg` ilə).
+# LiteDB, açarlar və upload-lar API dayandırıldıqdan sonra arxivlənir.
+# Root cron: 0 3 * * * /bin/bash /var/kiberaz/deploy/backup.sh >> /var/log/kiberaz/backup.log 2>&1
+# Arxivlər root:root / 0600-dür. Ayrıca şifrəli off-server nüsxə saxlayın.
 set -euo pipefail
-BASE=/var/kiberaz
-OUT=$BASE/backup
-STAMP=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$OUT"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+initialize
+TOUCHED=0
 
-systemctl stop kiberaz-api
-tar -czf "$OUT/kiberaz-$STAMP.tgz" -C "$BASE" data keys uploads
-systemctl start kiberaz-api
+finish() {
+  local result=$?
+  trap - EXIT INT TERM
+  set +e
+  cleanup_temporary_files
+  if [[ "$TOUCHED" == 1 && "$ORIGINAL_STATE" == active ]]; then
+    if ! systemctl start "$SERVICE" || ! health_check; then
+      printf 'XƏTA: backup-dan sonra API sağlamlığı təsdiqlənmədi. journalctl -u kiberaz-api\n' >&2
+      result=1
+    fi
+  fi
+  exit "$result"
+}
+trap finish EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-# Şifrələmə (age quraşdırılıbsa): age -r <public-key> -o "$OUT/kiberaz-$STAMP.tgz.age" "$OUT/kiberaz-$STAMP.tgz" && rm "$OUT/kiberaz-$STAMP.tgz"
-find "$OUT" -name 'kiberaz-*.tgz*' -mtime +14 -delete
-echo "$(date -Is) backup ok: $OUT/kiberaz-$STAMP.tgz ($(du -h "$OUT/kiberaz-$STAMP.tgz" | cut -f1))"
+TOUCHED=1
+stop_api
+offline_backup kiberaz
+# Yalnız uğurlu arxivdən sonra köhnə gündəlik nüsxələr silinir; pre-deploy arxivləri saxlanır.
+find "$OUT" -maxdepth 1 -type f -name 'kiberaz-*.tgz' -mtime +14 -delete
+echo 'Backup tamamlandı.'

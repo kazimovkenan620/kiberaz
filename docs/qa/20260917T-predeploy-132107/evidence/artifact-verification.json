@@ -1,0 +1,9 @@
+{
+  "textFilesChecked": 98,
+  "knownSensitiveValueMatches": [],
+  "trackedHashDifferences": [],
+  "matrixRows": 273,
+  "uniqueTestIds": 273,
+  "missingEvidencePaths": [],
+  "limits": "Known secret value scan of text only; screenshots were visually inspected separately. Not a generic secret detector."
+}

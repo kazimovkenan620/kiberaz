@@ -1,0 +1,83 @@
+Əsas məzmuna keç
+KIBERAZ.AZ
+// TƏHSİL PLATFORMASI
+Ana Səhifə
+Təlimlər
+Biliklər
+İmtahan
+Liderlik
+QA
+qaadmina
+Admin
+QA
+qaadmina
+Admin
+İDARƏETMƏ PANELİ
+İcmal
+İstifadəçilər
+Təlimlər
+İmtahan sessiyaları
+Kateqoriyalar + suallar
+Ana səhifə
+Çıxış
+
+Daha güclü gələcək üçün birlikdə öyrənək.
+
+İDARƏETMƏ PANELİ
+Kateqoriyalar və suallar
+
+Sual bankının idarəsi. Açıq suallar ana səhifədəki quizdə görünür, məxfi suallar isə yalnız imtahan sessiyalarında işlənir.
+
+4
+Kateqoriya
+9
+Ümumi sual
+5
+Açıq sual
+4
+Məxfi (imtahan) sual
+Kateqoriyalar
+(4)
+Suallar
+(9)
+Silinmişlər
+Yeni kateqoriya
+#	KATEQORİYA	MÖVZULAR	AÇIQ	MƏXFİ	İŞTİRAKÇI	SIRA	
+ƏMƏLİYYAT
+
+1	
+shield
+QA Açıq Praktika
+Yalnız sintetik audit sualları
+	1	4	0	1	1	
+Redaktə
+Sil
+
+2	
+shield
+QA Qapalı İmtahan
+Yalnız sintetik audit sualları
+	1	0	4	0	2	
+Redaktə
+Sil
+
+3	
+shield
+QA CRUD 20260917T-predeploy-132107
+Sintetik audit kateqoriyası
+	1	0	0	0	9	
+Redaktə
+Sil
+
+4	
+shield
+QA CRUD 20260917T-predeploy-132107
+Sintetik audit kateqoriyası
+	1	1	0	0	9	
+Redaktə
+Sil
+
+Biz sayt təcrübənizi yaxşılaşdırmaq üçün çərəzlərdən istifadə edirik. Məxfilik Siyasəti
+
+Rədd et
+Qəbul et

@@ -1,0 +1,72 @@
+[
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:08:26.647Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:28.181Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:08:28.183Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:28.183Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:08:28.183Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:28.184Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:30.474Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:30.474Z"
+  },
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:08:30.474Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:30.574Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:08:30.574Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:08:30.574Z"
+  },
+  {
+    "path": "/api/auth/login",
+    "status": 401,
+    "time": "2026-09-17T12:08:31.477Z"
+  },
+  {
+    "path": "/api/auth/resend-confirmation",
+    "status": 200,
+    "time": "2026-09-17T12:08:31.725Z"
+  }
+]

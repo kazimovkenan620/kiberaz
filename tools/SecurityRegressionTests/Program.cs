@@ -479,6 +479,7 @@ internal static partial class Program
             }
 
             await RunRemediationTests(client, OpenDb, accounts, tokens, sandbox);
+            await RunPreDeployProfileTests(client, OpenDb, accounts, tokens);
             Console.WriteLine($"Security regression tests: {_assertions - Failures.Count}/{_assertions} passed.");
             foreach (var failure in Failures) Console.Error.WriteLine("FAIL: " + failure);
             return Failures.Count == 0 ? 0 : 1;

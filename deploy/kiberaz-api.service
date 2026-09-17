@@ -1,12 +1,17 @@
 # systemd unit — Kiberaz API
 # Quraşdırma:
 #   sudo useradd --system --home /var/kiberaz --shell /usr/sbin/nologin kiberaz
-#   sudo mkdir -p /var/kiberaz/{data,keys,uploads,app,backup} /var/log/kiberaz
-#   sudo chown -R kiberaz:kiberaz /var/kiberaz /var/log/kiberaz
+#   sudo install -d -m 755 /var/kiberaz /var/kiberaz/deploy /var/kiberaz/releases /var/kiberaz/incoming /var/www/kiberaz
+#   sudo install -d -m 700 -o kiberaz -g kiberaz /var/kiberaz/{data,keys,runtime}
+#   sudo install -d -m 750 -o kiberaz -g kiberaz /var/kiberaz/uploads
+#   sudo install -d -m 700 /var/kiberaz/backup
+#   sudo install -d -m 750 /etc/kiberaz /var/log/kiberaz
+#   app və /var/www/kiberaz/dist yaratmayın: deploy.sh onları release symlink-i kimi yaradır.
 #   sudo cp deploy/kiberaz-api.env.example /etc/kiberaz/api.env   # sonra REAL dəyərləri yaz
 #   sudo chmod 600 /etc/kiberaz/api.env && sudo chown root:kiberaz /etc/kiberaz/api.env && sudo chmod 640 /etc/kiberaz/api.env
 #   sudo cp deploy/kiberaz-api.service /etc/systemd/system/
-#   sudo systemctl daemon-reload && sudo systemctl enable --now kiberaz-api
+#   sudo systemctl daemon-reload && sudo systemctl enable kiberaz-api
+#   İlk start: sudo bash /var/kiberaz/deploy/deploy.sh (common.sh eyni qovluqda)
 #   journalctl -u kiberaz-api -f
 
 [Unit]
@@ -31,8 +36,8 @@ Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
 Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
 Environment=DOTNET_NOLOGO=1
 # LiteDB, upload və DataProtection üçün HOME lazım deyil, amma dotnet bəzi keşləri buraya yazır.
-Environment=HOME=/var/kiberaz
-Environment=DOTNET_CLI_HOME=/var/kiberaz
+Environment=HOME=/var/kiberaz/runtime
+Environment=DOTNET_CLI_HOME=/var/kiberaz/runtime
 
 Restart=always
 RestartSec=5
@@ -45,7 +50,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/kiberaz /var/log/kiberaz
+ReadWritePaths=/var/kiberaz/data /var/kiberaz/keys /var/kiberaz/uploads /var/kiberaz/runtime
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true

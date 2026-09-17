@@ -1,0 +1,10 @@
+Command: dotnet run --project tools/SecurityRegressionTests/SecurityRegressionTests.csproj --artifacts-path tools/SecurityRegressionTests/.artifacts
+Process-only environment: DataProtection__KeysPath=qa-keys (sandbox relative)
+StartedUtc: 2026-09-17T09:22:47.4806724+00:00
+FinishedUtc: 2026-09-17T09:23:50.0256641+00:00
+ExitCode: 0
+
+Redacted output:
+Checked 29 privileged routes for anonymous and four non-admin roles.
+Checking remediation attack paths and legitimate controls.
+Security regression tests: 516/516 passed.

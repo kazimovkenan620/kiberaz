@@ -334,10 +334,10 @@ export default function App() {
     setShowDashboard(true);
   }, []);
 
-  // Səssiz giriş bərpası (audit F6): yeni tab/səhifə yenilənməsində sessionStorage boşdur, amma httpOnly refresh
+  // Səssiz giriş bərpası: yeni tab/səhifə yenilənməsində yaddaşda token yoxdur, amma HttpOnly refresh
   // cookie brauzerdədir — access tokensiz refresh ilə sessiya bərpa olunur, yenidən giriş və yeni server sessiyası lazım gəlmir.
   useEffect(() => {
-    if (isLoggedIn || !hasSessionHint()) return;
+    if (isLoggedIn || isGoogleLoginCallbackPage || !hasSessionHint()) return;
     let cancelled = false;
     refreshTokens().then(ok => { if (ok && !cancelled) setIsLoggedIn(true); });
     return () => { cancelled = true; };

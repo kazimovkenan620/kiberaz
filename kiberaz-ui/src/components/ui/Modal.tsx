@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import IconButton from './IconButton';
@@ -25,62 +25,83 @@ interface Props {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-let openModals = 0;
+type FocusScope = { panel: HTMLDivElement; returnTargets: HTMLElement[] };
+const modalStack: FocusScope[] = [];
+let previousBodyOverflow = '';
 
-export default function Modal({
-  open, onClose, title, kicker, size = 'md', role = 'dialog',
+function isVisible(element: HTMLElement): boolean {
+  return element.isConnected && element.getClientRects().length > 0
+    && !element.matches(':disabled') && !element.closest('[inert], [aria-hidden="true"]');
+}
+
+export default function Modal(props: Props) {
+  // Açıq hissə ayrıca mount olunur: ilkin fokus autoFocus commit-indən əvvəl tutulur.
+  return props.open ? <OpenModal {...props} /> : null;
+}
+
+function OpenModal({
+  onClose, title, kicker, size = 'md', role = 'dialog',
   closeOnBackdrop = false, closeOnEscape = true, footer, children,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const [returnTargets] = useState(() => {
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Auth pəncərələri bir-birini əvəz edəndə silinmiş elementin əvəzinə ilkin açan düymə seçilir.
+    return [...(focused && focused !== document.body ? [focused] : []), ...modalStack.flatMap(scope => scope.returnTargets).reverse()];
+  });
 
-  // Effekt yalnız `open` dəyişəndə işləyir; onClose/closeOnEscape hər renderdə
+  // Effekt yalnız açılışda işləyir; onClose/closeOnEscape hər renderdə
   // dəyişə bilər (inline funksiyalar), ona görə ref-də saxlanılır — əks halda
   // valideynin hər renderi (məs. imtahan taymeri) fokusu yenidən qoyurdu.
   const latest = useRef({ onClose, closeOnEscape });
   useEffect(() => { latest.current = { onClose, closeOnEscape }; });
 
   useEffect(() => {
-    if (!open) return;
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    openModals += 1;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const scope: FocusScope = { panel, returnTargets };
+    if (modalStack.length === 0) previousBodyOverflow = document.body.style.overflow;
+    modalStack.push(scope);
     document.body.style.overflow = 'hidden';
 
     // İlk fokus: React `autoFocus` commit zamanı fokusu artıq qoyubsa, o saxlanılır;
     // yoxsa bağlama düyməsindən sonrakı ilk fokuslana bilən element, o da yoxdursa panel.
-    const panel = panelRef.current;
-    if (panel && !panel.contains(document.activeElement)) {
-      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+    if (!panel.contains(document.activeElement)) {
+      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(isVisible);
       const first = nodes.find(n => !n.closest('.modal__head')) ?? nodes[0];
       (first ?? panel).focus();
     }
 
     const onKey = (e: KeyboardEvent) => {
+      if (modalStack.at(-1) !== scope) return;
       if (e.key === 'Escape') {
-        if (latest.current.closeOnEscape) { e.stopPropagation(); latest.current.onClose(); }
+        if (latest.current.closeOnEscape) { e.preventDefault(); e.stopPropagation(); latest.current.onClose(); }
         return;
       }
-      if (e.key !== 'Tab' || !panel) return;
-      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(n => n.offsetParent !== null || n === document.activeElement);
+      if (e.key !== 'Tab') return;
+      const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(isVisible);
       if (nodes.length === 0) { e.preventDefault(); panel.focus(); return; }
       const firstNode = nodes[0];
       const lastNode = nodes[nodes.length - 1];
-      if (e.shiftKey && (document.activeElement === firstNode || document.activeElement === panel)) { e.preventDefault(); lastNode.focus(); }
-      else if (!e.shiftKey && document.activeElement === lastNode) { e.preventDefault(); firstNode.focus(); }
+      if (e.shiftKey && (document.activeElement === firstNode || document.activeElement === panel || !panel.contains(document.activeElement))) { e.preventDefault(); lastNode.focus(); }
+      else if (!e.shiftKey && (document.activeElement === lastNode || !panel.contains(document.activeElement))) { e.preventDefault(); firstNode.focus(); }
     };
     document.addEventListener('keydown', onKey);
 
     return () => {
       document.removeEventListener('keydown', onKey);
-      openModals = Math.max(0, openModals - 1);
-      // Digər kilidlər (mobil menyu, yan panel çəkməsi) pozulmasın deyə əvvəlki dəyər bərpa olunur.
-      if (openModals === 0) document.body.style.overflow = previousOverflow === 'hidden' ? previousOverflow : '';
-      previouslyFocused?.focus?.();
+      modalStack.splice(modalStack.indexOf(scope), 1);
+      if (modalStack.length === 0) document.body.style.overflow = previousBodyOverflow;
+      const activePanel = modalStack.at(-1)?.panel;
+      // Yeni açılmış pəncərənin autoFocus-u əvvəlki pəncərənin cleanup-ı ilə pozulmur.
+      if (activePanel?.contains(document.activeElement)) return;
+      const target = returnTargets.find(element => isVisible(element) && (!activePanel || activePanel.contains(element)))
+        ?? Array.from((activePanel ?? document).querySelectorAll<HTMLElement>(FOCUSABLE)).find(isVisible)
+        ?? activePanel;
+      target?.focus();
     };
-  }, [open]);
-
-  if (!open) return null;
+  }, [returnTargets]);
 
   return createPortal(
     <div

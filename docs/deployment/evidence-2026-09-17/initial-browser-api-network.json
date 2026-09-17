@@ -1,0 +1,257 @@
+[
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:06:38.926Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:38.926Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:38.927Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:38.975Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:38.979Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:39.005Z"
+  },
+  {
+    "path": "/api/auth/login",
+    "status": 200,
+    "time": "2026-09-17T12:06:39.467Z"
+  },
+  {
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "time": "2026-09-17T12:06:39.722Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.431Z"
+  },
+  {
+    "path": "/api/auth/refresh",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.438Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.448Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.448Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.449Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.473Z"
+  },
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.473Z"
+  },
+  {
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "time": "2026-09-17T12:06:44.478Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:46.327Z"
+  },
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:06:46.327Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:46.328Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:46.328Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:46.331Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:46.365Z"
+  },
+  {
+    "path": "/api/auth/login",
+    "status": 401,
+    "time": "2026-09-17T12:06:46.976Z"
+  },
+  {
+    "path": "/api/auth/resend-confirmation",
+    "status": 200,
+    "time": "2026-09-17T12:06:47.328Z"
+  },
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:06:48.631Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:48.631Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:48.631Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:48.632Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:48.632Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:48.633Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:51.988Z"
+  },
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:06:51.988Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:52.024Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:52.024Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:06:52.025Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:06:52.027Z"
+  },
+  {
+    "path": "/api/auth/login",
+    "status": 200,
+    "time": "2026-09-17T12:06:53.212Z"
+  },
+  {
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "time": "2026-09-17T12:06:53.223Z"
+  },
+  {
+    "path": "/api/exam-sessions/join",
+    "status": 200,
+    "time": "2026-09-17T12:06:57.277Z"
+  },
+  {
+    "path": "/api/exam-sessions/attempts/3e488983cac945d2a4bcd9dc513ea260/answer",
+    "status": 200,
+    "time": "2026-09-17T12:07:07.739Z"
+  },
+  {
+    "path": "/api/exam-sessions/attempts/3e488983cac945d2a4bcd9dc513ea260/answer",
+    "status": 200,
+    "time": "2026-09-17T12:07:10.305Z"
+  },
+  {
+    "path": "/api/exam-sessions/attempts/3e488983cac945d2a4bcd9dc513ea260/answer",
+    "status": 200,
+    "time": "2026-09-17T12:07:12.794Z"
+  },
+  {
+    "path": "/api/exam-sessions/attempts/3e488983cac945d2a4bcd9dc513ea260/answer",
+    "status": 200,
+    "time": "2026-09-17T12:07:15.331Z"
+  },
+  {
+    "path": "/api/exam-sessions/attempts/3e488983cac945d2a4bcd9dc513ea260/submit",
+    "status": 200,
+    "time": "2026-09-17T12:07:58.249Z"
+  },
+  {
+    "path": "/api/auth/logout",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.488Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.936Z"
+  },
+  {
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.937Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.938Z"
+  },
+  {
+    "path": "/api/course",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.938Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.938Z"
+  },
+  {
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "time": "2026-09-17T12:08:01.938Z"
+  }
+]

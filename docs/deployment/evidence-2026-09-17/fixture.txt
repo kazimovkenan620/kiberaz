@@ -1,0 +1,2 @@
+Sintetik fikstür hazırdır: 11 hesab, 2 kateqoriya, 8 sual, 2 aktiv VIP dövrü. Baza bağlandı.
+İzolə fikstür hazırdır; hesab/config dəyərləri yalnız private temp-dədir.

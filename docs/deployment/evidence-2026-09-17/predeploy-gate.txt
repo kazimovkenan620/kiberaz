@@ -1,0 +1,30 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Kiberaz.Domain -> C:\Users\User\Desktop\kiberaz\Kiberaz.Domain\bin\Release\net9.0\Kiberaz.Domain.dll
+  Kiberaz.Application -> C:\Users\User\Desktop\kiberaz\Kiberaz.Application\bin\Release\net9.0\Kiberaz.Application.dll
+  Kiberaz.Infrastructure -> C:\Users\User\Desktop\kiberaz\Kiberaz.Infrastructure\bin\Release\net9.0\Kiberaz.Infrastructure.dll
+  Kiberaz.Api -> C:\Users\User\Desktop\kiberaz\Kiberaz.Api\bin\Release\net9.0\Kiberaz.Api.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.78
+Checked 29 privileged routes for anonymous and four non-admin roles.
+Checking remediation attack paths and legitimate controls.
+Security regression tests: 528/528 passed.
+  Kiberaz.Api -> C:\Users\User\Desktop\kiberaz\artifacts\releases\20260917-160516-518c0816\publish\
+
+name                       passed   exitCode diagnosticMatched timedOut
+----                       ------   -------- ----------------- --------
+production-ignores-local    False         -1              True     True
+staging-ignores-local        True -532462766              True    False
+development-reads-local      True -532462766              True    False
+production-missing-captcha   True -532462766              True    False
+production-bypass-rejected   True -532462766              True    False
+
+Exception: C:\Users\User\Desktop\kiberaz\deploy\Test-ReleaseConfiguration.ps1:65
+Line |
+  65 |  … sed }).Count) { throw 'Release konfiqurasiya regressiyası keçmədi.' }
+     |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | Release konfiqurasiya regressiyası keçmədi.

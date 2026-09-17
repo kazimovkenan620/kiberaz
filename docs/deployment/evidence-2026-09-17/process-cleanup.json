@@ -1,0 +1,17 @@
+{
+  "ownListenerCount": 0,
+  "userPorts": [
+    {
+      "LocalPort": 5251,
+      "OwningProcess": 32080
+    },
+    {
+      "LocalPort": 5173,
+      "OwningProcess": 20076
+    },
+    {
+      "LocalPort": 5251,
+      "OwningProcess": 32080
+    }
+  ]
+}

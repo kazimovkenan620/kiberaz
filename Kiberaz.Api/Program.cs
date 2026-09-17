@@ -34,8 +34,10 @@ if (args is ["--sanitize-pdf"])
 }
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
-// Deployment secrets and explicit command-line settings take precedence over local files.
+// Lokal sirlər yalnız developer mühitində oxunur, server mühitlərinə daşınmır.
+if (builder.Environment.IsDevelopment())
+    builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+// Environment və açıq command-line parametrləri lokal fayldan üstün qalır.
 builder.Configuration.AddEnvironmentVariables().AddCommandLine(args);
 
 // ─── 1. LİTEDB ────────────────────────────────────────────────

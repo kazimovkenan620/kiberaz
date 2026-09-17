@@ -179,44 +179,82 @@ function CreateSessionModal({ quota, onClose, onCreated }: {
 function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => void }) {
   const [attempt, setAttempt] = useState(initial);
   const [index, setIndex] = useState(0);
-  const [remaining, setRemaining] = useState(0);
+  const [remaining, setRemaining] = useState(() => Math.max(0, Math.ceil((Date.parse(initial.expiresAt) - Date.parse(initial.serverNow)) / 1000)));
+  const [initialDeadline] = useState(() => performance.now() + Date.parse(initial.expiresAt) - Date.parse(initial.serverNow));
+  const deadline = useRef(initialDeadline);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [confirmFinish, setConfirmFinish] = useState(false);
   const submitting = useRef(false);
+  const autoSubmitted = useRef(false);
+  const answerInFlight = useRef<Promise<void> | null>(null);
 
-  const submit = async () => {
+  const receiveAttempt = useCallback((next: ExamAttempt) => {
+    // Yeni server snapshot gec gəlsə belə görünən vaxt geriyə artmır.
+    deadline.current = Math.min(deadline.current, performance.now() + Date.parse(next.expiresAt) - Date.parse(next.serverNow));
+    setAttempt(current => current.submittedAt ? current : next);
+  }, []);
+
+  const submit = useCallback(async () => {
     if (submitting.current || attempt.submittedAt) return;
     submitting.current = true; setSaving(true); setError('');
-    try { const result = await submitExamAttempt(attempt.id); if (result.success && result.data) setAttempt(result.data); else setError(errorText(result)); }
+    try {
+      // Son seçim üçün qısa möhlət var; ilişmiş şəbəkə deadline göndərişini saxlamır.
+      if (answerInFlight.current) {
+        let timeout: number | undefined;
+        try {
+          await Promise.race([answerInFlight.current, new Promise<void>(resolve => {
+            timeout = window.setTimeout(resolve, 2000);
+          })]);
+        } finally { window.clearTimeout(timeout); }
+      }
+      const result = await submitExamAttempt(attempt.id);
+      if (result.success && result.data) receiveAttempt(result.data);
+      else setError(errorText(result));
+    }
     catch { setError('Nəticə serverə göndərilə bilmədi.'); }
     finally { submitting.current = false; setSaving(false); setConfirmFinish(false); }
-  };
+  }, [attempt.id, attempt.submittedAt, receiveAttempt]);
 
-  // Server vaxtı ilə lokal saat arasındakı fərq bir dəfə hesablanır; geri sayım
-  // həmin fərqlə aparılır. Vaxt bitəndə cavablar serverə göndərilir.
+  // Sabit monoton deadline render və StrictMode effekt təkrarından asılı deyil.
   useEffect(() => {
-    const serverOffset = new Date(attempt.serverNow).getTime() - Date.now();
+    if (attempt.submittedAt) return;
+    let active = true;
     const tick = () => {
-      const value = Math.max(0, Math.ceil((new Date(attempt.expiresAt).getTime() - (Date.now() + serverOffset)) / 1000));
+      if (!active) return;
+      const value = Math.max(0, Math.ceil((deadline.current - performance.now()) / 1000));
       setRemaining(value);
-      if (value === 0 && !attempt.submittedAt) void submit();
+      if (value === 0 && !autoSubmitted.current) {
+        autoSubmitted.current = true;
+        void submit();
+      }
     };
     const timer = window.setInterval(tick, 1000);
     void Promise.resolve().then(tick);
-    return () => window.clearInterval(timer);
-  });
+    document.addEventListener('visibilitychange', tick);
+    window.addEventListener('pageshow', tick);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', tick);
+      window.removeEventListener('pageshow', tick);
+    };
+  }, [attempt.submittedAt, submit]);
 
-  const choose = async (questionId: string, optionKey: string) => {
-    if (saving || attempt.submittedAt) return;
+  const choose = useCallback((questionId: string, optionKey: string) => {
+    if (saving || submitting.current || answerInFlight.current || attempt.submittedAt || performance.now() >= deadline.current) return;
     setSaving(true); setError('');
-    try {
-      const result = await saveExamAnswer(attempt.id, questionId, optionKey, attempt.revision);
-      if (result.success && result.data) setAttempt(result.data);
-      else { setError(errorText(result)); const fresh = await getExamAttempt(attempt.id); if (fresh.success && fresh.data) setAttempt(fresh.data); }
-    } catch { setError('Cavab saxlanmadı. İnternet bağlantısını yoxlayın.'); }
-    finally { setSaving(false); }
-  };
+    const pending = (async () => {
+      try {
+        const result = await saveExamAnswer(attempt.id, questionId, optionKey, attempt.revision);
+        if (result.success && result.data) receiveAttempt(result.data);
+        else { setError(errorText(result)); const fresh = await getExamAttempt(attempt.id); if (fresh.success && fresh.data) receiveAttempt(fresh.data); }
+      } catch { setError('Cavab saxlanmadı. İnternet bağlantısını yoxlayın.'); }
+      finally { answerInFlight.current = null; if (!submitting.current) setSaving(false); }
+    })();
+    answerInFlight.current = pending;
+    return pending;
+  }, [saving, attempt.id, attempt.submittedAt, attempt.revision, receiveAttempt]);
 
   const totalQ = attempt.questions.length;
   const answeredCount = Object.keys(attempt.answers).length;
@@ -276,7 +314,7 @@ function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => v
                   className={`es-option${chosen ? ' is-selected' : ''}`}
                   aria-pressed={chosen}
                   onClick={() => void choose(question.id, option.key)}
-                  disabled={saving}
+                  disabled={saving || remaining === 0}
                 >
                   <span className="es-option__key" aria-hidden="true">{option.key}</span>
                   <span className="es-option__text">{option.text}</span>
@@ -286,7 +324,9 @@ function ExamPlayer({ initial, onExit }: { initial: ExamAttempt; onExit: () => v
             })}
           </div>
 
-          {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span></div>}
+          {error && <div className="notice notice--danger" role="alert"><AlertTriangle size={16} /><span>{error}</span>
+            {remaining === 0 && <Button variant="outline" size="sm" onClick={() => void submit()} disabled={saving}>Yenidən göndər</Button>}
+          </div>}
 
           <div className="es-player__actions">
             <Button variant="outline" onClick={() => setIndex(value => Math.max(0, value - 1))} disabled={index === 0}><ChevronLeft size={16} /> Əvvəlki</Button>

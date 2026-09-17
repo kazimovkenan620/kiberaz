@@ -1,0 +1,674 @@
+[
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:51.661Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:51.661Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:51.661Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:51.661Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:51.661Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:51.661Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.162Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.163Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.163Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.163Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.164Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.164Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.776Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:52.804Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/user/profile",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:53.128Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/course/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:53.148Z"
+  },
+  {
+    "alias": "UserA",
+    "method": "GET",
+    "path": "/api/user/me/overview",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:53.149Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:54.426Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:54.426Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:54.426Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:54.426Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:54.427Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:54.463Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:55.093Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:55.119Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/user/profile",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:55.431Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/user/me/overview",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:55.433Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/course/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:55.441Z"
+  },
+  {
+    "alias": "TeacherA",
+    "method": "GET",
+    "path": "/api/user/teacher/classes",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:55.444Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.127Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.128Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.128Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.128Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.128Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.128Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.818Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:57.844Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/user/profile",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:58.244Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/user/me/overview",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:58.246Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/course/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:58.948Z"
+  },
+  {
+    "alias": "VIPA",
+    "method": "GET",
+    "path": "/api/course/vip-status",
+    "status": 200,
+    "timestamp": "2026-09-17T09:39:58.972Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.031Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.031Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.031Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.031Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.031Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.031Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.648Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/exam-sessions/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:00.667Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/user/profile",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:01.075Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/user/me/overview",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:01.075Z"
+  },
+  {
+    "alias": "ModeratorA",
+    "method": "GET",
+    "path": "/api/course/mine",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:01.096Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:02.593Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:02.593Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:02.593Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:02.593Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:02.593Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:02.593Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "POST",
+    "path": "/api/auth/login",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.195Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/user/profile",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.726Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.731Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/user/me/overview",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.731Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/audit",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.753Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.891Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/users",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.892Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.975Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/courses",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:03.976Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:04.042Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/exam-sessions",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:04.043Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/quiz/admin/questions",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:04.107Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/quiz/admin/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:04.107Z"
+  },
+  {
+    "alias": "AdminA",
+    "method": "GET",
+    "path": "/api/admin/stats",
+    "status": 200,
+    "timestamp": "2026-09-17T09:40:04.107Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:43:55.633Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:43:55.633Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:43:55.634Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:43:55.634Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:43:55.635Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:43:55.659Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "POST",
+    "path": "/api/auth/reset-password",
+    "status": 400,
+    "timestamp": "2026-09-17T09:43:56.110Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:07.776Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:07.777Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:07.777Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:07.778Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:07.778Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:07.779Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "POST",
+    "path": "/api/auth/reset-password",
+    "status": 400,
+    "timestamp": "2026-09-17T09:45:08.112Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "POST",
+    "path": "/api/auth/confirm-email",
+    "status": 400,
+    "timestamp": "2026-09-17T09:45:08.200Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:42.014Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:42.015Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:42.015Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/course",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:42.136Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/leaderboard",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:42.139Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "GET",
+    "path": "/api/quiz/categories",
+    "status": 200,
+    "timestamp": "2026-09-17T09:45:42.139Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "POST",
+    "path": "/api/auth/reset-password",
+    "status": 400,
+    "timestamp": "2026-09-17T09:45:42.581Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "POST",
+    "path": "/api/auth/confirm-email",
+    "status": 400,
+    "timestamp": "2026-09-17T09:45:42.705Z"
+  },
+  {
+    "alias": "Guest",
+    "method": "POST",
+    "path": "/api/user/confirm-email-change",
+    "status": 400,
+    "timestamp": "2026-09-17T09:45:42.789Z"
+  }
+]

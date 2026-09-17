@@ -12,7 +12,7 @@ import './Navbar.css';
 
 // ─── Tətbiq başlığı (ictimai + kabinet) ──────────────────────
 // Giriş, qeydiyyat və şifrə bərpası modal pəncərələrdədir (components/auth).
-// Təhlükəsizlik məntiqi dəyişməyib: token yaddaşda (sessionStorage), refresh
+// Access token yalnız modul yaddaşında, refresh
 // HttpOnly cookie-də; rol nişanı yalnız məlumat xarakterlidir.
 
 function getInitialNavbarUser(): { nickname: string } | null {

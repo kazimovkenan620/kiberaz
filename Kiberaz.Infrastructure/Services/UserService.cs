@@ -56,6 +56,10 @@ public class UserService : IUserService
         if (user is null)
             return ApiResponse<ProfileResponse>.Fail("İstifadəçi tapılmadı.");
 
+        // Nickname yenilənməsi də dərhal yazır; qoruma bütün dəyişikliklərdən əvvəl olmalıdır.
+        if (_protected.IsOwner(user))
+            return ApiResponse<ProfileResponse>.Fail(ProtectedAccountPolicy.OwnerImmutableMessage);
+
         var newNickname = request.Nickname.Trim();
         if (!string.Equals(user.Nickname, newNickname, StringComparison.OrdinalIgnoreCase))
         {

@@ -1,0 +1,58 @@
+{
+  "samples": [
+    {
+      "timestamp": "2026-09-17T09:41:56.979Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:01.999Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:07.007Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:12.016Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:17.031Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:22.045Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:27.051Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:32.056Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:37.070Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:42.081Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:47.090Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:52.105Z",
+      "timer": "01:00\nQalan vaxt"
+    },
+    {
+      "timestamp": "2026-09-17T09:42:57.109Z",
+      "timer": "01:00\nQalan vaxt"
+    }
+  ],
+  "submitRequests": 0,
+  "timerVisible": true
+}
